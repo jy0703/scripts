@@ -10,7 +10,7 @@
 
 [Script]
 http-request ^https?:\/\/gw2c\-hw\-open\.longfor\.com\/lmarketing\-task\-api\-mvc\-prod\/openapi\/task\/v1\/signature\/clock script-path=https://raw.githubusercontent.com/jy0703/scripts/refs/heads/main/scripts/lhtj.js, timeout=60, tag=龙湖天街获取Cookie
-
+cron "0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/refs/heads/main/scripts/lhtj.js, timeout=600, tag=龙湖天街
 [MITM]
 hostname = gw2c-hw-open.longfor.com
 
