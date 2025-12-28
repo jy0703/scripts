@@ -1,12 +1,13 @@
 /*
 ------------------------------------------
-@Author: Leiyiyan
-@Date: 2024-10-08 11:25:00
-@Description: 龙湖天街小程序签到、抽奖
+@Author: Fengzzzz
+@原作者: leiyiyan
+@UPDate: 2025-12-28 11:25:00
+@Description: 龙湖天街app&小程序签到、抽奖
 ------------------------------------------
 获取 Cookie：打开龙湖天街小程序，进入 我的 - 签到赚珑珠 - 任务赚奖励 - 马上签到。
 
-图标：https://raw.githubusercontent.com/leiyiyan/resource/main/icons/lhtj.png
+图标：https://raw.githubusercontent.com/jy0703/scripts/refs/heads/main/icons/lhtj.png
 
 [Script]
 http-request ^https?:\/\/gw2c\-hw\-open\.longfor\.com\/lmarketing\-task\-api\-mvc\-prod\/openapi\/task\/v1\/signature\/clock script-path=https://raw.githubusercontent.com/jy0703/scripts/refs/heads/main/scripts/lhtj.js, timeout=60, tag=龙湖天街获取Cookie
