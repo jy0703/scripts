@@ -122,8 +122,13 @@ async function signin(user) {
             }
         }
         let res = await fetch(opts);
-        const reward_num = res?.data?.is_popup == 1 ? res?.data?.reward_info[0]?.reward_num : 0
-        $.log(`${$.doFlag[res?.data?.is_popup == 1]} ${res?.data?.is_popup == 1 ? '小程序每日签到: 成功, 获得' + res?.data?.reward_info[0]?.reward_num + '分' : '小程序每日签到: 今日已签到'}\n`);
+        // 计算所有奖励的总和
+        let reward_sum = 0;
+        if(res?.data?.is_popup == 1 && res?.data?.reward_info && Array.isArray(res?.data?.reward_info)) {
+            reward_sum = res.data.reward_info.reduce((sum, item) => sum + (item?.reward_num || 0), 0);
+        }
+        const reward_num = res?.data?.is_popup == 1 ? reward_sum : 0
+        $.log(`${$.doFlag[res?.data?.is_popup == 1]} ${res?.data?.is_popup == 1 ? '小程序每日签到: 成功, 获得' + reward_sum + '分' : '小程序每日签到: 今日已签到'}\n`);
         return reward_num
     } catch (e) {
         $.log(`⛔️ 每日签到失败！${e}\n`)
@@ -155,8 +160,13 @@ async function appsignin(user) {
             }
         }
         let res = await fetch(opts);
-        const appreward_num = res?.data?.is_popup == 1 ? res?.data?.reward_info[0]?.reward_num : 0
-        $.log(`${$.doFlag[res?.data?.is_popup == 1]} ${res?.data?.is_popup == 1 ? 'APP每日签到: 成功, 获得' + res?.data?.reward_info[0]?.reward_num + '分' : 'APP每日签到: 今日已签到'}\n`);
+        // 计算所有奖励的总和
+        let appreward_sum = 0;
+        if(res?.data?.is_popup == 1 && res?.data?.reward_info && Array.isArray(res?.data?.reward_info)) {
+            appreward_sum = res.data.reward_info.reduce((sum, item) => sum + (item?.reward_num || 0), 0);
+        }
+        const appreward_num = res?.data?.is_popup == 1 ? appreward_sum : 0
+        $.log(`${$.doFlag[res?.data?.is_popup == 1]} ${res?.data?.is_popup == 1 ? 'APP每日签到: 成功, 获得' + appreward_sum + '分' : 'APP每日签到: 今日已签到'}\n`);
         return appreward_num
     } catch (e) {
         $.log(`⛔️ 每日签到失败！${e}\n`)
