@@ -193,8 +193,8 @@ async function lotterySignin(user) {
             type: 'post',
             dataType: "json",
             body: {
-                "component_no": "CD19U18I26K291GU",
-                "activity_no": "AP25T112V6099DOB"
+                "component_no": "CO13545A08P7EI9Y",
+                "activity_no": "AP25O123K1HEE8DB"
               }
         }
         let res = await fetch(opts);
@@ -225,10 +225,10 @@ async function lotteryClock(user) {
             type: 'post',
             dataType: "json",
             body: {
-                "component_no": "CD19U18I26K291GU",
-                "activity_no": "AP25T112V6099DOB",
+                "component_no": "CO13545A08P7EI9Y",
+                "activity_no": "AP25O123K1HEE8DB",
                 "batch_no": ""
-            }
+              }
         }
         let res = await fetch(opts);
         $.log(`${$.doFlag[res?.code == '0000']} ${res?.code == '0000' && res?.data?.reward_num>0 ? '小程序抽奖成功, 获得' + res?.data?.reward_num + res?.data?.prize_name: '小程序抽奖: ' + res?.message}\n`);
@@ -257,8 +257,8 @@ async function applotterySignin(user) {
             type: 'post',
             dataType: "json",
             body: {
-                "component_no": "CF19Z15Q58X4O6T0",
-                "activity_no": "AP255112Z6RBXVEY"
+                "component_no": "CC13U47045E3262G",
+                "activity_no": "AP25I123Y1CKKXSL"
               }
         }
         let res = await fetch(opts);
@@ -289,8 +289,8 @@ async function applotteryClock(user) {
             type: 'post',
             dataType: "json",
             body: {
-                "component_no": "CF19Z15Q58X4O6T0",
-                "activity_no": "AP255112Z6RBXVEY",
+                "component_no": "CC13U47045E3262G",
+                "activity_no": "AP25I123Y1CKKXSL",
                 "batch_no": ""
               }
         }
