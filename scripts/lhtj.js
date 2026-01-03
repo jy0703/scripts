@@ -69,11 +69,11 @@ async function main() {
 
             // 签到
             const reward_num = await signin(user);
-            const appreward_num = await appsignin(user);
+            const {appreward_num, applzreward} = await appsignin(user);
             if ($.ckStatus) {
                 // 抽奖签到
                 const lottery_num = await lotterySignin(user)
-                const applottery_num, applzreward = await applotterySignin(user)
+                const applottery_num = await applotterySignin(user)
                 // 抽奖
                 if (lottery_num === 1) {
                     await lotteryClock(user)}
@@ -173,7 +173,7 @@ async function appsignin(user) {
         const rewardType10 = res.data.reward_info.find(item => item.reward_type === 10);
         const applzreward = res?.data?.is_popup == 1 && rewardType10 ? rewardType10.reward_num: 0
         $.log(`${$.doFlag[res?.data?.is_popup == 1]} ${res?.data?.is_popup == 1 ? 'APP每日签到: 成功, 获得' + appreward_sum + '分' + '，' + applzreward + '龙珠': 'APP每日签到: 今日已签到'}\n`);
-        return appreward_num,applzreward
+        return {appreward_num, applzreward}
     } catch (e) {
         $.log(`⛔️ 每日签到失败！${e}\n`)
     }
