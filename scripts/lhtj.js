@@ -73,7 +73,7 @@ async function main() {
             if ($.ckStatus) {
                 // 抽奖签到
                 const lottery_num = await lotterySignin(user)
-                const applottery_num = await applotterySignin(user)
+                const applottery_num, applzreward = await applotterySignin(user)
                 // 抽奖
                 if (lottery_num === 1) {
                     await lotteryClock(user)}
@@ -84,7 +84,7 @@ async function main() {
                 //查询珑珠
                 const { balance } = await getBalance(user)
                 $.avatar = head_portrait;
-                $.title = `本次运行共获得${reward_num + appreward_num}积分`
+                $.title = `本次运行共获得${reward_num + appreward_num}积分，${applzreward}龙珠`
                 DoubleLog(`当前用户:${nick_name}\n成长值: ${growth_value}  等级: V${level}  珑珠: ${balance}`)
             } else {
                 DoubleLog(`⛔️ 「${user.userName ?? `账号${index}`}」check ck error!`)
@@ -125,7 +125,9 @@ async function signin(user) {
         // 计算所有奖励的总和
         let reward_sum = 0;
         if(res?.data?.is_popup == 1 && res?.data?.reward_info && Array.isArray(res?.data?.reward_info)) {
-            reward_sum = res.data.reward_info.reduce((sum, item) => sum + (item?.reward_num || 0), 0);
+            reward_sum = res.data.reward_info
+                .filter(item => item?.reward_type === 20)  // 只保留reward_type为20的项
+                .reduce((sum, item) => sum + (item?.reward_num || 0), 0);  // 计算这些项的reward_num总和
         }
         const reward_num = res?.data?.is_popup == 1 ? reward_sum : 0
         $.log(`${$.doFlag[res?.data?.is_popup == 1]} ${res?.data?.is_popup == 1 ? '小程序每日签到: 成功, 获得' + reward_sum + '分' : '小程序每日签到: 今日已签到'}\n`);
@@ -163,11 +165,15 @@ async function appsignin(user) {
         // 计算所有奖励的总和
         let appreward_sum = 0;
         if(res?.data?.is_popup == 1 && res?.data?.reward_info && Array.isArray(res?.data?.reward_info)) {
-            appreward_sum = res.data.reward_info.reduce((sum, item) => sum + (item?.reward_num || 0), 0);
+            appreward_sum = res.data.reward_info
+                .filter(item => item?.reward_type === 20)  // 只保留reward_type为20的项
+                .reduce((sum, item) => sum + (item?.reward_num || 0), 0);  // 计算这些项的reward_num总和
         }
         const appreward_num = res?.data?.is_popup == 1 ? appreward_sum : 0
-        $.log(`${$.doFlag[res?.data?.is_popup == 1]} ${res?.data?.is_popup == 1 ? 'APP每日签到: 成功, 获得' + appreward_sum + '分' : 'APP每日签到: 今日已签到'}\n`);
-        return appreward_num
+        const rewardType10 = res.data.reward_info.find(item => item.reward_type === 10);
+        const applzreward = res?.data?.is_popup == 1 && rewardType10 ? rewardType10.reward_num: 0
+        $.log(`${$.doFlag[res?.data?.is_popup == 1]} ${res?.data?.is_popup == 1 ? 'APP每日签到: 成功, 获得' + appreward_sum + '分' + '，' + applzreward + '龙珠': 'APP每日签到: 今日已签到'}\n`);
+        return appreward_num,applzreward
     } catch (e) {
         $.log(`⛔️ 每日签到失败！${e}\n`)
     }
