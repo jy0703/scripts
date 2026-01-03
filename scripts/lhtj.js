@@ -9,9 +9,34 @@
 
 图标：https://raw.githubusercontent.com/jy0703/scripts/main/icons/lhtj.png
 
+------------------ Surge 配置 ------------------
+
 [Script]
-http-request ^https?:\/\/gw2c\-hw\-open\.longfor\.com\/lmarketing\-task\-api\-mvc\-prod\/openapi\/task\/v1\/signature\/clock script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/lhtj.js, timeout=60, tag=龙湖天街获取Cookie
+龙湖天街获取Cookie= type=http-request ^https?:\/\/gw2c\-hw\-open\.longfor\.com\/lmarketing\-task\-api\-mvc\-prod\/openapi\/task\/v1\/signature\/clock, requires-body=0, max-size=0, timeout=600, script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/lhtj.js, script-update-interval=0
+
+龙湖天街= type=cron cronexp="0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/refs/heads/main/scripts/lhtj.js, timeout=600, script-update-interval=0
+
+[MITM]
+hostname = gw2c-hw-open.longfor.com
+
+------------------- Loon 配置 -------------------
+
+[Script]
+http-request ^https?:\/\/gw2c\-hw\-open\.longfor\.com\/lmarketing\-task\-api\-mvc\-prod\/openapi\/task\/v1\/signature\/clock script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/lhtj.js, timeout=600, tag=龙湖天街获取Cookie
+
 cron "0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/refs/heads/main/scripts/lhtj.js, timeout=600, tag=龙湖天街
+
+[MITM]
+hostname = gw2c-hw-open.longfor.com
+
+--------------- Quantumult X 配置 ---------------
+
+[rewrite_local]
+^https?:\/\/gw2c\-hw\-open\.longfor\.com\/lmarketing\-task\-api\-mvc\-prod\/openapi\/task\/v1\/signature\/clock url script-request-body https://raw.githubusercontent.com/jy0703/scripts/main/scripts/lhtj.js
+
+[task_local]
+"0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/refs/heads/main/scripts/lhtj.js, tag=龙湖天街, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/lhtj.png, enabled=true
+
 [MITM]
 hostname = gw2c-hw-open.longfor.com
 
