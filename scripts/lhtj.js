@@ -170,7 +170,11 @@ async function appsignin(user) {
                 .reduce((sum, item) => sum + (item?.reward_num || 0), 0);  // 计算这些项的reward_num总和
         }
         const appreward_num = res?.data?.is_popup == 1 ? appreward_sum : 0
-        const rewardType10 = res.data.reward_info.find(item => item.reward_type === 10);
+        
+        // 修复：确保reward_info存在且为数组时才查找
+        const rewardType10 = res?.data?.is_popup == 1 && res?.data?.reward_info && Array.isArray(res?.data?.reward_info) 
+            ? res.data.reward_info.find(item => item?.reward_type === 10) 
+            : undefined;
         const applzreward = res?.data?.is_popup == 1 && rewardType10 ? rewardType10.reward_num: 0
         $.log(`${$.doFlag[res?.data?.is_popup == 1]} ${res?.data?.is_popup == 1 ? 'APP每日签到: 成功, 获得' + appreward_sum + '分' + '，' + applzreward + '龙珠': 'APP每日签到: 今日已签到'}\n`);
         return {appreward_num, applzreward}
