@@ -7,10 +7,10 @@
 ------------------------------------------
 获取 Cookie：打开龙湖天街小程序，进入 我的 - 签到赚珑珠 - 任务赚奖励 - 马上签到。
 
-图标：https://raw.githubusercontent.com/jy0703/scripts/refs/heads/main/icons/lhtj.png
+图标：https://raw.githubusercontent.com/jy0703/scripts/main/icons/lhtj.png
 
 [Script]
-http-request ^https?:\/\/gw2c\-hw\-open\.longfor\.com\/lmarketing\-task\-api\-mvc\-prod\/openapi\/task\/v1\/signature\/clock script-path=https://raw.githubusercontent.com/jy0703/scripts/refs/heads/main/scripts/lhtj.js, timeout=60, tag=龙湖天街获取Cookie
+http-request ^https?:\/\/gw2c\-hw\-open\.longfor\.com\/lmarketing\-task\-api\-mvc\-prod\/openapi\/task\/v1\/signature\/clock script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/lhtj.js, timeout=60, tag=龙湖天街获取Cookie
 cron "0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/refs/heads/main/scripts/lhtj.js, timeout=600, tag=龙湖天街
 [MITM]
 hostname = gw2c-hw-open.longfor.com
