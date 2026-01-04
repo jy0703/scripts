@@ -266,7 +266,7 @@ async function lotteryClock(user) {
               }
         }
         let res = await fetch(opts);
-        $.log(`${$.doFlag[res?.code == '0000']} ${res?.code == '0000' && res?.data?.reward_num>0 ? '小程序抽奖成功, 获得' + res?.data?.reward_num + res?.data?.prize_name: '小程序抽奖: ' + (res?.code == '0000' && res?.data?.reward_num == 0 ? '空气' : res?.message)}\n`);
+        $.log(`${$.doFlag[res?.code == '0000']} ${res?.code == '0000' && res?.data?.reward_num>0 ? '小程序抽奖成功, 获得' + res?.data?.reward_num + res?.data?.prize_name: '小程序抽奖成功, 获得' + (res?.code == '0000' && res?.data?.reward_num == 0 ? '空气' : res?.message)}\n`);
     } catch (e) {
         $.log(`⛔️ 抽奖失败！${e}\n`)
     }
@@ -330,7 +330,7 @@ async function applotteryClock(user) {
               }
         }
         let res = await fetch(opts);
-        $.log(`${$.doFlag[res?.code == '0000']} ${res?.code == '0000' && res?.data?.reward_num>0 ? 'APP抽奖成功, 获得' + res?.data?.reward_num + res?.data?.prize_name: 'APP抽奖: ' + (res?.code == '0000' && res?.data?.reward_num == 0 ? '空气' : res?.message)}\n`);
+        $.log(`${$.doFlag[res?.code == '0000']} ${res?.code == '0000' && res?.data?.reward_num>0 ? 'APP抽奖成功, 获得' + res?.data?.reward_num + res?.data?.prize_name: 'APP抽奖成功, 获得' + (res?.code == '0000' && res?.data?.reward_num == 0 ? '空气' : res?.message)}\n`);
     } catch (e) {
         $.log(`⛔️ 抽奖失败！${e}\n`)
     }
