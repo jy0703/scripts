@@ -138,7 +138,7 @@ async function doSign(token) {
     try {
     // 获取当前日期 YYYY-MM-DD 格式
     const today = new Date();
-    const signDate = today.toISOString().split('T')[0];
+    const signDate = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
 
     // 构造请求
     const options = {
