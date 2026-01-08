@@ -1,0 +1,10 @@
+#!name=中国移动签到获取Cookie
+#!desc=自动抓取中国移动签到Cookie
+#!打开中国移动app获取cookie
+
+
+[Script]
+中国移动签到获取Cookie = type=http-request,pattern=https:\/\/wx\.10086\.cn\/qwhdhub\/qwhdmark\/,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jingy0703/cmcc_sign.js,script-update-interval=0
+
+[MITM]
+hostname = wx.10086.cn
