@@ -1,0 +1,10 @@
+#!name=泉水签到获取Token
+#!desc=自动抓取泉水签到token
+#!打开泉站订水小程序，自动获取token
+
+
+[Script]
+泉水签到获取Token = type=http-request,pattern=https:\/\/java-uapi\.quanzhan888\.com\/u\/user-center\/index,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/quanshui_sign.js,script-update-interval=0
+
+[MITM]
+hostname = java-uapi.quanzhan888.com
