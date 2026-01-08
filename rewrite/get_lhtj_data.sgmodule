@@ -1,0 +1,9 @@
+#!name=龙湖天街获取Cookie
+#!desc=自动抓取龙湖天Cookie
+#!打开龙湖天街小程序，进入 我的 - 签到赚珑珠 - 任务赚奖励 - 马上签到。
+
+[Script]
+龙湖天街获取Cookie= type=http-request ^https?:\/\/gw2c\-hw\-open\.longfor\.com\/lmarketing\-task\-api\-mvc\-prod\/openapi\/task\/v1\/signature\/clock, requires-body=0, max-size=0, timeout=600, script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/lhtj.js, script-update-interval=0
+
+[MITM]
+hostname = gw2c-hw-open.longfor.com
