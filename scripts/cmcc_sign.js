@@ -11,9 +11,9 @@
 hostname = wx.10086.cn
 
 [Script]
-中国移动签到获取Cookie = type=http-request,pattern=https:\/\/wx\.10086\.cn\/qwhdhub\/qwhdmark\/,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jingy0703/cmcc_sign.js,script-update-interval=0
+中国移动签到获取Cookie = type=http-request,pattern=https:\/\/wx\.10086\.cn\/qwhdhub\/qwhdmark\/,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/cmcc_sign.js,script-update-interval=0
 
-中国移动签到 = type=cron,cronexp="0 9 * * *",timeout=60,script-path=https://raw.githubusercontent.com/jingy0703/cmcc_sign.js,script-update-interval=0
+中国移动签到 = type=cron,cronexp="0 9 * * *",timeout=60,script-path=https://raw.githubusercontent.com/jy0703/cmcc_sign.js,script-update-interval=0
 
 ------------------- Loon 配置 -------------------
 
@@ -21,9 +21,9 @@ hostname = wx.10086.cn
 hostname = wx.10086.cn
 
 [Script]
-http-request https:\/\/wx\.10086\.cn\/qwhdhub\/qwhdmark\/ tag=中国移动签到获取Cookie,script-path=https://raw.githubusercontent.com/jingy0703/cmcc_sign.js,requires-body=1
+http-request https:\/\/wx\.10086\.cn\/qwhdhub\/qwhdmark\/ tag=中国移动签到获取Cookie,script-path=https://raw.githubusercontent.com/jy0703/cmcc_sign.js,requires-body=1
 
-cron "0 9 * * *" script-path=https://raw.githubusercontent.com/jingy0703/cmcc_sign.js,tag=中国移动签到,enable=true
+cron "0 9 * * *" script-path=https://raw.githubusercontent.com/jy0703/cmcc_sign.js,tag=中国移动签到,enable=true
 
 --------------- Quantumult X 配置 ---------------
 
@@ -31,10 +31,10 @@ cron "0 9 * * *" script-path=https://raw.githubusercontent.com/jingy0703/cmcc_si
 hostname = wx.10086.cn
 
 [rewrite_local]
-https:\/\/wx\.10086\.cn\/qwhdhub\/qwhdmark\/ url script-request-header https://raw.githubusercontent.com/jingy0703/cmcc_sign.js
+https:\/\/wx\.10086\.cn\/qwhdhub\/qwhdmark\/ url script-request-header https://raw.githubusercontent.com/jy0703/cmcc_sign.js
 
 [task_local]
-0 9 * * * https://raw.githubusercontent.com/jingy0703/cmcc_sign.js, tag=中国移动签到, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/cmcc.png, enabled=true
+0 9 * * * https://raw.githubusercontent.com/jy0703/cmcc_sign.js, tag=中国移动签到, img-url=https://raw.githubusercontent.com/Orz-3/mini/master/Color/cmcc.png, enabled=true
 
 ------------------ Stash 配置 ------------------
 
@@ -55,7 +55,7 @@ http:
 
 script-providers:
   中国移动签到:
-    url: https://raw.githubusercontent.com/jingy0703/cmcc_sign.js
+    url: https://raw.githubusercontent.com/jy0703/cmcc_sign.js
     interval: 86400
 
  */
