@@ -1,0 +1,14 @@
+# 设置所有 JavaScript 文件使用 LF 行尾符
+*.js text eol=lf
+
+# 设置所有 JSON 文件使用 LF 行尾符
+*.json text eol=lf
+
+# 设置所有 Markdown 文件使用 LF 行尾符
+*.md text eol=lf
+
+# 对于 Windows 需要的特殊文件，保持 CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.exe binary
+*.dll binary
