@@ -143,7 +143,7 @@ async function doSign(token) {
         }
 
         // 发起请求
-        const result = await Request(options, 'POST');
+        const result = await Request(options);
         if (result?.code === 1) {
             const reward = result?.result || 0;
             msg += `签到: ✅ 签到成功，获得 ${reward} 积分`;
