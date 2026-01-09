@@ -139,6 +139,7 @@ async function doSign(token) {
         // 构造请求
         const options = {
             url: `https://api.ikbang.cn/v2/iclick-new/signIn/sign`,
+            method: 'post', 
             headers: getHeaders('/iclick-new/signIn/sign', token)
         }
 
@@ -268,7 +269,7 @@ function generateSign(url, timestamp, token, params = null) {
     signStr += appKey;
     if (token) {
         signStr += token;
-    }
+    }   
     return MD5(signStr);
 }
 
@@ -292,7 +293,7 @@ function generateSign(url, timestamp, token, params = null) {
 async function Request(options) {
     try {
     options = options.url ? options : { url: options };
-    const _method = options?._method || ('body' in options ? 'post' : 'get');
+    const _method = options?._method || options?.method || ('body' in options ? 'post' : 'get');
     const _respType = options?._respType || 'body';
     const _timeout = options?._timeout || 15000;
     const _http = [
@@ -315,7 +316,6 @@ async function Request(options) {
     $.logErr(err);
     }
 }
-    
 
 // 发送消息
 async function sendMsg(message) {
