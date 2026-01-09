@@ -156,7 +156,7 @@ async function doSign(token) {
     // 发起请求
     const result = await Request(options);
     if (result?.code === 200 || result?.code === 0) {
-        msg += `签到: ✅ ${result?.msg || result?.message || '签到成功'}`;
+        msg += `签到: ✅ ${'签到成功' || result?.msg || result?.message}`;
     } else if (result?.msg?.includes('已签到') || result?.message?.includes('已签到')) {
         msg += `签到: 📝 今日已签到`;
     } else {
