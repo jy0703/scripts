@@ -12,6 +12,7 @@ hostname = api.ikbang.cn
 
 [Script]
 艾克帮签到获取Token = type=http-request,pattern=https:\/\/api\.ikbang\.cn\/v2\/iclick-new\/usercenter\/getUserDetails,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aikebang_sign.js,script-update-interval=0
+艾克帮签到获取Token2 = type=http-response,pattern=https:\/\/api\.ikbang\.cn\/v2\/iclick-new\/usercenter\/getUserDetails,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aikebang_sign.js,script-update-interval=0
 
 艾克帮签到 = type=cron,cronexp="0 8 * * *",timeout=60,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aikebang_sign.js,script-update-interval=0
 
@@ -107,25 +108,25 @@ function GetCookie() {
         debug($request.headers, "获取Header");
         
         // 从请求头中获取token
-        const tokenHeader = $request.headers['token'];
+        const token = $request.headers['token'];
+        const result = $.toObj($response.body);
+        const {userId, userName} = result?.result;
         
-        if (tokenHeader) {
-            // 使用 find() 方法找到与 token 匹配的 token，以新增/更新用户 token
-            const tokenList = $.userInfo.split(/&|\n/).filter(t => t.trim());
-            const tokenExists = tokenList.some(token => token.trim() === tokenHeader.trim());
-            
-            if (!tokenExists) {
-                msg += `🆕 新增用户 Token: ${tokenHeader}`;
-                tokenList.push(tokenHeader);
-                // 写入数据持久化
-                $.setdata(tokenList.join('&'), 'AIKEBANG_TOKEN');
+        if (userId && token) {
+            $.log(`✅ 成功获取 Token`);
+            // 使用 find() 方法找到与 userId 匹配的对象，以新增/更新用户 token
+            const user = $.userArr.find(user => user.userId === userId);
+            if (user) {
+                if (user.token == token) return;
+                msg += `♻️ 更新用户 [${userId}] Token: ${token}`;
+                user.token = token;
             } else {
-                return; 
+                msg += `🆕 新增用户 [${userId}] Token: ${token}`;
+                $.userArr.push({ "userId": userId, "token": token, "userName": userName });
             }
-            
+            // 写入数据持久化
+            $.setdata($.toStr($.userArr), 'AIKEBANG_TOKEN');
             $.Messages.push(msg), $.log(msg);
-        } else {
-            $.log("❌ 未找到 token header");
         }
     } catch (e) {
         $.log("❌ Token获取失败"), $.log(e);
