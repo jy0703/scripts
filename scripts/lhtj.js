@@ -43,7 +43,7 @@ hostname = gw2c-hw-open.longfor.com
 ⚠️【免责声明】
 ------------------------------------------
 1、此脚本仅用于学习研究，不保证其合法性、准确性、有效性，请根据情况自行判断，本人对此不承担任何保证责任。
-2、由于此脚本仅用于学习研究，您必须在下载后 24 小时内将所有内容从您的计算机或手机或任何存储设备中完全删除，若违反规定引起任何事件本人对此均不负责。
+2、由于此脚本仅用于学习研究，您必须在下载后 24 小时内将所有内容从您的计算机或手机或任何存储设备中完全删除，若违反规定引起任何事件本人对此不负责。
 3、请勿将此脚本用于任何商业或非法目的，若违反规定请自行对此负责。
 4、此脚本涉及应用与本人无关，本人对因此引起的任何隐私泄漏或其他后果不承担任何责任。
 5、本人对任何脚本引发的问题概不负责，包括但不限于由脚本错误引起的任何损失和损害。
@@ -275,31 +275,52 @@ async function lotteryClock(user) {
 // app抽奖签到
 async function applotterySignin(user) {
     try {
-        const opts = {
-            url: "https://gw2c-hw-open.longfor.com/llt-gateway-prod/api/v1/activity/auth/lottery/sign",
-            headers: {
-                'cookie': user.cookie,
-                'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.48(0x18003029) NetType/4G Language/zh_CN miniProgram/wx50282644351869da',
-                'authtoken': user.token,
-                'x-gaia-api-key': '2f9e3889-91d9-4684-8ff5-24d881438eaf',
-                'x-lf-dxrisk-token': user['x-lf-dxrisk-token'],
-                'bucode': user['x-lf-bu-code'],
-                'channel': user['x-lf-channel'],
-                'x-lf-dxrisk-source': user['x-lf-dxrisk-source'],
-                'origin': 'https://llt.longfor.com',
-                'referer': 'https://llt.longfor.com'
+        // 定义两组ID
+        const idGroups = [
+            {
+                component_no: "CC13U47045E3262G",
+                activity_no: "AP25I123Y1CKKXSL"
             },
-            type: 'post',
-            dataType: "json",
-            body: {
-                "component_no": "CC13U47045E3262G",
-                "activity_no": "AP25I123Y1CKKXSL"
-              }
+            {
+                component_no: "CU15A06D41Y9ZECJ", 
+                activity_no: "AP260010Y6WP4KCV"
+            }
+        ];
+        
+        // 循环执行两组ID
+        let totalChances = 0;
+        
+        for(const group of idGroups) {
+            const opts = {
+                url: "https://gw2c-hw-open.longfor.com/llt-gateway-prod/api/v1/activity/auth/lottery/sign",
+                headers: {
+                    'cookie': user.cookie,
+                    'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.48(0x18003029) NetType/4G Language/zh_CN miniProgram/wx50282644351869da',
+                    'authtoken': user.token,
+                    'x-gaia-api-key': '2f9e3889-91d9-4684-8ff5-24d881438eaf',
+                    'x-lf-dxrisk-token': user['x-lf-dxrisk-token'],
+                    'bucode': user['x-lf-bu-code'],
+                    'channel': user['x-lf-channel'],
+                    'x-lf-dxrisk-source': user['x-lf-dxrisk-source'],
+                    'origin': 'https://llt.longfor.com',
+                    'referer': 'https://llt.longfor.com'
+                },
+                type: 'post',
+                dataType: "json",
+                body: {
+                    "component_no": group.component_no,
+                    "activity_no": group.activity_no
+                }
+            }
+            let res = await fetch(opts);
+            
+            const applottery_num = res?.code == '0000' ? res?.data?.chance : 0
+            totalChances += applottery_num;
+            
+            $.log(`${$.doFlag[res?.code == '0000']} ${res?.code == '0000' ? `APP抽奖签到(${group.activity_no}): 成功, 获得` + res?.data?.chance + '次抽奖机会' : `APP抽奖签到(${group.activity_no}): ` + res?.message}\n`);
         }
-        let res = await fetch(opts);
-        const applottery_num = res?.code == '0000' ? res?.data?.chance : 0
-        $.log(`${$.doFlag[res?.code == '0000']} ${res?.code == '0000' ? 'APP抽奖签到: 成功, 获得' + res?.data?.chance + '次抽奖机会' : 'APP抽奖签到: ' + res?.message}\n`);
-        return applottery_num
+        
+        return totalChances;
     } catch (e) {
         $.log(`⛔️ 抽奖签到失败！${e}\n`)
     }
@@ -307,30 +328,76 @@ async function applotterySignin(user) {
 // app抽奖
 async function applotteryClock(user) {
     try {
-        const opts = {
-            url: "https://gw2c-hw-open.longfor.com/llt-gateway-prod/api/v1/activity/auth/lottery/click",
-            headers: {
-                'cookie': user.cookie,
-                'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.48(0x18003029) NetType/4G Language/zh_CN miniProgram/wx50282644351869da',
-                'authtoken': user.token,
-                'x-lf-dxrisk-token': user['x-lf-dxrisk-token'],
-                'x-gaia-api-key': '2f9e3889-91d9-4684-8ff5-24d881438eaf',
-                'bucode': user['x-lf-bu-code'],
-                'channel': user['x-lf-channel'],
-                'origin': 'https://llt.longfor.com',
-                'referer': 'https://llt.longfor.com',
-                'x-lf-dxrisk-source': user['x-lf-dxrisk-source']
+        // 定义两组ID
+        const idGroups = [
+            {
+                component_no: "CC13U47045E3262G",
+                activity_no: "AP25I123Y1CKKXSL"
             },
-            type: 'post',
-            dataType: "json",
-            body: {
-                "component_no": "CC13U47045E3262G",
-                "activity_no": "AP25I123Y1CKKXSL",
-                "batch_no": ""
-              }
+            {
+                component_no: "CU15A06D41Y9ZECJ", 
+                activity_no: "AP260010Y6WP4KCV"
+            }
+        ];
+        
+        // 循环执行两组ID的抽奖
+        for(const group of idGroups) {
+            // 先获取该组的抽奖次数
+            const signOpts = {
+                url: "https://gw2c-hw-open.longfor.com/llt-gateway-prod/api/v1/activity/auth/lottery/sign",
+                headers: {
+                    'cookie': user.cookie,
+                    'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.48(0x18003029) NetType/4G Language/zh_CN miniProgram/wx50282644351869da',
+                    'authtoken': user.token,
+                    'x-gaia-api-key': '2f9e3889-91d9-4684-8ff5-24d881438eaf',
+                    'x-lf-dxrisk-token': user['x-lf-dxrisk-token'],
+                    'bucode': user['x-lf-bu-code'],
+                    'channel': user['x-lf-channel'],
+                    'x-lf-dxrisk-source': user['x-lf-dxrisk-source'],
+                    'origin': 'https://llt.longfor.com',
+                    'referer': 'https://llt.longfor.com'
+                },
+                type: 'post',
+                dataType: "json",
+                body: {
+                    "component_no": group.component_no,
+                    "activity_no": group.activity_no
+                }
+            }
+            let signRes = await fetch(signOpts);
+            
+            if (signRes?.code == '0000' && signRes?.data?.chance > 0) {
+                // 执行该组的抽奖
+                const drawCount = signRes?.data?.chance;
+                
+                for (let i = 0; i < drawCount; i++) {
+                    const opts = {
+                        url: "https://gw2c-hw-open.longfor.com/llt-gateway-prod/api/v1/activity/auth/lottery/click",
+                        headers: {
+                            'cookie': user.cookie,
+                            'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.48(0x18003029) NetType/4G Language/zh_CN miniProgram/wx50282644351869da',
+                            'authtoken': user.token,
+                            'x-gaia-api-key': '2f9e3889-91d9-4684-8ff5-24d881438eaf',
+                            'x-lf-dxrisk-token': user['x-lf-dxrisk-token'],
+                            'bucode': user['x-lf-bu-code'],
+                            'channel': user['x-lf-channel'],
+                            'origin': 'https://llt.longfor.com',
+                            'referer': 'https://llt.longfor.com',
+                            'x-lf-dxrisk-source': user['x-lf-dxrisk-source']
+                        },
+                        type: 'post',
+                        dataType: "json",
+                        body: {
+                            "component_no": group.component_no,
+                            "activity_no": group.activity_no,
+                            "batch_no": ""
+                        }
+                    }
+                    let res = await fetch(opts);
+                    $.log(`${$.doFlag[res?.code == '0000']} ${res?.code == '0000' && res?.data?.reward_num>0 ? `APP抽奖(${group.activity_no}): 成功, 获得` + res?.data?.reward_num + res?.data?.prize_name: `APP抽奖(${group.activity_no}): ` + (res?.code == '0000' && res?.data?.reward_num == 0 ? '空气' : res?.message)}\n`);
+                }
+            }
         }
-        let res = await fetch(opts);
-        $.log(`${$.doFlag[res?.code == '0000']} ${res?.code == '0000' && res?.data?.reward_num>0 ? 'APP抽奖成功, 获得' + res?.data?.reward_num + res?.data?.prize_name: 'APP抽奖成功, 获得' + (res?.code == '0000' && res?.data?.reward_num == 0 ? '空气' : res?.message)}\n`);
     } catch (e) {
         $.log(`⛔️ 抽奖失败！${e}\n`)
     }
