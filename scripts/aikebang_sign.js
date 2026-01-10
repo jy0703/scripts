@@ -109,7 +109,7 @@ function GetCookie() {
         // 从请求头中获取token
         const token = $request.headers['token'];
         const result = $.toObj($response.body);
-        const {userId, userName} = result.result;
+        const {userId, userName} = result?.result;
         
         if (userId && token) {
             $.log(`✅ 成功获取 Token`);
