@@ -64,7 +64,7 @@ script-providers:
 const $ = new Env('艾克帮签到');
 $.is_debug = getEnv('is_debug') || 'false';  // 调试模式
 $.userInfo = getEnv('AIKEBANG_TOKEN') || '';  // 获取账号
-$.userArr = $.userInfo.split(/&|\n/).filter(t => t.trim());  // 用户信息
+$.userArr = $.toObj($.userInfo) || [];  // 用户信息
 $.Messages = [];
 
 
