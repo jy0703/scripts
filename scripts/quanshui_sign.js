@@ -120,7 +120,7 @@ function GetCookie() {
         // 写入数据持久化
         $.setdata(tokenList.join('&'), 'QUANSHUI_TOKEN');
         } else {
-        msg += `✅ Token 已存在: ${authHeader}`;
+        return;
         }
         
         $.Messages.push(msg), $.log(msg);
