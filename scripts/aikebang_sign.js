@@ -120,7 +120,7 @@ function GetCookie() {
                 // 写入数据持久化
                 $.setdata(tokenList.join('&'), 'AIKEBANG_TOKEN');
             } else {
-                msg += `✅ Token 已存在: ${tokenHeader}`;
+                return; 
             }
             
             $.Messages.push(msg), $.log(msg);
