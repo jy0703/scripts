@@ -81,7 +81,7 @@ async function main() {
             $.is_login = true;
             $.beforeMsgs = '';
             $.messages = [];
-            $.token = $.userArr[i].trim();
+            $.token = $.userArr[i]['token'];
 
             // 执行签到
             await doSign($.token);
