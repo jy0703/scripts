@@ -342,9 +342,8 @@ async function applotteryClock(user) {
         
         // 循环执行两组ID的抽奖
         for(const group of idGroups) {
-            // 先获取该组的抽奖次数
-            const signOpts = {
-                url: "https://gw2c-hw-open.longfor.com/llt-gateway-prod/api/v1/activity/auth/lottery/sign",
+            const opts = {
+                url: "https://gw2c-hw-open.longfor.com/llt-gateway-prod/api/v1/activity/auth/lottery/click",
                 headers: {
                     'cookie': user.cookie,
                     'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.48(0x18003029) NetType/4G Language/zh_CN miniProgram/wx50282644351869da',
@@ -353,50 +352,20 @@ async function applotteryClock(user) {
                     'x-lf-dxrisk-token': user['x-lf-dxrisk-token'],
                     'bucode': user['x-lf-bu-code'],
                     'channel': user['x-lf-channel'],
-                    'x-lf-dxrisk-source': user['x-lf-dxrisk-source'],
                     'origin': 'https://llt.longfor.com',
-                    'referer': 'https://llt.longfor.com'
+                    'referer': 'https://llt.longfor.com',
+                    'x-lf-dxrisk-source': user['x-lf-dxrisk-source']
                 },
                 type: 'post',
                 dataType: "json",
                 body: {
                     "component_no": group.component_no,
-                    "activity_no": group.activity_no
+                    "activity_no": group.activity_no,
+                    "batch_no": ""
                 }
             }
-            let signRes = await fetch(signOpts);
-            
-            if (signRes?.code == '0000' && signRes?.data?.chance > 0) {
-                // 执行该组的抽奖
-                const drawCount = signRes?.data?.chance;
-                
-                for (let i = 0; i < drawCount; i++) {
-                    const opts = {
-                        url: "https://gw2c-hw-open.longfor.com/llt-gateway-prod/api/v1/activity/auth/lottery/click",
-                        headers: {
-                            'cookie': user.cookie,
-                            'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.48(0x18003029) NetType/4G Language/zh_CN miniProgram/wx50282644351869da',
-                            'authtoken': user.token,
-                            'x-gaia-api-key': '2f9e3889-91d9-4684-8ff5-24d881438eaf',
-                            'x-lf-dxrisk-token': user['x-lf-dxrisk-token'],
-                            'bucode': user['x-lf-bu-code'],
-                            'channel': user['x-lf-channel'],
-                            'origin': 'https://llt.longfor.com',
-                            'referer': 'https://llt.longfor.com',
-                            'x-lf-dxrisk-source': user['x-lf-dxrisk-source']
-                        },
-                        type: 'post',
-                        dataType: "json",
-                        body: {
-                            "component_no": group.component_no,
-                            "activity_no": group.activity_no,
-                            "batch_no": ""
-                        }
-                    }
-                    let res = await fetch(opts);
-                    $.log(`${$.doFlag[res?.code == '0000']} ${res?.code == '0000' && res?.data?.reward_num>0 ? `APP抽奖(${group.activity_no}): 成功, 获得` + res?.data?.reward_num + res?.data?.prize_name: `APP抽奖(${group.activity_no}): ` + (res?.code == '0000' && res?.data?.reward_num == 0 ? '空气' : res?.message)}\n`);
-                }
-            }
+            let res = await fetch(opts);
+            $.log(`${$.doFlag[res?.code == '0000']} ${res?.code == '0000' && res?.data?.reward_num>0 ? `APP抽奖(${group.activity_no}): 成功, 获得` + res?.data?.reward_num + res?.data?.prize_name: `APP抽奖(${group.activity_no}): ` + (res?.code == '0000' && res?.data?.reward_num == 0 ? '空气' : res?.message)}\n`);
         }
     } catch (e) {
         $.log(`⛔️ 抽奖失败！${e}\n`)
