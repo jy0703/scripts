@@ -97,13 +97,11 @@ async function main() {
             const {appreward_num, applzreward} = await appsignin(user);
             if ($.ckStatus) {
                 // 抽奖签到
-                const lottery_num = await lotterySignin(user)
-                const applottery_num = await applotterySignin(user)
+                await lotterySignin(user)
+                await applotterySignin(user)
                 // 抽奖
-                if (lottery_num === 1) {
-                    await lotteryClock(user)}
-                if (applottery_num === 1) {
-                    await applotteryClock(user)}
+                await lotteryClock(user)
+                await applotteryClock(user)
                 //查询用户信息
                 const { nick_name, growth_value, level, head_portrait } = await getUserInfo(user)
                 //查询珑珠
@@ -343,8 +341,8 @@ async function applotteryClock(user) {
         // 循环执行两组ID的抽奖
         for(const group of idGroups) {
             // 先获取该组的抽奖次数
-            const signOpts = {
-                url: "https://gw2c-hw-open.longfor.com/llt-gateway-prod/api/v1/activity/auth/lottery/sign",
+            const chanceopts = {
+                url: `https://gw2c-hw-open.longfor.com/llt-gateway-prod/api/v1/activity/auth/lottery/chance?component_no=${group.component_no}&activity_no=${group.activity_no}`,
                 headers: {
                     'cookie': user.cookie,
                     'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.48(0x18003029) NetType/4G Language/zh_CN miniProgram/wx50282644351869da',
@@ -357,18 +355,14 @@ async function applotteryClock(user) {
                     'origin': 'https://llt.longfor.com',
                     'referer': 'https://llt.longfor.com'
                 },
-                type: 'post',
-                dataType: "json",
-                body: {
-                    "component_no": group.component_no,
-                    "activity_no": group.activity_no
-                }
+                type: 'get',
+                dataType: "json"
             }
-            let signRes = await fetch(signOpts);
-            
-            if (signRes?.code == '0000' && signRes?.data?.chance > 0) {
+            let chanceres = await fetch(chanceopts);
+            console.log(chanceres)
+            if (chanceres?.code == '0000' && chanceres?.data?.chance > 0) {
                 // 执行该组的抽奖
-                const drawCount = signRes?.data?.chance;
+                const drawCount = chanceres?.data?.chance;
                 
                 for (let i = 0; i < drawCount; i++) {
                     const opts = {
