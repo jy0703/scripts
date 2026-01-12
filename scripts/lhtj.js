@@ -359,7 +359,6 @@ async function applotteryClock(user) {
                 dataType: "json"
             }
             let chanceres = await fetch(chanceopts);
-            console.log(chanceres)
             if (chanceres?.code == '0000' && chanceres?.data?.chance > 0) {
                 // 执行该组的抽奖
                 const drawCount = chanceres?.data?.chance;
