@@ -1,9 +1,0 @@
-#!name=什么值得买获取Cookie
-#!desc=自动抓取什么值得买Cookie
-#!打开什么值得买app。
-
-[Script]
-什么值得买获取Cookie = type=http-request,pattern=https:\/\/user-api\.smzdm\.com\/checkin,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/smzdm_sign.js,script-update-interval=0
-
-[MITM]
-hostname = user-api.smzdm.com
