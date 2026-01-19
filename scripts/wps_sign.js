@@ -400,6 +400,49 @@ async function doLottery(times) {
     }
 }
 
+function GetCookie() {
+    try {
+        let msg = '';
+        debug($request.headers, "获取Header");
+        
+        // 从请求头中获取cookie
+        const cookie = $request.headers['Cookie'] || $request.headers['cookie'];
+        
+        if (cookie) {
+            // 从Cookie中提取uid
+            const uidMatch = cookie.match(/(?:^|;)\s*uid\s*=\s*([^;]+)/);
+            const uid = uidMatch ? uidMatch[1] : null;
+            
+            if (!uid) {
+                $.log(`❌ 无法从Cookie中提取uid`);
+                return;
+            }
+            
+            $.log(`✅ 成功获取 Cookie，提取到 UID: ${uid}`);
+            
+            // 使用 find() 方法找到与 uid 匹配的对象，以新增/更新用户 cookie
+            const user = $.userArr.find(user => user.uid === uid);
+            if (user) {
+                if (user.cookie == cookie) {
+                    $.log(`🔄 Cookie未发生变化，无需更新`);
+                    return;
+                }
+                msg += `♻️ 更新用户 [${uid}] Cookie`;
+                user.cookie = cookie;
+            } else {
+                msg += `🆕 新增用户 [${uid}] Cookie`;
+                $.userArr.push({ "uid": uid, "cookie": cookie });
+            }
+            // 写入数据持久化
+            $.setdata($.toStr($.userArr), 'WPS_COOKIE');
+            $.Messages.push(msg), $.log(msg);
+        } else {
+            $.log(`❌ 未能从请求头获取Cookie`);
+        }
+    } catch (e) {
+        $.log("❌ Cookie获取失败"), $.log(e);
+    }
+}
 
 // 脚本执行入口
 !(async () => {
