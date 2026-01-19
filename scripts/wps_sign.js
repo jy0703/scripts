@@ -92,11 +92,12 @@ async function main() {
             }
 
             // 获取公钥
-            const publicKey = await getPublicKey();
-            if (publicKey) {
-                // 执行签到
-                await doSign();
-            }
+            // const publicKey = await getPublicKey();
+            // if (publicKey) {
+            //     // 执行签到
+            //     await doSign(publicKey);
+            // }
+            await doSign()
 
             // 完成分享任务
             await doShareTask();
@@ -145,8 +146,15 @@ async function getPublicKey() {
                 'accept': 'application/json, text/plain, */*',
                 'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6',
                 'origin': 'https://personal-act.wps.cn',
+                'priority': 'u=1, i',
                 'referer': 'https://personal-act.wps.cn/',
-                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36 Edg/134.0.0.0'
+                'sec-ch-ua': '"Chromium";v="134", "Not:A-Brand";v="24", "Microsoft Edge";v="134"',
+                'sec-ch-ua-mobile': '?0',
+                'sec-ch-ua-platform': '"Windows"',
+                'sec-fetch-dest': 'empty',
+                'sec-fetch-mode': 'cors',
+                'sec-fetch-site': 'same-site',
+                'cookie': $.cookie,
             }
         
         }
@@ -169,8 +177,20 @@ async function getPublicKey() {
 // 签到
 async function doSign() {
     try {
-        // 此处需要一个远程服务来处理加密数据，这里简化为直接调用签到接口
-        // 实际使用中可能需要类似原Python脚本中的远程加密服务
+        // 首先获取签到所需的加密参数
+        const publicKey = await getPublicKey();
+        if (!publicKey) {
+            $.log(`❌ 获取公钥失败，无法进行签到\n`);
+            return;
+        }
+
+        // 通过远程服务获取签到参数
+        const signParams = await getSignParams(publicKey);
+        if (!signParams) {
+            $.log(`❌ 获取签到参数失败，无法进行签到\n`);
+            return;
+        }
+
         const options = {
             url: `https://personal-bus.wps.cn/sign_in/v1/sign_in`,
             headers: {
@@ -180,11 +200,10 @@ async function doSign() {
                 'origin': 'https://personal-act.wps.cn',
                 'referer': 'https://personal-act.wps.cn/',
                 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36 Edg/134.0.0.0',
-                'cookie': $.cookie
+                'cookie': $.cookie,
+                'token': signParams.token  // 使用远程服务返回的token
             },
-            body: {
-                'userId': parseInt($.uid)
-            }
+            body: signParams.data  // 使用远程服务返回的数据
         }
 
         const response = await Request(options);
@@ -201,6 +220,43 @@ async function doSign() {
         }
     } catch (e) {
         $.log(`❌ 签到异常: ${e.message}\n`);
+    }
+}
+
+// 获取签到参数
+async function getSignParams(encryptData) {
+    try {
+        const params = {
+            'encryptData': encryptData,
+            'userId': parseInt($.uid),
+        };
+
+        const options = {
+            url: `https://py.leishennb.icu/v1/rnl-2-gather/get-wps-publickey`,
+            headers: {
+                'accept': '*/*',
+                'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6',
+                'content-type': 'application/json',
+                'origin': 'https://personal-act.wps.cn',
+                'referer': 'https://personal-act.wps.cn/',
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36 Edg/134.0.0.0',
+                'cookie': $.cookie
+            },
+            body: params
+        }
+
+        const response = await Request(options);
+
+        if (response && response.code === 200) {  // 修改成功状态码为200
+            $.log(`✅ 获取签到参数成功\n`);
+            return response.data;  // 返回token和data
+        } else {
+            $.log(`❌ 获取签到参数失败: ${response ? JSON.stringify(response) : '网络错误'}\n`);
+            return null;
+        }
+    } catch (e) {
+        $.log(`❌ 获取签到参数异常: ${e.message}\n`);
+        return null;
     }
 }
 
