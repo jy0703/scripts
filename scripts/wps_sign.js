@@ -8,7 +8,7 @@
 ------------------ Surge 配置 ------------------
 
 [MITM]
-hostname = personal-bus.wps.cn, personal-act.wps.cn, account.wps.cn
+hostname = personal-act.wps.cn
 
 [Script]
 WPS签到获取Cookie = type=http-request,pattern=https:\/\/personal-act\.wps\.cn\/activity-rubik\/activity\/component_action,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js,script-update-interval=0
@@ -18,7 +18,7 @@ WPS签到 = type=cron,cronexp="0 8 * * *",timeout=60,script-path=https://raw.git
 ------------------- Loon 配置 -------------------
 
 [MITM]
-hostname = personal-bus.wps.cn, personal-act.wps.cn, account.wps.cn
+hostname = personal-act.wps.cn
 
 [Script]
 http-request https:\/\/personal-act\.wps\.cn\/activity-rubik\/activity\/component_action tag=WPS签到获取Cookie,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js,requires-body=1
@@ -28,7 +28,7 @@ cron "0 8 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/ma
 --------------- Quantumult X 配置 ---------------
 
 [MITM]
-hostname = personal-bus.wps.cn, personal-act.wps.cn, account.wps.cn
+hostname = personal-act.wps.cn
 
 [rewrite_local]
 https:\/\/personal-act\.wps\.cn\/activity-rubik\/activity\/component_action url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js

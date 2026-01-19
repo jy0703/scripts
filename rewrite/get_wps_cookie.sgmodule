@@ -1,0 +1,9 @@
+#!name=WPS获取Cookie
+#!desc=自动抓取WPSCookie
+#!打开https://personal-act.wps.cn/rubik2/portal/HD2025031821201822/YM2025040908558269?cs_from=web_vipcenter_banner_inpublic&mk_key=4b9deqIfqNO3KCZrgH17WPH1kdzMoKUEvya&position=pc_aty_ban3_kaixue_test_b，登陆后自动获取。
+
+[Script]
+WPS签到获取Cookie = type=http-request,pattern=https:\/\/personal-act\.wps\.cn\/activity-rubik\/activity\/component_action,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js,script-update-interval=0
+
+[MITM]
+hostname = personal-act.wps.cn
