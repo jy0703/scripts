@@ -185,7 +185,7 @@ async function doMiniProgramSign(user) {
         msg += `小程序签到: ❌ ${e.message}`;
         $.log(`❌ 小程序签到失败: ${e.message}`);
     }
-    // $.messages.push(msg), $.log(msg);
+    $.log(msg);
 }
 
 // APP签到
@@ -241,7 +241,7 @@ async function doAppSign(user) {
         msg += `APP签到: ❌ ${e.message}`;
         $.log(`❌ APP签到失败: ${e.message}`);
     }
-    // $.messages.push(msg), $.log(msg);
+    $.log(msg);
 }
 
 // 小程序抽奖签到
@@ -280,7 +280,7 @@ async function doMiniProgramLotterySign(user) {
         msg += `小程序抽奖签到: ❌ ${e.message}`;
         $.log(`❌ 小程序抽奖签到失败: ${e.message}`);
     }
-    // $.messages.push(msg), $.log(msg);
+    $.log(msg);
 }
 
 // 小程序抽奖
@@ -324,7 +324,7 @@ async function doMiniProgramLottery(user) {
         msg += `小程序抽奖: ❌ ${e.message}`;
         $.log(`❌ 小程序抽奖失败: ${e.message}`);
     }
-    // $.messages.push(msg), $.log(msg);
+    $.log(msg);
 }
 
 // APP抽奖签到
@@ -383,7 +383,7 @@ async function doAppLotterySign(user) {
         msg = `APP抽奖签到: ❌ ${e.message}`;
         $.log(`❌ APP抽奖签到失败: ${e.message}`);
     }
-    // $.messages.push(msg), $.log(msg);
+    $.log(msg);
 }
 
 // APP抽奖
@@ -470,7 +470,7 @@ async function doAppLottery(user) {
         msg = `APP抽奖: ❌ ${e.message}`;
         $.log(`❌ APP抽奖失败: ${e.message}`);
     }
-    // $.messages.push(msg), $.log(msg);
+    $.log(msg);
 }
 
 // 获取用户信息
