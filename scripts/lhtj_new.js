@@ -333,10 +333,10 @@ async function doAppLotterySign(user) {
     try {
         // 定义两组ID
         const idGroups = [
-            {
-                component_no: "CC13U47045E3262G",
-                activity_no: "AP25I123Y1CKKXSL"
-            },
+            // {
+            //     component_no: "CC13U47045E3262G",
+            //     activity_no: "AP25I123Y1CKKXSL"
+            // },
             {
                 component_no: "CU15A06D41Y9ZECJ", 
                 activity_no: "AP260010Y6WP4KCV"
@@ -392,10 +392,10 @@ async function doAppLottery(user) {
     try {
         // 定义两组ID
         const idGroups = [
-            {
-                component_no: "CC13U47045E3262G",
-                activity_no: "AP25I123Y1CKKXSL"
-            },
+            // {
+            //     component_no: "CC13U47045E3262G",
+            //     activity_no: "AP25I123Y1CKKXSL"
+            // },
             {
                 component_no: "CU15A06D41Y9ZECJ", 
                 activity_no: "AP260010Y6WP4KCV"
