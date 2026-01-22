@@ -8,26 +8,26 @@
 ------------------ Surge 配置 ------------------
 
 [MITM]
-hostname = happy.mail.10086.cn, caiyun.feixin.10086.cn, orches.yun.139.com
+hostname = h.139.com
 
 [Script]
-移动云盘签到获取Token = type=http-request,pattern=https:\/\/orches\.yun\.139\.com\/orchestration\/auth-rebuild\/token\/v1\.0\/querySpecToken,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,script-update-interval=0
+移动云盘签到获取Token = type=http-request,pattern=https:\/\/h\.139\.com\/ccopapi\/share\/share5gMessage,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,script-update-interval=0
 移动云盘签到 = type=cron,cronexp="0 8 * * *",timeout=60,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,script-update-interval=0
 
 ------------------- Loon 配置 -------------------
 
 [MITM]
-hostname = happy.mail.10086.cn, caiyun.feixin.10086.cn, orches.yun.139.com
+hostname = h.139.com
 
 cron "0 8 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,tag=移动云盘签到,enable=true
 
 --------------- Quantumult X 配置 ---------------
 
 [MITM]
-hostname = happy.mail.10086.cn, caiyun.feixin.10086.cn, orches.yun.139.com
+hostname = h.139.com
 
 [rewrite_local]
-https:\/\/orches\.yun\.139\.com\/orchestration\/auth-rebuild\/token\/v1\.0\/querySpecToken url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js
+https:\/\/h\.139\.com\/ccopapi\/share\/share5gMessage url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js
 
 [task_local]
 0 8 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js, tag=移动云盘签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/yidongyunpan.png, enabled=true
@@ -45,8 +45,9 @@ http:
     - "happy.mail.10086.cn"
     - "caiyun.feixin.10086.cn"
     - "orches.yun.139.com"
+    - "h.139.com"
   script:
-    - match: https:\/\/orches\.yun\.139\.com\/orchestration\/auth-rebuild\/token\/v1\.0\/querySpecToken
+    - match: https:\/\/h\.139\.com\/ccopapi\/share\/share5gMessage
       name: 移动云盘签到获取Token
       type: request
       require-body: true
@@ -61,7 +62,7 @@ script-providers:
 const $ = new Env('移动云盘签到');
 $.is_debug = getEnv('is_debug') || 'false';  // 调试模式
 $.userInfo = getEnv('ydyp_data') || '';  // 获取账号
-$.userArr = $.toObj($.userInfo) || [];  // 用户信息 - 从JSON字符串转换为数组
+$.userArr = $.toObj($.userInfo) || [{'Authorization':'Basic bW9iaWxlOjE1OTU4MTY1NzQxOndoZ2I3N1VrfDF8UkNTfDE3NzE2MDc3ODcyNzV8cXZmbGxNbXZJWFNmN21GaWlkai5JUUg5dHhjVFNRSXNYejk5Q2RiZVJVVkhyY1J0UjRFcG9tbHZxa2RiTEdSbWJNclg2OUtKakd2czBIdEpETkowdU8xeDE3TzVDZUFYeEpYU1diMU5pQUlPWnExVV9PN0IwVUhic2ZkSUUyeE1IZGdoOUNlbDhUWktKbzc2MzFTRFBpTUlHV1ZXV1NZVTFjXzRsdzVZT1EwLQ==','phone':'15958165741','token':'bW9iaWxlOjE1OTU4MTY1NzQxOndoZ2I3N1VrfDF8UkNTfDE3NzE2MDc3ODcyNzV8cXZmbGxNbXZJWFNmN21GaWlkai5JUUg5dHhjVFNRSXNYejk5Q2RiZVJVVkhyY1J0UjRFcG9tbHZxa2RiTEdSbWJNclg2OUtKakd2czBIdEpETkowdU8xeDE3TzVDZUFYeEpYU1diMU5pQUlPWnExVV9PN0IwVUhic2ZkSUUyeE1IZGdoOUNlbDhUWktKbzc2MzFTRFBpTUlHV1ZXV1NZVTFjXzRsdzVZT1EwLQ=='}];  // 用户信息 - 从JSON字符串转换为数组
 $.Messages = [];
 $.err_accounts = '';
 $.err_message = '';
@@ -81,7 +82,7 @@ async function main() {
             // 初始化
             $.is_login = true;
             $.messages = [];
-            const authorization = $.userArr[i]['authorization'];
+            const authorization = $.userArr[i]['Authorization'];
             const phone = $.userArr[i]['phone'];
             const token = $.userArr[i]['token'];
             const encrypted_phone = phone.substring(0, 3) + "****" + phone.substring(7);
@@ -570,8 +571,7 @@ async function updata_file() {
     <tagID></tagID>
     <tagType></tagType>
 </pcUploadFileRequest>
-    `,
-            _respType: 'all'
+    `
         };
         
         const response = await Request(options);
@@ -702,7 +702,7 @@ async function shake() {
             const options = {
                 url: "https://caiyun.feixin.10086.cn:7071/market/shake-server/shake/shakeIt?flag=1",
                 headers: $.jwtHeaders,
-                
+                _method: 'POST',
             };
             
             const return_data = await Request(options);
@@ -1030,12 +1030,12 @@ async function cloud_game() {
             await $.wait(waitTime * 1000);
             
             const end_options = {
-                url: 'https://caiyun.feixin.10086.cn/market/signin/hecheng1T/finish?flag=true',
+                url: 'https://caiyun.feixin.10086.cn/market/signin/hecheng1T/finish?flag=true&r=active',
                 headers: $.jwtHeaders,   
             };
             
             const end_data = await Request(end_options);
-            
+            console.log(end_data);
             if (end_data && end_data.code === 0) {
                 $.log('游戏成功');
             }
@@ -1223,7 +1223,6 @@ function GetCookie() {
         debug($request, "获取请求信息");
         
         const authorization = $request.headers['Authorization'] || $request.headers['authorization'];
-        息
         if (authorization) {
             // 从响应体中获取手机号等信息
             const response = $.toObj($response.body);
@@ -1246,7 +1245,7 @@ function GetCookie() {
                     msg += `🆕 新增用户 [${phone}] 信息`;
                     $.userArr.push({
                         "phone": phone,
-                        "authorization": authorization,
+                        "Authorization": authorization,
                         "token": response?.result?.token || ''
                     });
                 }
