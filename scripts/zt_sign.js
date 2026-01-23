@@ -108,7 +108,7 @@ function GetCookie() {
         // 从请求头中获取token和openid
         const x_token = $request.headers['x-token'];
         const result = $.toObj($response.body);
-        const {phone} = result?.data?.mobile;
+        const {phone} = result?.data.mobile;
         
         if (x_token && phone) {
             $.log(`✅ 成功获取 Token 和 phone`);
