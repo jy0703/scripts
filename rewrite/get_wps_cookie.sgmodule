@@ -6,4 +6,4 @@
 WPS签到获取Cookie = type=http-request,pattern=https:\/\/personal-act\.wps\.cn\/activity-rubik\/activity\/component_action,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js,script-update-interval=0
 
 [MITM]
-hostname = personal-act.wps.cn
+hostname = %APPEND% personal-act.wps.cn
