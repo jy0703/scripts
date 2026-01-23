@@ -13,6 +13,8 @@ hostname = membergateway.zto.com
 [Script]
 中通快递签到获取Token = type=http-request,pattern=https:\/\/membergateway\.zto\.com\/getMember,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,script-update-interval=0
 
+中通快递签到获取Token2 = type=http-http-response,pattern=https:\/\/membergateway\.zto\.com\/getMember,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,script-update-interval=0
+
 中通快递签到 = type=cron,cronexp="0 8 * * *",timeout=60,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,script-update-interval=0
 
 ------------------- Loon 配置 -------------------
@@ -106,7 +108,7 @@ function GetCookie() {
         // 从请求头中获取token和openid
         const x_token = $request.headers['x-token'];
         const result = $.toObj($response.body);
-        const phone = result?.data?.mobile;
+        const {phone} = result?.data?.mobile;
         
         if (x_token && phone) {
             $.log(`✅ 成功获取 Token 和 phone`);
