@@ -62,6 +62,8 @@ script-providers:
 
  */
 
+const { log } = require('console');
+
 const $ = new Env('中通快递签到');
 $.is_debug = getEnv('is_debug') || 'false';  // 调试模式
 $.userInfo = getEnv('ZTO_TOKEN') || '';  // 获取账号
@@ -108,8 +110,8 @@ function GetCookie() {
         // 从请求头中获取token和openid
         const x_token = $request.headers['x-token'];
         const result = $.toObj($response.body);
-        const {phone} = result?.data.mobile;
-        
+        const phone = result?.data?.mobile;
+        $.log(`phone: ${phone}`);
         if (x_token && phone) {
             $.log(`✅ 成功获取 Token 和 phone`);
             // 使用 find() 方法找到与 phone 匹配的对象，以新增/更新用户 token
