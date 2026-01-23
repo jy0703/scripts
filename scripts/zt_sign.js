@@ -62,8 +62,6 @@ script-providers:
 
  */
 
-const { log } = require('console');
-
 const $ = new Env('中通快递签到');
 $.is_debug = getEnv('is_debug') || 'false';  // 调试模式
 $.userInfo = getEnv('ZTO_TOKEN') || '';  // 获取账号
