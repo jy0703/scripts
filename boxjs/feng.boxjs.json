@@ -1,0 +1,153 @@
+{
+  "id": "feng.app.sub",
+  "name": "Feng 应用订阅",
+  "author": "@Feng",
+  "icon": "https://avatars.githubusercontent.com/u/12345678",
+  "repo": "https://github.com/Feng/scripts",
+  "apps": [
+    {
+      "id": "aikebang_sign",
+      "name": "艾克帮签到",
+      "author": "@Feng",
+      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aikebang_sign.js",
+      "descs_html": ["艾克帮签到，每日签到获得积分奖励，支持多账号"],
+      "icons": [
+        "https://raw.githubusercontent.com/jy0703/scripts/main/images/aikebang.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/images/aikebang.png"
+      ],
+      "keys": ["AIKEBANG_TOKEN"],
+      "settings": [
+        {
+          "id": "AIKEBANG_TOKEN",
+          "name": "艾克帮 Token",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 3,
+          "placeholder": "",
+          "desc": ""
+        }
+      ]
+    },
+    {
+      "id": "quanshui_sign",
+      "name": "泉水签到",
+      "author": "@Feng",
+      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/quanshui_sign.js",
+      "descs_html": ["泉水签到，每日签到获得积分奖励，支持多账号"],
+      "icons": [
+        "https://raw.githubusercontent.com/jy0703/scripts/main/images/quanshui.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/images/quanshui.png"
+      ],
+      "keys": ["QUANSHUI_TOKEN"],
+      "settings": [
+        {
+          "id": "QUANSHUI_TOKEN",
+          "name": "泉水 Token",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 3,
+          "placeholder": "",
+          "desc": ""
+        }
+      ]
+    },
+    {
+      "id": "wps_sign",
+      "name": "WPS签到",
+      "author": "@Feng",
+      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js",
+      "descs_html": ["WPS签到，每日签到获得积分奖励，支持多账号"],
+      "icons": [
+        "https://raw.githubusercontent.com/jy0703/scripts/main/images/wps.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/images/wps.png"
+      ],
+      "keys": ["WPS_COOKIE"],
+      "settings": [
+        {
+          "id": "WPS_COOKIE",
+          "name": "WPS Cookie",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 5,
+          "placeholder": "",
+          "desc": ""
+        }
+      ]
+    },
+    {
+      "id": "ydyp",
+      "name": "移动云盘签到",
+      "author": "@Feng",
+      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js",
+      "descs_html": ["移动云盘签到，每日签到获得云朵奖励，支持多账号"],
+      "icons": [
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/yidongyunpan.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/yidongyunpan.png"
+      ],
+      "keys": ["ydyp_data"],
+      "settings": [
+        {
+          "id": "ydyp_data",
+          "name": "移动云盘数据",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 5,
+          "placeholder": "",
+          "desc": ""
+        }
+      ]
+    },
+    {
+      "id": "zt_sign",
+      "name": "中通快递签到",
+      "author": "@Feng",
+      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js",
+      "descs_html": ["中通快递签到，每日签到获得奖励，支持多账号"],
+      "icons": [
+        "https://raw.githubusercontent.com/jy0703/scripts/main/images/zt.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/images/zt.png"
+      ],
+      "keys": ["ZTO_TOKEN"],
+      "settings": [
+        {
+          "id": "ZTO_TOKEN",
+          "name": "中通 Token",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 3,
+          "placeholder": "",
+          "desc": ""
+        }
+      ]
+    },
+    {
+      "id": "lhtj",
+      "name": "龙湖天街签到",
+      "author": "@Feng",
+      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/lhtj_new.js",
+      "descs_html": ["龙湖天街签到，每日签到获得积分、珑珠奖励，可参与抽奖，支持多账号"],
+      "icons": [
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/lhtj.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/lhtj.png"
+      ],
+      "keys": ["lhtj_data"],
+      "settings": [
+        {
+          "id": "lhtj_data",
+          "name": "龙湖天街数据",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 5,
+          "placeholder": "",
+          "desc": ""
+        }
+      ]
+    }
+  ]
+}
