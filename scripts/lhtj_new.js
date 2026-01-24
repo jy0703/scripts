@@ -97,10 +97,11 @@ async function main() {
         let totalLZ = 0;
         for (const user of $.userArr) {
             totalPoints += user.totalPoints || 0;
-            totalLZ += user.totalLZ || 0;
+            // 确保totalLZ是数字类型后再加入总和计算
+            totalLZ += parseFloat(user.totalLZ) || 0;
         }
         
-        $.Messages.push(`\n📊 本次运行总计获得: ${totalPoints} 积分, ${totalLZ} 珑珠`);
+        $.Messages.push(`\n📊 本次运行总计获得: ${totalPoints} 积分, ${Number(totalLZ).toFixed(2)} 珑珠`);
         $.log(`\n----- 所有账号执行完成 -----\n`);
     } else {
         throw new Error('未找到 lhtj_data 变量 ❌');
@@ -227,9 +228,9 @@ async function doAppSign(user) {
             const rewardType10 = result.data.reward_info.find(item => item?.reward_type === 10);
             lzreward = rewardType10 ? rewardType10.reward_num : 0;
             
-            // 更新累计积分和珑珠
+            // 更新累计积分和珑珠，修复浮点数精度问题
             user.totalPoints = (user.totalPoints || 0) + appreward_sum;
-            user.totalLZ = (user.totalLZ || 0) + lzreward;
+            user.totalLZ = Number((user.totalLZ || 0) + lzreward).toFixed(2);
         }
         
         if (result?.data?.is_popup == 1) {
@@ -312,8 +313,8 @@ async function doMiniProgramLottery(user) {
         const result = await Request(options);
         
         if (result?.code == '0000' && result?.data?.reward_num > 0) {
-            // 更新累计珑珠
-            user.totalLZ = (user.totalLZ || 0) + result?.data?.reward_num;
+            // 更新累计珑珠，修复浮点数精度问题
+            user.totalLZ = Number((user.totalLZ || 0 + result?.data?.reward_num).toFixed(2));
             msg += `小程序抽奖: ✅ 成功, 获得 ${result?.data?.reward_num} ${result?.data?.prize_name}`;
         } else if (result?.code == '0000' && result?.data?.reward_num == 0) {
             msg += `小程序抽奖: 😐 成功, 获得 空气`;
@@ -451,8 +452,8 @@ async function doAppLottery(user) {
                 const result = await Request(options);
                 
                 if (result?.code == '0000' && result?.data?.reward_num > 0) {
-                    // 更新累计珑珠
-                    user.totalLZ = (user.totalLZ || 0) + result?.data?.reward_num;
+                    // 更新累计珑珠，修复浮点数精度问题
+                    user.totalLZ = Number((user.totalLZ || 0) + result?.data?.reward_num).toFixed(2);
                     msg += `APP抽奖(${group.activity_no}): ✅ 成功, 获得 ${result?.data?.reward_num} ${result?.data?.prize_name}\n`;
                 } else if (result?.code == '0000' && result?.data?.reward_num == 0) {
                     msg += `APP抽奖(${group.activity_no}): 😐 成功, 获得 空气\n`;
