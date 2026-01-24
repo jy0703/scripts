@@ -235,18 +235,40 @@ async function doSign(token) {
 
         // 发起请求
         const result = await Request(options);
+        
         if (result?.status) {
             const data = result?.result || {};
-            if(data.statusCode === 'SYS000'){
-                msg += `签到: ✅ 签到成功，获得 ${data.pointsEarned || '未知'} 奖励`;
-            }else{
-                msg += `签到: ❌ ${data.msg || '签到失败'}`;
+            
+            // 检查是否已经签到
+            if(result?.message?.includes('已签到') || data.isSigned) {
+                msg += `签到: 📝 今日已签到`;
+            } 
+            // 检查签到是否成功
+            else if(data.statusCode === 'SYS000' || result?.statusCode === 'SYS000') {
+                let rewardInfo = '';
+                if(data.awardType && data.pointsEarned){
+                    rewardInfo = `${data.pointsEarned} ${data.awardType}`;
+                } else if(data.pointsEarned){
+                    rewardInfo = `${data.pointsEarned} 积分`;
+                } else {
+                    rewardInfo = '奖励';
+                }
+                
+                msg += `签到: ✅ 签到成功，获得 ${rewardInfo}`;
+                
+                // 添加连续签到天数信息（如果存在）
+                if(data.continuousDays !== null && data.continuousDays !== undefined){
+                    msg += `，连续签到 ${data.continuousDays} 天`;
+                }
+            } else {
+                // 如果返回了错误信息
+                const errorMsg = data.msg || result?.message || result?.msg || '签到失败';
+                msg += `签到: ❌ ${errorMsg}`;
+                $.log(`签到失败详情: ${$.toStr(result)}`);
             }
         } else if (result?.message?.includes('已签到')) {
             msg += `签到: 📝 今日已签到`;
-        } else {
-            msg += `签到: ❌ ${result?.message || result?.msg || '签到失败'}`;
-        }
+        } 
     } catch (e) {
         msg += `签到: ❌ ${e.message}`;
         $.log(`❌ 签到失败: ${e.message}`);
