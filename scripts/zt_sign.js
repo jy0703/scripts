@@ -3,37 +3,41 @@
  * 活动规则：每日签到获得奖励
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。
  * 环境变量：ZTO_TOKEN
- * 更新时间：2026-01-23
+ * 更新时间：2026-01-24
 
 ------------------ Surge 配置 ------------------
 
 [MITM]
-hostname = membergateway.zto.com
+hostname = membergateway.zto.com, hdgateway.zto.com
 
 [Script]
 中通快递签到获取Token = type=http-request,pattern=https:\/\/membergateway\.zto\.com\/getMember,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,script-update-interval=0
 
-中通快递签到获取Token2 = type=http-http-response,pattern=https:\/\/membergateway\.zto\.com\/getMember,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,script-update-interval=0
+中通快递签到获取Token2 = type=http-response,pattern=https:\/\/membergateway\.zto\.com\/getMember,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,script-update-interval=0
+
+中通快递Token刷新 = type=http-request,pattern=https:\/\/hdgateway\.zto\.com\/auth_account_getUserLoginProvider,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,script-update-interval=0
 
 中通快递签到 = type=cron,cronexp="0 8 * * *",timeout=60,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,script-update-interval=0
 
 ------------------- Loon 配置 -------------------
 
 [MITM]
-hostname = membergateway.zto.com
+hostname = membergateway.zto.com, hdgateway.zto.com
 
 [Script]
 http-request https:\/\/membergateway\.zto\.com\/getMember tag=中通快递签到获取Token,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,requires-body=1
+http-request https:\/\/hdgateway\.zto\.com\/auth_account_getUserLoginProvider tag=中通快递Token刷新,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,requires-body=1
 
 cron "0 8 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,tag=中通快递签到,enable=true
 
 --------------- Quantumult X 配置 ---------------
 
 [MITM]
-hostname = membergateway.zto.com
+hostname = membergateway.zto.com, hdgateway.zto.com
 
 [rewrite_local]
 https:\/\/membergateway\.zto\.com\/getMember url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js
+https:\/\/hdgateway\.zto\.com\/auth_account_getUserLoginProvider url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js
 
 [task_local]
 0 8 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js, tag=中通快递签到, enabled=true
@@ -49,9 +53,14 @@ cron:
 http:
   mitm:
     - "membergateway.zto.com"
+    - "hdgateway.zto.com"
   script:
     - match: https:\/\/membergateway\.zto\.com\/getMember
       name: 中通快递签到获取Token
+      type: request
+      require-body: true
+    - match: https:\/\/hdgateway\.zto\.com\/auth_account_getUserLoginProvider
+      name: 中通快递Token刷新
       type: request
       require-body: true
 
@@ -83,6 +92,21 @@ async function main() {
             $.beforeMsgs = '';
             $.messages = [];
             $.token = $.userArr[i]['token'];
+            $.phone = $.userArr[i]['phone'];
+
+            // 检查token是否过期，如果过期则刷新
+            const isValidToken = await checkToken($.token);
+            if (!isValidToken) {
+                $.log(`\n----- Token 已过期，正在刷新 -----`);
+                const refreshedToken = await refreshToken($.phone);
+                if (refreshedToken) {
+                    $.log(`\n----- Token 刷新成功 -----`);
+                    $.token = refreshedToken;
+                } else {
+                    $.log(`\n----- Token 刷新失败，跳过该账号 -----`);
+                    continue;
+                }
+            }
 
             // 执行签到
             await doSign($.token);
@@ -96,6 +120,64 @@ async function main() {
         $.log(`\n----- 所有账号执行完成 -----\n`);
     } else {
         throw new Error('未找到 ZTO_TOKEN 变量 ❌');
+    }
+}
+
+// 检查token是否有效
+async function checkToken(token) {
+    try {
+        const options = {
+            url: `https://hdgateway.zto.com/auth_account_getUserLoginProvider`,
+            method: 'post',
+            headers: {
+                'Host': 'hdgateway.zto.com',
+                'Content-Type': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.68(0x18004429) NetType/WIFI Language/zh_CN',
+                'x-token': token,
+            }
+        };
+
+        const result = await Request(options);
+        if (result?.statusCode === 'S209' && result?.message?.includes('token已过期')) {
+            return false; // token已过期
+        }
+        return true; // token有效
+    } catch (e) {
+        $.log(`❌ 检查token有效性失败: ${e.message}`);
+        return false; // 出错时默认认为token无效
+    }
+}
+
+// 刷新token
+async function refreshToken(phone) {
+    try {
+        const options = {
+            url: `https://hdgateway.zto.com/auth_token_checkToken`,
+            method: 'post',
+            headers: {
+                'Host': 'hdgateway.zto.com',
+                'Content-Type': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.68(0x18004429) NetType/WIFI Language/zh_CN'
+            }
+        };
+
+        const result = await Request(options);
+        if (result?.status === true && result?.result?.newToken) {
+            const newToken = result.result.newToken;
+            // 更新本地存储的token
+            const userIndex = $.userArr.findIndex(user => user.phone === phone);
+            if (userIndex !== -1) {
+                $.userArr[userIndex].token = newToken;
+                $.setdata($.toStr($.userArr), 'ZTO_TOKEN');
+            }
+            return newToken;
+        } else {
+            $.log(`❌ 刷新token失败: ${result?.message || '未知错误'}`);
+            return null;
+        }
+    } catch (e) {
+        $.log(`❌ 刷新token过程中出错: ${e.message}`);
+        return null;
     }
 }
 
