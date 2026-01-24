@@ -98,7 +98,7 @@ async function main() {
             const isValidToken = await checkToken($.token);
             if (!isValidToken) {
                 $.log(`\n----- Token 已过期，正在刷新 -----`);
-                const refreshedToken = await refreshToken($.phone);
+                const refreshedToken = await refreshToken($.phone,$.token);
                 if (refreshedToken) {
                     $.log(`\n----- Token 刷新成功 -----`);
                     $.token = refreshedToken;
@@ -149,7 +149,7 @@ async function checkToken(token) {
 }
 
 // 刷新token
-async function refreshToken(phone) {
+async function refreshToken(phone,token) {
     try {
         const options = {
             url: `https://hdgateway.zto.com/auth_token_checkToken`,
@@ -157,7 +157,8 @@ async function refreshToken(phone) {
             headers: {
                 'Host': 'hdgateway.zto.com',
                 'Content-Type': 'application/json',
-                'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.68(0x18004429) NetType/WIFI Language/zh_CN'
+                'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.68(0x18004429) NetType/WIFI Language/zh_CN',
+                'x-token': token
             }
         };
 
