@@ -230,7 +230,7 @@ async function doAppSign(user) {
             
             // 更新累计积分和珑珠，修复浮点数精度问题
             user.totalPoints = (user.totalPoints || 0) + appreward_sum;
-            user.totalLZ = Number((user.totalLZ || 0) + lzreward).toFixed(2);
+            user.totalLZ = Number((parseFloat(user.totalLZ || 0) + parseFloat(lzreward)).toFixed(2));
         }
         
         if (result?.data?.is_popup == 1) {
@@ -314,7 +314,7 @@ async function doMiniProgramLottery(user) {
         
         if (result?.code == '0000' && result?.data?.reward_num > 0) {
             // 更新累计珑珠，修复浮点数精度问题
-            user.totalLZ = Number((user.totalLZ || 0 + result?.data?.reward_num).toFixed(2));
+            user.totalLZ = Number((parseFloat(user.totalLZ || 0) + parseFloat(result?.data?.reward_num || 0)).toFixed(2));
             msg += `小程序抽奖: ✅ 成功, 获得 ${result?.data?.reward_num} ${result?.data?.prize_name}`;
         } else if (result?.code == '0000' && result?.data?.reward_num == 0) {
             msg += `小程序抽奖: 😐 成功, 获得 空气`;
@@ -453,7 +453,7 @@ async function doAppLottery(user) {
                 
                 if (result?.code == '0000' && result?.data?.reward_num > 0) {
                     // 更新累计珑珠，修复浮点数精度问题
-                    user.totalLZ = Number((user.totalLZ || 0) + result?.data?.reward_num).toFixed(2);
+                    user.totalLZ = Number((parseFloat(user.totalLZ || 0) + parseFloat(result?.data?.reward_num || 0)).toFixed(2));
                     msg += `APP抽奖(${group.activity_no}): ✅ 成功, 获得 ${result?.data?.reward_num} ${result?.data?.prize_name}\n`;
                 } else if (result?.code == '0000' && result?.data?.reward_num == 0) {
                     msg += `APP抽奖(${group.activity_no}): 😐 成功, 获得 空气\n`;
