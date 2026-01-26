@@ -15,8 +15,6 @@ hostname = membergateway.zto.com, hdgateway.zto.com
 
 中通快递签到获取Token2 = type=http-response,pattern=https:\/\/membergateway\.zto\.com\/getMember,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,script-update-interval=0
 
-中通快递Token刷新 = type=http-request,pattern=https:\/\/hdgateway\.zto\.com\/auth_account_getUserLoginProvider,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,script-update-interval=0
-
 中通快递签到 = type=cron,cronexp="0 8 * * *",timeout=60,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,script-update-interval=0
 
 ------------------- Loon 配置 -------------------
@@ -26,7 +24,7 @@ hostname = membergateway.zto.com, hdgateway.zto.com
 
 [Script]
 http-request https:\/\/membergateway\.zto\.com\/getMember tag=中通快递签到获取Token,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,requires-body=1
-http-request https:\/\/hdgateway\.zto\.com\/auth_account_getUserLoginProvider tag=中通快递Token刷新,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,requires-body=1
+http-response https:\/\/membergateway\.zto\.com\/getMember tag=中通快递Token2,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,requires-body=1
 
 cron "0 8 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,tag=中通快递签到,enable=true
 
@@ -37,7 +35,7 @@ hostname = membergateway.zto.com, hdgateway.zto.com
 
 [rewrite_local]
 https:\/\/membergateway\.zto\.com\/getMember url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js
-https:\/\/hdgateway\.zto\.com\/auth_account_getUserLoginProvider url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js
+https:\/\/membergateway\.zto\.com\/getMember url script-response-body https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js
 
 [task_local]
 0 8 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js, tag=中通快递签到, enabled=true
@@ -59,9 +57,9 @@ http:
       name: 中通快递签到获取Token
       type: request
       require-body: true
-    - match: https:\/\/hdgateway\.zto\.com\/auth_account_getUserLoginProvider
-      name: 中通快递Token刷新
-      type: request
+    - match: https:\/\/membergateway\.zto\.com\/getMember
+      name: 中通快递Token2
+      type: response
       require-body: true
 
 script-providers:
@@ -235,40 +233,36 @@ async function doSign(token) {
 
         // 发起请求
         const result = await Request(options);
+        $.log(result)
+        const data = result?.result || {};
         
-        if (result?.status) {
-            const data = result?.result || {};
-            
-            // 检查是否已经签到
-            if(result?.message?.includes('已签到') || data.isSigned) {
-                msg += `签到: 📝 今日已签到`;
-            } 
-            // 检查签到是否成功
-            else if(data.statusCode === 'SYS000' || result?.statusCode === 'SYS000') {
-                let rewardInfo = '';
-                if(data.awardType && data.pointsEarned){
-                    rewardInfo = `${data.pointsEarned} ${data.awardType}`;
-                } else if(data.pointsEarned){
-                    rewardInfo = `${data.pointsEarned} 积分`;
-                } else {
-                    rewardInfo = '奖励';
-                }
-                
-                msg += `签到: ✅ 签到成功，获得 ${rewardInfo}`;
-                
-                // 添加连续签到天数信息（如果存在）
-                if(data.continuousDays !== null && data.continuousDays !== undefined){
-                    msg += `，连续签到 ${data.continuousDays} 天`;
-                }
-            } else {
-                // 如果返回了错误信息
-                const errorMsg = data.msg || result?.message || result?.msg || '签到失败';
-                msg += `签到: ❌ ${errorMsg}`;
-                $.log(`签到失败详情: ${$.toStr(result)}`);
-            }
-        } else if (result?.message?.includes('已签到')) {
+        // 检查是否已经签到
+        if(result?.message?.includes('已签到') ) {
             msg += `签到: 📝 今日已签到`;
         } 
+        // 检查签到是否成功
+        else if(result?.statusCode === 'SYS000') {
+            let rewardInfo = '';
+            if(data.awardType && data.pointsEarned){
+                rewardInfo = `${data.pointsEarned} ${data.awardType}`;
+            } else if(data.pointsEarned){
+                rewardInfo = `${data.pointsEarned} 积分`;
+            } else {
+                rewardInfo = '奖励';
+            }
+            
+            msg += `签到: ✅ 签到成功，获得 ${rewardInfo}`;
+            
+            // 添加连续签到天数信息（如果存在）
+            if(data.continuousDays !== null && data.continuousDays !== undefined){
+                msg += `，连续签到 ${data.continuousDays} 天`;
+            }
+        } else {
+            // 如果返回了错误信息
+            const errorMsg = data.msg || result?.message || result?.msg || '签到失败';
+            msg += `签到: ❌ ${errorMsg}`;
+            $.log(`签到失败详情: ${$.toStr(result)}`);
+        }
     } catch (e) {
         msg += `签到: ❌ ${e.message}`;
         $.log(`❌ 签到失败: ${e.message}`);
