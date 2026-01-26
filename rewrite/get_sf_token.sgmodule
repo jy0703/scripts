@@ -1,9 +1,0 @@
-#!name=顺丰速运获取Token
-#!desc=顺丰速运 签到、日常任务、会员日、蜂蜜。采蜜任务默认关闭，可在boxjs打开
-#!打开小程序，进入我的页面，点击优惠券页面获取token。支持多账号。
-
-[Script]
-顺丰速运签到获取Token = type=http-response,pattern=^https:\/\/mcs-mimp-web\.sf-express\.com\/mcs-mimp\/share\/weChat\/shareGiftReceiveRedirect.+,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/sf.js,script-update-interval=0
-
-[MITM]
-hostname = %APPEND% mcs-mimp-web.sf-express.com
