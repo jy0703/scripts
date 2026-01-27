@@ -233,7 +233,7 @@ async function doSign(token) {
 
         // 发起请求
         const result = await Request(options);
-        $.log(result)
+
         const data = result?.result || {};
         
         // 检查是否已经签到
@@ -244,11 +244,7 @@ async function doSign(token) {
         else if(result?.statusCode === 'SYS000') {
             let rewardInfo = '';
             if(data.awardType && data.pointsEarned){
-                rewardInfo = `${data.pointsEarned} ${data.awardType}`;
-            } else if(data.pointsEarned){
                 rewardInfo = `${data.pointsEarned} 积分`;
-            } else {
-                rewardInfo = '奖励';
             }
             
             msg += `签到: ✅ 签到成功，获得 ${rewardInfo}`;
