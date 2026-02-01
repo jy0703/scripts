@@ -249,36 +249,56 @@ async function doAppSign(user) {
 async function doMiniProgramLotterySign(user) {
     let msg = '';
     try {
-        const options = {
-            url: "https://gw2c-hw-open.longfor.com/llt-gateway-prod/api/v1/activity/auth/lottery/sign",
-            headers: {
-                'cookie': user.cookie,
-                'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.48(0x18003029) NetType/4G Language/zh_CN miniProgram/wx50282644351869da',
-                'authtoken': user.token,
-                'x-gaia-api-key': '2f9e3889-91d9-4684-8ff5-24d881438eaf',
-                'x-lf-dxrisk-token': user['x-lf-dxrisk-token'],
-                'bucode': user['x-lf-bu-code'],
-                'channel': user['x-lf-channel'],
-                'x-lf-dxrisk-source': user['x-lf-dxrisk-source'],
-                'origin': 'https://llt.longfor.com',
-                'referer': 'https://llt.longfor.com'
+        // 定义小程序的ID组
+        const miniProgramIdGroups = [
+            {
+                component_no: "CO13545A08P7EI9Y",
+                activity_no: "AP25O123K1HEE8DB"
             },
-            
-            body: {
-                "component_no": "CO13545A08P7EI9Y",
-                "activity_no": "AP25O123K1HEE8DB"
+            {
+                component_no: "CW16530P28V520GL",
+                activity_no: "AP26P012R90F1UKX"
             }
-        };
-
-        const result = await Request(options);
+        ];
         
-        if (result?.code == '0000') {
-            msg += `小程序抽奖签到: ✅ 成功, 获得 ${result?.data?.chance} 次抽奖机会`;
-        } else {
-            msg += `小程序抽奖签到: ❌ ${result?.message}`;
+        // let totalChances = 0;
+        
+        for(const group of miniProgramIdGroups) {
+            const options = {
+                url: "https://gw2c-hw-open.longfor.com/llt-gateway-prod/api/v1/activity/auth/lottery/sign",
+                headers: {
+                    'cookie': user.cookie,
+                    'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.48(0x18003029) NetType/4G Language/zh_CN miniProgram/wx50282644351869da',
+                    'authtoken': user.token,
+                    'x-gaia-api-key': '2f9e3889-91d9-4684-8ff5-24d881438eaf',
+                    'x-lf-dxrisk-token': user['x-lf-dxrisk-token'],
+                    'bucode': user['x-lf-bu-code'],
+                    'channel': user['x-lf-channel'],
+                    'x-lf-dxrisk-source': user['x-lf-dxrisk-source'],
+                    'origin': 'https://llt.longfor.com',
+                    'referer': 'https://llt.longfor.com'
+                },
+                
+                body: {
+                    "component_no": group.component_no,
+                    "activity_no": group.activity_no
+                }
+            };
+
+            const result = await Request(options);
+            
+            if (result?.code == '0000') {
+                // totalChances += result?.data?.chance;
+                msg += `小程序抽奖签到(${group.activity_no}): ✅ 成功, 获得 ${result?.data?.chance} 次抽奖机会\n`;
+            } else {
+                msg += `小程序抽奖签到(${group.activity_no}): ❌ ${result?.message}\n`;
+            }
         }
+        
+        // 清理多余换行
+        msg = msg.trim();
     } catch (e) {
-        msg += `小程序抽奖签到: ❌ ${e.message}`;
+        msg = `小程序抽奖签到: ❌ ${e.message}`;
         $.log(`❌ 小程序抽奖签到失败: ${e.message}`);
     }
     $.log(msg);
@@ -288,41 +308,83 @@ async function doMiniProgramLotterySign(user) {
 async function doMiniProgramLottery(user) {
     let msg = '';
     try {
-        const options = {
-            url: "https://gw2c-hw-open.longfor.com/llt-gateway-prod/api/v1/activity/auth/lottery/click",
-            headers: {
-                'cookie': user.cookie,
-                'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.48(0x18003029) NetType/4G Language/zh_CN miniProgram/wx50282644351869da',
-                'authtoken': user.token,
-                'x-lf-dxrisk-token': user['x-lf-dxrisk-token'],
-                'x-gaia-api-key': '2f9e3889-91d9-4684-8ff5-24d881438eaf',
-                'bucode': user['x-lf-bu-code'],
-                'channel': user['x-lf-channel'],
-                'origin': 'https://llt.longfor.com',
-                'referer': 'https://llt.longfor.com',
-                'x-lf-dxrisk-source': user['x-lf-dxrisk-source']
+        // 定义小程序的ID组
+        const miniProgramIdGroups = [
+            {
+                component_no: "CO13545A08P7EI9Y",
+                activity_no: "AP25O123K1HEE8DB"
             },
-            
-            body: {
-                "component_no": "CO13545A08P7EI9Y",
-                "activity_no": "AP25O123K1HEE8DB",
-                "batch_no": ""
+            {
+                component_no: "CW16530P28V520GL",
+                activity_no: "AP26P012R90F1UKX"
             }
-        };
-       
-        const result = await Request(options);
+        ];
         
-        if (result?.code == '0000' && result?.data?.reward_num > 0) {
-            // 更新累计珑珠，修复浮点数精度问题
-            user.totalLZ = Number((parseFloat(user.totalLZ || 0) + parseFloat(result?.data?.reward_num || 0)).toFixed(2));
-            msg += `小程序抽奖: ✅ 成功, 获得 ${result?.data?.reward_num} ${result?.data?.prize_name}`;
-        } else if (result?.code == '0000' && result?.data?.reward_num == 0) {
-            msg += `小程序抽奖: 😐 成功, 获得 空气`;
-        } else {
-            msg += `小程序抽奖: ❌ ${result?.message}`;
+        for(const group of miniProgramIdGroups) {
+            // 先获取该组的抽奖次数
+            const chanceOptions = {
+                url: `https://gw2c-hw-open.longfor.com/llt-gateway-prod/api/v1/activity/auth/lottery/chance?component_no=${group.component_no}&activity_no=${group.activity_no}`,
+                headers: {
+                    'cookie': user.cookie,
+                    'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.48(0x18003029) NetType/4G Language/zh_CN miniProgram/wx50282644351869da',
+                    'authtoken': user.token,
+                    'x-gaia-api-key': '2f9e3889-91d9-4684-8ff5-24d881438eaf',
+                    'x-lf-dxrisk-token': user['x-lf-dxrisk-token'],
+                    'bucode': user['x-lf-bu-code'],
+                    'channel': user['x-lf-channel'],
+                    'x-lf-dxrisk-source': user['x-lf-dxrisk-source'],
+                    'origin': 'https://llt.longfor.com',
+                    'referer': 'https://llt.longfor.com'
+                },
+                method: 'get'
+            };
+            
+            const chanceResult = await Request(chanceOptions);
+            
+            if (chanceResult?.code == '0000' && chanceResult?.data?.chance > 0) {
+                // 执行该组的抽奖
+                const options = {
+                    url: "https://gw2c-hw-open.longfor.com/llt-gateway-prod/api/v1/activity/auth/lottery/click",
+                    headers: {
+                        'cookie': user.cookie,
+                        'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.48(0x18003029) NetType/4G Language/zh_CN miniProgram/wx50282644351869da',
+                        'authtoken': user.token,
+                        'x-gaia-api-key': '2f9e3889-91d9-4684-8ff5-24d881438eaf',
+                        'x-lf-dxrisk-token': user['x-lf-dxrisk-token'],
+                        'bucode': user['x-lf-bu-code'],
+                        'channel': user['x-lf-channel'],
+                        'origin': 'https://llt.longfor.com',
+                        'referer': 'https://llt.longfor.com',
+                        'x-lf-dxrisk-source': user['x-lf-dxrisk-source']
+                    },
+                    
+                    body: {
+                        "component_no": group.component_no,
+                        "activity_no": group.activity_no,
+                        "batch_no": ""
+                    }
+                };
+                
+                const result = await Request(options);
+                
+                if (result?.code == '0000' && result?.data?.reward_num > 0) {
+                    // 更新累计珑珠，修复浮点数精度问题
+                    user.totalLZ = Number((parseFloat(user.totalLZ || 0) + parseFloat(result?.data?.reward_num || 0)).toFixed(2));
+                    msg += `小程序抽奖(${group.activity_no}): ✅ 成功, 获得 ${result?.data?.reward_num} ${result?.data?.prize_name}\n`;
+                } else if (result?.code == '0000' && result?.data?.reward_num == 0) {
+                    msg += `小程序抽奖(${group.activity_no}): 😐 成功, 获得 空气\n`;
+                } else {
+                    msg += `小程序抽奖(${group.activity_no}): ❌ ${result?.message}\n`;
+                }
+            } else {
+                msg += `小程序抽奖(${group.activity_no}): 📝 无抽奖机会\n`;
+            }
         }
+        
+        // 清理多余换行
+        msg = msg.trim();
     } catch (e) {
-        msg += `小程序抽奖: ❌ ${e.message}`;
+        msg = `小程序抽奖: ❌ ${e.message}`;
         $.log(`❌ 小程序抽奖失败: ${e.message}`);
     }
     $.log(msg);
@@ -334,17 +396,17 @@ async function doAppLotterySign(user) {
     try {
         // 定义两组ID
         const idGroups = [
-            // {
-            //     component_no: "CC13U47045E3262G",
-            //     activity_no: "AP25I123Y1CKKXSL"
-            // },
+            {
+                "component_no": "CV16H24J49G1KERU",
+                "activity_no": "AP266012H9Q69JHI"
+            },
             {
                 component_no: "CU15A06D41Y9ZECJ", 
                 activity_no: "AP260010Y6WP4KCV"
             }
         ];
         
-        let totalChances = 0;
+        // let totalChances = 0;
         
         for(const group of idGroups) {
             const options = {
@@ -371,7 +433,7 @@ async function doAppLotterySign(user) {
             const result = await Request(options);
             
             if (result?.code == '0000') {
-                totalChances += result?.data?.chance;
+                // totalChances += result?.data?.chance;
                 msg += `APP抽奖签到(${group.activity_no}): ✅ 成功, 获得 ${result?.data?.chance} 次抽奖机会\n`;
             } else {
                 msg += `APP抽奖签到(${group.activity_no}): ❌ ${result?.message}\n`;
@@ -393,10 +455,10 @@ async function doAppLottery(user) {
     try {
         // 定义两组ID
         const idGroups = [
-            // {
-            //     component_no: "CC13U47045E3262G",
-            //     activity_no: "AP25I123Y1CKKXSL"
-            // },
+            {
+                "component_no": "CV16H24J49G1KERU",
+                "activity_no": "AP266012H9Q69JHI"
+            },
             {
                 component_no: "CU15A06D41Y9ZECJ", 
                 activity_no: "AP260010Y6WP4KCV"
@@ -445,8 +507,7 @@ async function doAppLottery(user) {
                         "component_no": group.component_no,
                         "activity_no": group.activity_no,
                         "batch_no": ""
-                    },
-                    dataType: "json"
+                    }
                 };
                 
                 const result = await Request(options);
@@ -506,8 +567,8 @@ async function getUserInfo(user) {
             }
             
             $.beforeMsgs += `用户名: ${nick_name}\n`;
-            $.beforeMsgs += `成长值: ${growth_value}\n`;
-            $.beforeMsgs += `等级: V${level}\n`;
+            $.beforeMsgs += `成长值: ${growth_value}`;
+            $.beforeMsgs += `等级: V${level}`;
         } else {
             $.log(`❌ 查询用户信息失败: ${$.toStr(result)}`);
         }
@@ -546,8 +607,8 @@ async function getBalance(user) {
                 $.beforeMsgs += '\n';
             }
             
-            $.beforeMsgs += `珑珠余额: ${balance}\n`;
-            $.beforeMsgs += `即将过期: ${expiring_lz}\n`;
+            $.beforeMsgs += `珑珠余额: ${balance}`;
+            $.beforeMsgs += `即将过期: ${expiring_lz}`;
         } else {
             $.log(`❌ 查询珑珠余额失败: ${$.toStr(result)}`);
         }
