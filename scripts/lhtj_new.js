@@ -89,19 +89,19 @@ async function main() {
             $.messages.splice(0, 0, $.beforeMsgs), $.Messages = $.Messages.concat($.messages);
             
             // 在每个账号结束后添加额外换行
-            $.Messages.push(""); // 添加一个空行作为账号间的分隔
+            // $.Messages.push(""); // 添加一个空行作为账号间的分隔
         }
         
-        // 添加总计信息
-        let totalPoints = 0;
-        let totalLZ = 0;
-        for (const user of $.userArr) {
-            totalPoints += user.totalPoints || 0;
-            // 确保totalLZ是数字类型后再加入总和计算
-            totalLZ += parseFloat(user.totalLZ) || 0;
-        }
+        // // 添加总计信息
+        // let totalPoints = 0;
+        // let totalLZ = 0;
+        // for (const user of $.userArr) {
+        //     totalPoints += user.totalPoints || 0;
+        //     // 确保totalLZ是数字类型后再加入总和计算
+        //     totalLZ += parseFloat(user.totalLZ) || 0;
+        // }
         
-        $.Messages.push(`\n📊 本次运行总计获得: ${totalPoints} 积分, ${Number(totalLZ).toFixed(2)} 珑珠`);
+        // $.Messages.push(`\n📊 本次运行总计获得: ${totalPoints} 积分, ${Number(totalLZ).toFixed(2)} 珑珠`);
         $.log(`\n----- 所有账号执行完成 -----\n`);
     } else {
         throw new Error('未找到 lhtj_data 变量 ❌');
@@ -567,8 +567,8 @@ async function getUserInfo(user) {
             }
             
             $.beforeMsgs += `当前用户: ${nick_name}\n`;
-            $.beforeMsgs += `成长值: ${growth_value} `;
-            $.beforeMsgs += `等级: V${level} `;
+            $.beforeMsgs += `成长值: ${growth_value}  `;
+            $.beforeMsgs += `等级: V${level}  `;
         } else {
             $.log(`❌ 查询用户信息失败: ${$.toStr(result)}`);
         }
@@ -607,7 +607,7 @@ async function getBalance(user) {
             //     $.beforeMsgs += '\n';
             // }
             
-            $.beforeMsgs += `珑珠余额: ${balance} `;
+            $.beforeMsgs += `珑珠余额: ${balance}  `;
             $.beforeMsgs += `即将过期: ${expiring_lz}\n`;
         } else {
             $.log(`❌ 查询珑珠余额失败: ${$.toStr(result)}`);
