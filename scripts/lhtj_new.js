@@ -566,7 +566,7 @@ async function getUserInfo(user) {
                 $.beforeMsgs += '\n';
             }
             
-            $.beforeMsgs += `用户名: ${nick_name}\n`;
+            $.beforeMsgs += `用户名: ${nick_name}`;
             $.beforeMsgs += `成长值: ${growth_value}`;
             $.beforeMsgs += `等级: V${level}`;
         } else {
@@ -603,12 +603,12 @@ async function getBalance(user) {
             const balance = balanceData?.balance || 0;
             const expiring_lz = balanceData?.expiring_lz || 0;
             
-            if ($.beforeMsgs) {
-                $.beforeMsgs += '\n';
-            }
+            // if ($.beforeMsgs) {
+            //     $.beforeMsgs += '\n';
+            // }
             
             $.beforeMsgs += `珑珠余额: ${balance}`;
-            $.beforeMsgs += `即将过期: ${expiring_lz}`;
+            $.beforeMsgs += `即将过期: ${expiring_lz}\n`;
         } else {
             $.log(`❌ 查询珑珠余额失败: ${$.toStr(result)}`);
         }
