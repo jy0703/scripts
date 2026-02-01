@@ -568,7 +568,7 @@ async function getUserInfo(user) {
             
             $.beforeMsgs += `当前用户: ${nick_name}\n`;
             $.beforeMsgs += `成长值: ${growth_value} `;
-            $.beforeMsgs += `等级: V${level}`;
+            $.beforeMsgs += `等级: V${level} `;
         } else {
             $.log(`❌ 查询用户信息失败: ${$.toStr(result)}`);
         }
