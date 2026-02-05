@@ -599,7 +599,7 @@ async function getUserInfo() {
             }
 
             $.log(`✅ 获取用户信息成功 - UID: ${$.uid}, 积分: ${userIntegral}, 抽奖次数: ${lotteryTimes}\n`);
-            $.messages.push(`UID: ${hideSensitiveData($.uid,2,2)}, 积分: ${userIntegral}, 抽奖次数: ${lotteryTimes}`);
+            // $.messages.push(`UID: ${hideSensitiveData($.uid,2,2)}, 积分: ${userIntegral}, 抽奖次数: ${lotteryTimes}`);
 
             return {
                 lottery_times: lotteryTimes,
@@ -673,68 +673,21 @@ async function doLottery(times) {
 // WPS超级会员小程序签到
 async function doSvipAppletSign() {
     try {
-        // 获取s_key
-        const infoOptions = {
-            url: `https://personal-bus.wps.cn/activity/clock_in/v1/info`,
-            headers: {
-                'Host': 'personal-bus.wps.cn',
-                'Connection': 'keep-alive',
-                'User-Agent': 'Mozilla/5.0 (Linux; Android 14; 23117RK66C Build/UKQ1.230804.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/142.0.7444.173 Mobile Safari/537.36 XWEB/1420153 MMWEBSDK/20240404 MMWEBID/3531 MicroMessenger/8.0.49.2600(0x2800313D) WeChat/arm64 Weixin Android Tablet NetType/WIFI Language/zh_CN ABI/arm64 MiniProgramEnv/android',
-                'Accept': '*/*',
-                'X-Requested-With': 'com.tencent.mm',
-                'Sec-Fetch-Site': 'same-origin',
-                'Sec-Fetch-Mode': 'cors',
-                'Sec-Fetch-Dest': 'empty',
-                'Referer': 'https://servicewechat.com/wx2f333d84a103825d/240/page-frame.html',
-                'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7',
-                'cookie': $.cookie
-            }
-        };
-        
-        let s_key = '06196ab4da15c09a3aaee610162ca56f';
-        try {
-            const infoResp = await Request(infoOptions);
-            if (infoResp && infoResp.code === 1000000) {
-                s_key = infoResp.data.s_key || s_key;
-            }
-        } catch (e) {
-            // 如果获取失败，使用默认值
-        }
-
-        const timestamp = new Date().toUTCString();
-        const clientType = {"client_type": 1};
-        const sortedKeys = Object.keys(clientType).sort();
-        const sortedClientType = {};
-        for (const key of sortedKeys) {
-            sortedClientType[key] = clientType[key];
-        }
-        
-        const jsonString = JSON.stringify(sortedClientType);
-        const md5Hash = $.crypto.MD5(jsonString).toString();
-        const ss = '7908b285f33c837d';
-        const signature = $.crypto.HmacSHA256(s_key + md5Hash + timestamp, ss).toString();
-        
         const options = {
             url: `https://personal-bus.wps.cn/activity/clock_in/v1/clock_in`,
             headers: {
                 'Host': 'personal-bus.wps.cn',
                 'Connection': 'keep-alive',
-                'date': timestamp,
+                'date': 'Tue, 20 Jan 2026 14:42:58 GMT',
                 'charset': 'utf-8',
-                'signature': signature,
+                'signature': '0d8ff00f5c74de36d0b2e677c82b22a1dd5ab196b0d227cc875fb051eec50156',
                 'x-csrftoken': '1234567890',
                 'User-Agent': 'Mozilla/5.0 (Linux; Android 14; 23117RK66C Build/UKQ1.230804.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/142.0.7444.173 Mobile Safari/537.36 XWEB/1420153 MMWEBSDK/20240404 MMWEBID/3531 MicroMessenger/8.0.49.2600(0x2800313D) WeChat/arm64 Weixin Android Tablet NetType/WIFI Language/zh_CN ABI/arm64 MiniProgramEnv/android',
                 'content-type': 'application/json',
-                'Accept': '*/*',
-                'X-Requested-With': 'com.tencent.mm',
-                'Sec-Fetch-Site': 'same-origin',
-                'Sec-Fetch-Mode': 'cors',
-                'Sec-Fetch-Dest': 'empty',
                 'Referer': 'https://servicewechat.com/wx2f333d84a103825d/240/page-frame.html',
-                'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7',
                 'cookie': $.cookie
             },
-            body: clientType
+            body: {"client_type": 1}
         };
 
         const response = await Request(options);
@@ -892,8 +845,8 @@ async function doFragmentCollectReward(taskId, title) {
                 $.log(`✅ 领取 [${title}] 奖励成功\n`);
                 return true;
             } else {
-                const reason = taskCenter?.reason || '未知原因';
-                $.log(`❌ 领取 [${title}] 奖励失败：${reason}\n`);
+                const reason = taskCenter?.reason;
+                $.log(`❌ 领取 [${title}] 奖励失败：已领取\n`);
                 return false;
             }
         } else {
@@ -1054,8 +1007,16 @@ async function getLottery3PageInfo() {
             headers: {
                 'accept': 'application/json, text/plain, */*',
                 'accept-language': 'zh-CN,zh;q=0.9',
+                'cache-control': 'no-cache',
+                'pragma': 'no-cache',
+                'priority': 'u=1, i',
                 'referer': 'https://personal-act.wps.cn/rubik2/portal/HD2025031721339450/YM2025031721331326?cs_from=ad_ucsty_rwzx&position=ad_ucsty_rwzx',
-                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36 Edg/134.0.0.0',
+                'sec-ch-ua': '"Google Chrome";v="129", "Not=A?Brand";v="8", "Chromium";v="129"',
+                'sec-ch-ua-mobile': '?0',
+                'sec-ch-ua-platform': '"Windows"',
+                'sec-fetch-dest': 'empty',
+                'sec-fetch-mode': 'cors',
+                'sec-fetch-site': 'same-origin',
                 'cookie': $.cookie
             }
         };
@@ -1104,8 +1065,11 @@ async function doLottery3(times) {
                 headers: {
                     'accept': 'application/json, text/plain, */*',
                     'accept-language': 'zh-CN,zh;q=0.9',
+                    'cache-control': 'no-cache',
                     'content-type': 'application/json',
                     'origin': 'https://personal-act.wps.cn',
+                    'pragma': 'no-cache',
+                    'priority': 'u=1, i',
                     'referer': 'https://personal-act.wps.cn/rubik2/portal/HD2025031721339450/YM2025031721331326?cs_from=ad_ucsty_rwzx&position=ad_ucsty_rwzx',
                     'sec-ch-ua': '"Google Chrome";v="129", "Not=A?Brand";v="8", "Chromium";v="129"',
                     'sec-ch-ua-mobile': '?0',
