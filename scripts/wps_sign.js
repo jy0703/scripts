@@ -3,7 +3,7 @@
  * 活动规则：每日签到获得积分奖励
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。
  * 环境变量：WPS_COOKIE
- * 更新时间：2026-01-22 补充了更多任务类型
+ * 更新时间：2026-02-05 添加了办公助手、天天领福利、WPS超级会员小程序功能
 
 ------------------ Surge 配置 ------------------
 
@@ -91,6 +91,7 @@ async function main() {
                 continue;
             }
 
+            // WPS任务中心
             await doSign()
 
             // 执行所有任务（替代原有的doShareTask）
@@ -101,6 +102,15 @@ async function main() {
             if (userInfo && userInfo.lottery_times > 0) {
                 await doLottery(userInfo.lottery_times);
             }
+            
+            // 办公助手
+            await doFragmentCollectTasks();
+            
+            // 天天领福利
+            await doLottery3Tasks();
+            
+            // WPS超级会员小程序
+            await doSvipAppletSign();
 
             // 合并通知
             $.messages.splice(0, 0, $.beforeMsgs), $.Messages = $.Messages.concat($.messages);
@@ -657,6 +667,489 @@ async function doLottery(times) {
         }
     } catch (e) {
         $.log(`❌ 抽奖异常: ${e.message}\n`);
+    }
+}
+
+// WPS超级会员小程序签到
+async function doSvipAppletSign() {
+    try {
+        // 获取s_key
+        const infoOptions = {
+            url: `https://personal-bus.wps.cn/activity/clock_in/v1/info`,
+            headers: {
+                'Host': 'personal-bus.wps.cn',
+                'Connection': 'keep-alive',
+                'User-Agent': 'Mozilla/5.0 (Linux; Android 14; 23117RK66C Build/UKQ1.230804.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/142.0.7444.173 Mobile Safari/537.36 XWEB/1420153 MMWEBSDK/20240404 MMWEBID/3531 MicroMessenger/8.0.49.2600(0x2800313D) WeChat/arm64 Weixin Android Tablet NetType/WIFI Language/zh_CN ABI/arm64 MiniProgramEnv/android',
+                'Accept': '*/*',
+                'X-Requested-With': 'com.tencent.mm',
+                'Sec-Fetch-Site': 'same-origin',
+                'Sec-Fetch-Mode': 'cors',
+                'Sec-Fetch-Dest': 'empty',
+                'Referer': 'https://servicewechat.com/wx2f333d84a103825d/240/page-frame.html',
+                'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+                'cookie': $.cookie
+            }
+        };
+        
+        let s_key = '06196ab4da15c09a3aaee610162ca56f';
+        try {
+            const infoResp = await Request(infoOptions);
+            if (infoResp && infoResp.code === 1000000) {
+                s_key = infoResp.data.s_key || s_key;
+            }
+        } catch (e) {
+            // 如果获取失败，使用默认值
+        }
+
+        const timestamp = new Date().toUTCString();
+        const clientType = {"client_type": 1};
+        const sortedKeys = Object.keys(clientType).sort();
+        const sortedClientType = {};
+        for (const key of sortedKeys) {
+            sortedClientType[key] = clientType[key];
+        }
+        
+        const jsonString = JSON.stringify(sortedClientType);
+        const md5Hash = $.crypto.MD5(jsonString).toString();
+        const ss = '7908b285f33c837d';
+        const signature = $.crypto.HmacSHA256(s_key + md5Hash + timestamp, ss).toString();
+        
+        const options = {
+            url: `https://personal-bus.wps.cn/activity/clock_in/v1/clock_in`,
+            headers: {
+                'Host': 'personal-bus.wps.cn',
+                'Connection': 'keep-alive',
+                'date': timestamp,
+                'charset': 'utf-8',
+                'signature': signature,
+                'x-csrftoken': '1234567890',
+                'User-Agent': 'Mozilla/5.0 (Linux; Android 14; 23117RK66C Build/UKQ1.230804.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/142.0.7444.173 Mobile Safari/537.36 XWEB/1420153 MMWEBSDK/20240404 MMWEBID/3531 MicroMessenger/8.0.49.2600(0x2800313D) WeChat/arm64 Weixin Android Tablet NetType/WIFI Language/zh_CN ABI/arm64 MiniProgramEnv/android',
+                'content-type': 'application/json',
+                'Accept': '*/*',
+                'X-Requested-With': 'com.tencent.mm',
+                'Sec-Fetch-Site': 'same-origin',
+                'Sec-Fetch-Mode': 'cors',
+                'Sec-Fetch-Dest': 'empty',
+                'Referer': 'https://servicewechat.com/wx2f333d84a103825d/240/page-frame.html',
+                'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+                'cookie': $.cookie
+            },
+            body: clientType
+        };
+
+        const response = await Request(options);
+
+        if (response && response.result === 'ok') {
+            $.log(`✅ 小程序签到成功\n`);
+            $.messages.push(`小程序签到成功`);
+        } else if (response && response.msg && response.msg.includes('already clocked in today')) {
+            $.log(`✅ 小程序今日已签到\n`);
+            $.messages.push(`小程序今日已签到`);
+        } else {
+            $.log(`❌ 小程序签到失败: ${response ? JSON.stringify(response) : '网络错误'}\n`);
+        }
+    } catch (e) {
+        $.log(`❌ 小程序签到异常: ${e.message}\n`);
+    }
+}
+
+// 办公助手任务
+async function doFragmentCollectTasks() {
+    try {
+        // 获取活动信息
+        const pageInfoOptions = {
+            url: `https://personal-act.wps.cn/activity-rubik/activity/page_info?activity_number=HD2025031010408781&page_number=YM2025061216463517&filter_params=%7B%22cs_from%22:%22xinchao_activity_lottery%22,%22position%22:%22xinchao_bgzs_autoreply_2148_cj%22%7D`,
+            headers: {
+                'accept': 'application/json, text/plain, */*',
+                'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6',
+                'referer': 'https://personal-act.wps.cn/rubik2/portal/HD2025031010408781/YM2025061216463517?cs_from=xinchao_activity_lottery&position=xinchao_bgzs_autoreply_2148_cj',
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36 Edg/134.0.0.0',
+                'cookie': $.cookie
+            }
+        };
+
+        const pageInfoResponse = await Request(pageInfoOptions);
+
+        if (pageInfoResponse && pageInfoResponse.result === 'ok') {
+            let taskList = null;
+            let lotteryTimes = null;
+
+            for (const item of pageInfoResponse.data) {
+                if (item.task_center && item.task_center.task_list) {
+                    taskList = item.task_center.task_list;
+                }
+                
+                if (item.lottery && item.lottery.rewards && Array.isArray(item.lottery.rewards) && item.lottery.rewards.length > 0) {
+                    const firstReward = item.lottery.rewards[0];
+                    if (firstReward.times !== undefined) {
+                        lotteryTimes = firstReward.times;
+                    }
+                }
+                
+                if (taskList !== null && lotteryTimes !== null) {
+                    break;
+                }
+            }
+
+            $.log(`✅ 办公助手 - 获取到 ${taskList ? taskList.length : 0} 个任务, 抽奖次数: ${lotteryTimes}\n`);
+            
+            // 完成任务
+            if (taskList) {
+                await doFragmentCollectTaskList(taskList);
+            }
+            
+            // 抽奖
+            if (lotteryTimes > 0) {
+                await doFragmentCollectLottery(lotteryTimes);
+            }
+        } else {
+            $.log(`❌ 获取办公助手活动信息失败: ${pageInfoResponse ? JSON.stringify(pageInfoResponse) : '网络错误'}\n`);
+        }
+    } catch (e) {
+        $.log(`❌ 办公助手任务异常: ${e.message}\n`);
+    }
+}
+
+// 办公助手任务列表处理
+async function doFragmentCollectTaskList(taskList) {
+    // 先处理"每日访问当前活动"任务
+    for (const task of taskList) {
+        const taskId = task.task_id;
+        const title = task.title;
+        const taskStatus = task.task_status;
+
+        if (taskStatus === 1 && title.includes('每日访问当前活动')) {
+            const rewardResult = await doFragmentCollectReward(taskId, title);
+            if (rewardResult) {
+                await $.wait(2000);
+            }
+            break; // 只处理这一个任务
+        }
+    }
+
+    // 再处理其他任务
+    for (const task of taskList) {
+        const taskId = task.task_id;
+        const title = task.title;
+        const taskStatus = task.task_status;
+
+        if (taskStatus === 1) {
+            $.log(`🔄 任务 [${title}] 已完成\n`);
+            continue;
+        }
+
+        if (title.includes('每日访问当前活动')) {
+            continue; // 跳过上面已经处理过的任务
+        }
+
+        const rewardResult = await doFragmentCollectReward(taskId, title);
+        if (rewardResult) {
+            await $.wait(2000);
+        }
+    }
+}
+
+// 办公助手领取奖励
+async function doFragmentCollectReward(taskId, title) {
+    try {
+        const options = {
+            url: `https://personal-act.wps.cn/activity-rubik/activity/component_action`,
+            headers: {
+                'accept': 'application/json, text/plain, */*',
+                'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6',
+                'content-type': 'application/json',
+                'origin': 'https://personal-act.wps.cn',
+                'referer': 'https://personal-act.wps.cn/rubik2/portal/HD2025031010408781/YM2025061216463517?cs_from=xinchao_activity_lottery&position=xinchao_bgzs_autoreply_2148_cj',
+                'sec-ch-ua': '"Chromium";v="134", "Not:A-Brand";v="24", "Microsoft Edge";v="134"',
+                'sec-ch-ua-mobile': '?0',
+                'sec-ch-ua-platform': '"Windows"',
+                'sec-fetch-dest': 'empty',
+                'sec-fetch-mode': 'cors',
+                'sec-fetch-site': 'same-origin',
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36 Edg/134.0.0.0',
+                'cookie': $.cookie
+            },
+            body: {
+                'component_uniq_number': {
+                    'activity_number': 'HD2025031010408781',
+                    'page_number': 'YM2025061216463517',
+                    'component_number': 'ZJ2024083022083755',
+                    'component_node_id': 'FN1740387182DaYX'
+                },
+                'component_type': 14,
+                'component_action': 'task_center.reward',
+                'task_center': {
+                    'task_id': taskId
+                }
+            }
+        };
+
+        const response = await Request(options);
+
+        if (response && response.result === 'ok') {
+            const taskCenter = response.data?.task_center;
+            if (taskCenter?.success) {
+                $.log(`✅ 领取 [${title}] 奖励成功\n`);
+                return true;
+            } else {
+                const reason = taskCenter?.reason || '未知原因';
+                $.log(`❌ 领取 [${title}] 奖励失败：${reason}\n`);
+                return false;
+            }
+        } else {
+            $.log(`❌ 领取 [${title}] 奖励失败：${response ? JSON.stringify(response) : '网络错误'}\n`);
+            return false;
+        }
+    } catch (e) {
+        $.log(`❌ 领取 [${title}] 奖励异常: ${e.message}\n`);
+        return false;
+    }
+}
+
+// 办公助手抽奖
+async function doFragmentCollectLottery(times) {
+    try {
+        for (let i = 0; i < times; i++) {
+            const options = {
+                url: `https://personal-act.wps.cn/activity-rubik/activity/component_action`,
+                headers: {
+                    'accept': 'application/json, text/plain, */*',
+                    'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6',
+                    'content-type': 'application/json',
+                    'origin': 'https://personal-act.wps.cn',
+                    'referer': 'https://personal-act.wps.cn/rubik2/portal/HD2025031010408781/YM2025061216463517?cs_from=xinchao_activity_lottery&position=xinchao_bgzs_autoreply_2148_cj',
+                    'sec-ch-ua': '"Chromium";v="134", "Not:A-Brand";v="24", "Microsoft Edge";v="134"',
+                    'sec-ch-ua-mobile': '?0',
+                    'sec-ch-ua-platform': '"Windows"',
+                    'sec-fetch-dest': 'empty',
+                    'sec-fetch-mode': 'cors',
+                    'sec-fetch-site': 'same-origin',
+                    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36 Edg/134.0.0.0',
+                    'cookie': $.cookie
+                },
+                body: {
+                    'component_uniq_number': {
+                        'activity_number': 'HD2025031010408781',
+                        'page_number': 'YM2025061216463517',
+                        'component_number': 'ZJ2024083022081230',
+                        'component_node_id': 'FN1741940010rC4c',
+                    },
+                    'component_type': 2,
+                    'component_action': 'lottery.exec',
+                    'lottery': {
+                        'pay_source': '',
+                        'integral_source': '',
+                        'position': 'bgzs_tasks_cj',
+                        'source': '',
+                        'ids': '1115,1119,1116,1117,1120,1121,1122,1118',
+                        'sign': '',
+                    },
+                }
+            };
+
+            const response = await Request(options);
+
+            if (response && response.result === 'ok') {
+                const rewardName = response.data.lottery.name;
+                $.log(`✅ 办公助手第${i+1}次抽奖成功: ${rewardName}\n`);
+                $.messages.push(`办公助手第${i+1}次抽奖: ${rewardName}`);
+            } else {
+                $.log(`❌ 办公助手第${i+1}次抽奖失败: ${response ? JSON.stringify(response) : '网络错误'}\n`);
+            }
+
+            // 抽奖间隔
+            await $.wait(2000);
+        }
+    } catch (e) {
+        $.log(`❌ 办公助手抽奖异常: ${e.message}\n`);
+    }
+}
+
+// 天天领福利任务
+async function doLottery3Tasks() {
+    try {
+        // 签到
+        await doLottery3SignIn();
+        
+        // 获取抽奖次数并抽奖
+        const pageInfo = await getLottery3PageInfo();
+        if (pageInfo && pageInfo.lottery_times > 0) {
+            await doLottery3(pageInfo.lottery_times);
+        }
+    } catch (e) {
+        $.log(`❌ 天天领福利任务异常: ${e.message}\n`);
+    }
+}
+
+// 天天领福利签到
+async function doLottery3SignIn() {
+    try {
+        const signDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD 格式
+        
+        const options = {
+            url: `https://personal-act.wps.cn/activity-rubik/activity/component_action`,
+            headers: {
+                'accept': 'application/json, text/plain, */*',
+                'accept-language': 'zh-CN,zh;q=0.9',
+                'content-type': 'application/json',
+                'origin': 'https://personal-act.wps.cn',
+                'referer': 'https://personal-act.wps.cn/rubik2/portal/HD2025031721339450/YM2025031721331326?cs_from=ad_ucsty_rwzx&position=ad_ucsty_rwzx',
+                'sec-ch-ua': '"Google Chrome";v="129", "Not=A?Brand";v="8", "Chromium";v="129"',
+                'sec-ch-ua-mobile': '?0',
+                'sec-ch-ua-platform': '"Windows"',
+                'sec-fetch-dest': 'empty',
+                'sec-fetch-mode': 'cors',
+                'sec-fetch-site': 'same-origin',
+                'x-act-csrf-token': $.act_csrf_token,
+                'cookie': $.cookie
+            },
+            body: {
+                'component_uniq_number': {
+                    'activity_number': 'HD2025031721339450',
+                    'page_number': 'YM2025031721331326',
+                    'component_number': 'ZJ2025061815363325',
+                    'component_node_id': 'FN1750234948dBVL',
+                    'filter_params': {
+                        'cs_from': 'ad_ucsty_rwzx',
+                        'position': 'ad_ucsty_rwzx',
+                    },
+                },
+                'component_type': 42,
+                'component_action': 'fragment_collect.sign_in',
+                'fragment_collect': {
+                    'sign_date': signDate,
+                    'series_id': '',
+                    'is_new_sign_series': true,
+                },
+            }
+        };
+
+        const response = await Request(options);
+
+        if (response && response.result === 'ok') {
+            const success = response.data?.fragment_collect?.success;
+            const rewards = response.data?.fragment_collect?.reason;
+            if (success) {
+                $.log(`✅ 天天领福利签到成功: ${rewards}\n`);
+                $.messages.push(`天天领福利签到: ${rewards}`);
+            } else {
+                $.log(`❌ 天天领福利签到失败: ${rewards}\n`);
+            }
+        } else if (response && response.msg && response.msg.includes('Duplicate entry')) {
+            $.log(`✅ 天天领福利今日已签到\n`);
+            $.messages.push(`天天领福利今日已签到`);
+        } else {
+            $.log(`❌ 天天领福利签到失败: ${response ? JSON.stringify(response) : '网络错误'}\n`);
+        }
+    } catch (e) {
+        $.log(`❌ 天天领福利签到异常: ${e.message}\n`);
+    }
+}
+
+// 获取天天领福利页面信息
+async function getLottery3PageInfo() {
+    try {
+        const options = {
+            url: `https://personal-act.wps.cn/activity-rubik/activity/page_info?activity_number=HD2025031721339450&page_number=YM2025031721331326&filter_params=%7B%22cs_from%22:%22ad_ucsty_rwzx%22,%22position%22:%22ad_ucsty_rwzx%22%7D`,
+            headers: {
+                'accept': 'application/json, text/plain, */*',
+                'accept-language': 'zh-CN,zh;q=0.9',
+                'referer': 'https://personal-act.wps.cn/rubik2/portal/HD2025031721339450/YM2025031721331326?cs_from=ad_ucsty_rwzx&position=ad_ucsty_rwzx',
+                'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36 Edg/134.0.0.0',
+                'cookie': $.cookie
+            }
+        };
+
+        const response = await Request(options);
+
+        if (response && response.result === 'ok') {
+            let lotteryTimes = null;
+
+            for (const item of response.data) {
+                if (lotteryTimes === null) {
+                    if (item.lottery_v2) {
+                        for (const session of item.lottery_v2.lottery_list || []) {
+                            if (session.times) {
+                                lotteryTimes = session.times;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (lotteryTimes !== null) {
+                    break;
+                }
+            }
+
+            $.log(`✅ 获取天天领福利信息成功 - 抽奖次数: ${lotteryTimes}\n`);
+            return {
+                lottery_times: lotteryTimes
+            };
+        } else {
+            $.log(`❌ 获取天天领福利信息失败: ${response ? JSON.stringify(response) : '网络错误'}\n`);
+            return null;
+        }
+    } catch (e) {
+        $.log(`❌ 获取天天领福利信息异常: ${e.message}\n`);
+        return null;
+    }
+}
+
+// 天天领福利抽奖
+async function doLottery3(times) {
+    try {
+        for (let i = 0; i < times; i++) {
+            const options = {
+                url: `https://personal-act.wps.cn/activity-rubik/activity/component_action`,
+                headers: {
+                    'accept': 'application/json, text/plain, */*',
+                    'accept-language': 'zh-CN,zh;q=0.9',
+                    'content-type': 'application/json',
+                    'origin': 'https://personal-act.wps.cn',
+                    'referer': 'https://personal-act.wps.cn/rubik2/portal/HD2025031721339450/YM2025031721331326?cs_from=ad_ucsty_rwzx&position=ad_ucsty_rwzx',
+                    'sec-ch-ua': '"Google Chrome";v="129", "Not=A?Brand";v="8", "Chromium";v="129"',
+                    'sec-ch-ua-mobile': '?0',
+                    'sec-ch-ua-platform': '"Windows"',
+                    'sec-fetch-dest': 'empty',
+                    'sec-fetch-mode': 'cors',
+                    'sec-fetch-site': 'same-origin',
+                    'x-act-csrf-token': $.act_csrf_token,
+                    'cookie': $.cookie
+                },
+                body: {
+                    'component_uniq_number': {
+                        'activity_number': 'HD2025031721339450',
+                        'page_number': 'YM2025031721331326',
+                        'component_number': 'ZJ2025092916515917',
+                        'component_node_id': 'FN1761875116m2x8',
+                        'filter_params': {
+                            'cs_from': 'ad_ucsty_rwzx',
+                            'position': 'ad_ucsty_rwzx',
+                        },
+                    },
+                    'component_type': 45,
+                    'component_action': 'lottery_v2.exec',
+                    'lottery_v2': {
+                        'session_id': 3001,
+                    },
+                }
+            };
+
+            const response = await Request(options);
+
+            if (response && response.result === 'ok') {
+                const rewardName = response.data.lottery_v2.reward_name;
+                $.log(`✅ 天天领福利第${i+1}次抽奖成功: ${rewardName}\n`);
+                $.messages.push(`天天领福利第${i+1}次抽奖: ${rewardName}`);
+            } else {
+                $.log(`❌ 天天领福利第${i+1}次抽奖失败: ${response ? JSON.stringify(response) : '网络错误'}\n`);
+            }
+
+            // 抽奖间隔
+            await $.wait(2000);
+        }
+    } catch (e) {
+        $.log(`❌ 天天领福利抽奖异常: ${e.message}\n`);
     }
 }
 
