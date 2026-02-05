@@ -983,8 +983,8 @@ async function doLottery3SignIn() {
             const success = response.data?.fragment_collect?.success;
             const rewards = response.data?.fragment_collect?.reason;
             if (success) {
-                $.log(`✅ 天天领福利签到成功: ${rewards}\n`);
-                $.messages.push(`天天领福利签到: ${rewards}`);
+                $.log(`✅ 天天领福利签到成功\n`);
+                $.messages.push(`天天领福利签到成功`);
             } else {
                 $.log(`❌ 天天领福利签到失败: ${rewards}\n`);
             }

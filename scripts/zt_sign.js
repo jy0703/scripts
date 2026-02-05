@@ -69,6 +69,8 @@ script-providers:
 
  */
 
+const { sign } = require('crypto');
+
 const $ = new Env('中通快递签到');
 $.is_debug = getEnv('is_debug') || 'false';  // 调试模式
 $.userInfo = getEnv('ZTO_TOKEN') || '';  // 获取账号
@@ -221,8 +223,7 @@ async function doSign(token) {
 
         // 构造请求
         const options = {
-            url: `https://membergateway.zto.com/member/activity/signIn`,
-            method: 'post', 
+            url: `https://membergateway.zto.com/member/activity/signIn`, 
             headers: getHeaders(token),
             body: JSON.stringify({
                 "signType":"TODAY_SIGN",
@@ -281,6 +282,7 @@ async function getUserInfo(token) {
             const userData = result?.data || {};
             const mobile = userData?.mobile || '未知手机号';
             const level = userData?.currentGradeLevel || '未知等级';
+            const {signedDays,totalPoints} = await queryRecentSign(token);
             
             if ($.beforeMsgs) {
                 $.beforeMsgs += '\n';
@@ -288,11 +290,59 @@ async function getUserInfo(token) {
             
             $.beforeMsgs += `手机号:  ${hideSensitiveData(mobile,2,2)}\n`;
             $.beforeMsgs += `会员等级: ${level}\n`;
+            $.beforeMsgs += `总积分:  ${totalPoints}积分\n`;
+            $.beforeMsgs += `已签到:  ${signedDays} 天\n`;
         } else {
             $.log(`❌ 查询用户信息失败: ${$.toStr(result)}`);
         }
     } catch (e) {
         $.log(`❌ 查询用户信息失败: ${e.message}`);
+    }
+}
+
+// 查询近期签到记录
+async function queryRecentSign(token) {
+    try {
+        // 获取当前月份的第一天和最后一天
+        const now = new Date();
+        const startDate = new Date(now.getFullYear(), now.getMonth(), 1); // 本月第一天
+        const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0); // 本月最后一天
+        
+        // 格式化日期为YYYY-MM-DD格式
+        const formatDate = (date) => {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            // 对于开始日期使用 00:00:00，对于结束日期使用 23:59:59
+            return `${year}-${month}-${day} ${date === endDate ? '23:59:59' : '00:00:00'}`;
+        };
+        
+        const startStr = formatDate(startDate);
+        const endStr = formatDate(endDate);
+
+        // 构造请求
+        const options = {
+            url: `https://membergateway.zto.com/member/activity/queryRecentSign`,
+            headers: getHeaders(token),
+            body: JSON.stringify({
+                "startDate": startStr,
+                "endDate": endStr
+            })
+        };
+
+        // 发起请求
+        const result = await Request(options);
+
+        if (result?.statusCode === 'SYS000') {
+            signedDays = result?.result?.continuousDays; 
+            totalPoints = result?.result?.totalPoints; 
+
+        } else {
+            $.log(`❌ 查询近期签到记录失败: ${result?.message || '未知错误'}`);
+        }
+        return {signedDays,totalPoints};
+    } catch (e) {
+        $.log(`❌ 查询近期签到记录失败: ${e.message}`);
     }
 }
 
@@ -311,7 +361,6 @@ function getHeaders(token) {
         'Referer': 'https://servicewechat.com/wx7ddec43d9d27276a/625/page-frame.html'
     };
 }
-
 
 // 脚本执行入口
 !(async () => {
