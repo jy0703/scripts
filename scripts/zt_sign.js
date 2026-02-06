@@ -69,7 +69,6 @@ script-providers:
 
  */
 
-const { sign } = require('crypto');
 
 const $ = new Env('中通快递签到');
 $.is_debug = getEnv('is_debug') || 'false';  // 调试模式
