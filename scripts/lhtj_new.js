@@ -251,10 +251,10 @@ async function doMiniProgramLotterySign(user) {
     try {
         // 定义小程序的ID组
         const miniProgramIdGroups = [
-            {
+            /*{
                 "component_no": "CO13545A08P7EI9Y",
                 "activity_no": "AP25O123K1HEE8DB"
-            },
+            },*/
             {
                 "component_no": "CW16530P28V520GL",
                 "activity_no": "AP26P012R90F1UKX"
@@ -310,10 +310,10 @@ async function doMiniProgramLottery(user) {
     try {
         // 定义小程序的ID组
         const miniProgramIdGroups = [
-            {
+            /*{
                 "component_no": "CO13545A08P7EI9Y",
                 "activity_no": "AP25O123K1HEE8DB"
-            },
+            },*/
             {
                 "component_no": "CW16530P28V520GL",
                 "activity_no": "AP26P012R90F1UKX"
@@ -403,6 +403,10 @@ async function doAppLotterySign(user) {
             {
                 "component_no": "CU15A06D41Y9ZECJ", 
                 "activity_no": "AP260010Y6WP4KCV"
+            },
+            {
+                "component_no" : "C113C44337V4P5CN",
+                "activity_no" : "AP26A021K1C6IZLL"
             }
         ];
         
@@ -462,6 +466,10 @@ async function doAppLottery(user) {
             {
                 "component_no": "CU15A06D41Y9ZECJ", 
                 "activity_no": "AP260010Y6WP4KCV"
+            },
+            {
+                "component_no" : "C113C44337V4P5CN",
+                "activity_no" : "AP26A021K1C6IZLL"
             }
         ];
         
