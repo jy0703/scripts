@@ -1,0 +1,11 @@
+#!name=经典农场提取Code
+#!desc=将 gate-obt.nqf.qq.com 的 HTTPS 请求重定向到本地，并输出 code 参数值
+
+[Rule]
+DOMAIN,gate-obt.nqf.qq.com,farmCode
+
+[Script]
+farmCode = type=http-request,pattern=https?:\/\/gate-obt\.nqf\.qq\.com.*,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/farmcode.js,script-update-interval=0
+
+[MITM]
+hostnames = %APPEND% gate-obt.nqf.qq.com
