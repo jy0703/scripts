@@ -69,8 +69,8 @@ async function main() {
             await doAppSign($.user);
 
             // 执行小程序抽奖签到和抽奖
-            await doMiniProgramLotterySign($.user);
-            await doMiniProgramLottery($.user);
+            // await doMiniProgramLotterySign($.user);
+            // await doMiniProgramLottery($.user);
 
             // 执行APP抽奖签到和抽奖
             await doAppLotterySign($.user);
@@ -397,16 +397,8 @@ async function doAppLotterySign(user) {
         // 定义两组ID
         const idGroups = [
             {
-                "component_no": "CV16H24J49G1KERU",
-                "activity_no": "AP266012H9Q69JHI"
-            },
-            {
-                "component_no": "CU15A06D41Y9ZECJ", 
-                "activity_no": "AP260010Y6WP4KCV"
-            },
-            {
-                "component_no" : "C113C44337V4P5CN",
-                "activity_no" : "AP26A021K1C6IZLL"
+                "component_no" : "CF17F20C54L0SYEZ",
+                "activity_no" : "AP26E022L8FTDAWH"
             }
         ];
         
@@ -460,16 +452,8 @@ async function doAppLottery(user) {
         // 定义两组ID
         const idGroups = [
             {
-                "component_no": "CV16H24J49G1KERU",
-                "activity_no": "AP266012H9Q69JHI"
-            },
-            {
-                "component_no": "CU15A06D41Y9ZECJ", 
-                "activity_no": "AP260010Y6WP4KCV"
-            },
-            {
-                "component_no" : "C113C44337V4P5CN",
-                "activity_no" : "AP26A021K1C6IZLL"
+                "component_no" : "CF17F20C54L0SYEZ",
+                "activity_no" : "AP26E022L8FTDAWH"
             }
         ];
         
