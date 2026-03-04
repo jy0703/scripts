@@ -24,6 +24,9 @@
  * ^https?:\/\/gate-obt\.nqf\.qq\.com\/prod\/ws\? url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/get_farm_code.js
  */
 const $ = new Env('QQ经典农场获取code');
+const LATEST_CODE_KEY = 'qq_farm_latest_code';
+const LATEST_REQ_KEY = 'qq_farm_latest_req';
+const NOTIFY_DEBOUNCE_MS = 800;
 
 function parseParam(url, key) {
   const re = new RegExp(`[?&]${key}=([^&#]*)`, 'i');
@@ -41,20 +44,33 @@ function safeDecode(value) {
   }
 }
 
-function captureCodeFromRequest() {
+async function captureCodeFromRequest() {
   const url = ($request && $request.url) || '';
   if (!url) throw new Error('Request url is empty');
 
   const code = parseParam(url, 'code');
   if (!code) throw new Error('No `code` found in request url');
 
-  $.log(`code: ${code}`);
-  $.msg($.name, 'code获取成功', `${code}`);
+  const reqId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  $.setdata(code, LATEST_CODE_KEY);
+  $.setdata(reqId, LATEST_REQ_KEY);
+  $.log(`captured code: ${code}, reqId: ${reqId}`);
+
+  await $.wait(NOTIFY_DEBOUNCE_MS);
+
+  const latestReqId = $.getdata(LATEST_REQ_KEY);
+  if (latestReqId !== reqId) {
+    $.log(`skip outdated code: ${code}, reqId: ${reqId}`);
+    return;
+  }
+
+  const latestCode = $.getdata(LATEST_CODE_KEY) || code;
+  $.msg($.name, 'code获取成功', `${latestCode}`);
 }
 
 !(async () => {
   if (typeof $request !== 'undefined') {
-    captureCodeFromRequest();
+    await captureCodeFromRequest();
   } else {
     $.log('No request context. This script only works in http-request mode.');
     $.msg($.name, 'No request context', 'Trigger ws request to capture code');
