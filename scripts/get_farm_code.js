@@ -23,7 +23,7 @@
  * [rewrite_local]
  * ^https?:\/\/gate-obt\.nqf\.qq\.com\/prod\/ws\? url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/get_farm_code.js
  */
-const $ = new Env('经典农场获取code');
+const $ = new Env('QQ经典农场获取code');
 
 function parseParam(url, key) {
   const re = new RegExp(`[?&]${key}=([^&#]*)`, 'i');
@@ -49,7 +49,7 @@ function captureCodeFromRequest() {
   if (!code) throw new Error('No `code` found in request url');
 
   $.log(`code: ${code}`);
-  $.msg($.name, '获取成功', `code=${code}`);
+  $.msg($.name, 'code获取成功', `${code}`);
 }
 
 !(async () => {
@@ -65,7 +65,7 @@ function captureCodeFromRequest() {
     $.log(`Error: ${msg}`);
     $.msg($.name, 'Capture failed', msg);
   })
-  .finally(() => $.done());
+  .finally(() => $.done({abort: true}));
 
 
 // prettier-ignore
