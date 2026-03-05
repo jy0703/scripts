@@ -1,33 +1,35 @@
 /**
- * Script name: 经典农场获取code
- * Usage:
- *  - Intercept request URL:
+ * 脚本名称：经典农场获取code
+ * 功能说明：根据platform参数区分是QQ还是微信的code，并分别存储和通知
+ * 使用方法：
+ *  - 拦截请求URL:
  *    https://gate-obt.nqf.qq.com/prod/ws?platform=qq&os=iOS&ver=1.6.1.16_20251224&code=xxxx&openID=
- *  - Capture and notify code directly (no persistence).
+ *  - 直接捕获并通知code（无持久化）
  *
- * Surge:
+ * Surge 配置：
  * [MITM]
  * hostname = gate-obt.nqf.qq.com
  * [Script]
  * 经典农场获取code = type=http-request,pattern=^https?:\/\/gate-obt\.nqf\.qq\.com\/prod\/ws\?,requires-body=0,max-size=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/get_farm_code.js,script-update-interval=0
  *
- * Loon:
+ * Loon 配置：
  * [MITM]
  * hostname = gate-obt.nqf.qq.com
  * [Script]
  * http-request ^https?:\/\/gate-obt\.nqf\.qq\.com\/prod\/ws\? tag=经典农场获取code,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/get_farm_code.js,requires-body=0
  *
- * Quantumult X:
+ * Quantumult X 配置：
  * [mitm]
  * hostname = gate-obt.nqf.qq.com
  * [rewrite_local]
  * ^https?:\/\/gate-obt\.nqf\.qq\.com\/prod\/ws\? url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/get_farm_code.js
  */
-const $ = new Env('QQ经典农场获取code');
-const LATEST_CODE_KEY = 'qq_farm_latest_code';
-const LATEST_REQ_KEY = 'qq_farm_latest_req';
-const NOTIFY_DEBOUNCE_MS = 800;
 
+const $ = new Env('QQ经典农场获取code');
+const NOTIFY_DEBOUNCE_MS = 3000;
+$.Messages = [];
+
+// 解析URL参数
 function parseParam(url, key) {
   const re = new RegExp(`[?&]${key}=([^&#]*)`, 'i');
   const match = url.match(re);
@@ -35,6 +37,7 @@ function parseParam(url, key) {
   return safeDecode(match[1]);
 }
 
+// 安全解码
 function safeDecode(value) {
   if (typeof value !== 'string') return '';
   try {
@@ -44,6 +47,7 @@ function safeDecode(value) {
   }
 }
 
+// 捕获code
 async function captureCodeFromRequest() {
   const url = ($request && $request.url) || '';
   if (!url) throw new Error('Request url is empty');
@@ -51,37 +55,89 @@ async function captureCodeFromRequest() {
   const code = parseParam(url, 'code');
   if (!code) throw new Error('No `code` found in request url');
 
+  const platform = parseParam(url, 'platform');
+  const isQQ = platform === 'qq';
+  const isWechat = platform === 'wechat';
+  const platformName = isQQ ? 'QQ' : isWechat ? '微信' : '未知平台';
+  const envName = `${platformName}经典农场获取code`;
+  const temp$ = new Env(envName);
+  const LATEST_CODE_KEY = isQQ ? 'qq_farm_latest_code' : 'wechat_farm_latest_code';
+  const LATEST_REQ_KEY = isQQ ? 'qq_farm_latest_req' : 'wechat_farm_latest_req';
+  const LATEST_TIMESTAMP_KEY = isQQ ? 'qq_farm_latest_timestamp' : 'wechat_farm_latest_timestamp';
+
+  // 生成唯一请求ID和时间戳
   const reqId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  $.setdata(code, LATEST_CODE_KEY);
-  $.setdata(reqId, LATEST_REQ_KEY);
-  $.log(`captured code: ${code}, reqId: ${reqId}`);
+  const timestamp = Date.now();
+  
+  // 存储当前code、请求ID和时间戳
+  temp$.setdata(code, LATEST_CODE_KEY);
+  temp$.setdata(reqId, LATEST_REQ_KEY);
+  temp$.setdata(timestamp.toString(), LATEST_TIMESTAMP_KEY);
+  temp$.log(`captured ${platformName} code: ${code}, reqId: ${reqId}, timestamp: ${timestamp}`);
 
-  await $.wait(NOTIFY_DEBOUNCE_MS);
+  // 等待一段时间，确保只处理最后一次请求
+  await temp$.wait(NOTIFY_DEBOUNCE_MS);
 
-  const latestReqId = $.getdata(LATEST_REQ_KEY);
-  if (latestReqId !== reqId) {
-    $.log(`skip outdated code: ${code}, reqId: ${reqId}`);
+  // 检查是否是最新的请求
+  const latestReqId = temp$.getdata(LATEST_REQ_KEY);
+  const latestTimestamp = temp$.getdata(LATEST_TIMESTAMP_KEY);
+  
+  if (latestReqId !== reqId || latestTimestamp !== timestamp.toString()) {
+    temp$.log(`skip outdated ${platformName} code: ${code}, reqId: ${reqId}`);
     return;
   }
 
-  const latestCode = $.getdata(LATEST_CODE_KEY) || code;
-  $.msg($.name, 'code获取成功', `${latestCode}`);
+  // 再次获取最新的code，确保使用的是最后一次存储的
+  const latestCode = temp$.getdata(LATEST_CODE_KEY) || code;
+  
+  // 清除之前的消息，只保留最新的
+  $.Messages = [];
+  $.Messages.push(`${platformName} code获取成功: ${latestCode}`);
+  
+  // 发送通知
+  temp$.msg(temp$.name, 'code获取成功', `${latestCode}`);
+  temp$.log(`sent ${platformName} code: ${latestCode}`);
 }
 
+// 脚本执行入口
 !(async () => {
   if (typeof $request !== 'undefined') {
     await captureCodeFromRequest();
   } else {
     $.log('No request context. This script only works in http-request mode.');
-    $.msg($.name, 'No request context', 'Trigger ws request to capture code');
+    $.Messages.push('No request context. This script only works in http-request mode.');
   }
 })()
   .catch((err) => {
     const msg = err && err.message ? err.message : String(err);
     $.log(`Error: ${msg}`);
-    $.msg($.name, 'Capture failed', msg);
+    $.Messages.push(`Capture failed: ${msg}`);
   })
-  .finally(() => $.done({abort: true}));
+  .finally(async () => {
+    if ($.Messages.length > 0) {
+      await sendMsg($.Messages.join('\n'));
+    }
+    $.done({abort: true});
+  });
+
+// 发送消息
+async function sendMsg(message) {
+  if (!message) return;
+  try {
+    if ($.isNode()) {
+      try {
+        var notify = require('./sendNotify');
+      } catch (e) {
+        var notify = require('./utils/sendNotify');
+      }
+      await notify.sendNotify($.name, message);
+    } else {
+      $.msg($.name, '', message);
+    }
+  } catch (e) {
+    $.log(`\n\n----- ${$.name} ------\n${message}`);
+  }
+}
 
 
 // prettier-ignore
