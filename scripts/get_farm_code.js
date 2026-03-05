@@ -57,7 +57,7 @@ async function captureCodeFromRequest() {
 
   const platform = parseParam(url, 'platform');
   const isQQ = platform === 'qq';
-  const isWechat = platform === 'wechat';
+  const isWechat = platform === 'wx';
   const platformName = isQQ ? 'QQ' : isWechat ? '微信' : '未知平台';
   const envName = `${platformName}经典农场获取code`;
   const temp$ = new Env(envName);
