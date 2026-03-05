@@ -69,6 +69,12 @@ async function captureCodeFromRequest() {
   const reqId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const timestamp = Date.now();
   
+  // 检查是否是重复的code
+  const previousCode = temp$.getdata(LATEST_CODE_KEY);
+  if (previousCode === code) {
+    return;
+  }
+
   // 存储当前code、请求ID和时间戳
   temp$.setdata(code, LATEST_CODE_KEY);
   temp$.setdata(reqId, LATEST_REQ_KEY);
@@ -93,10 +99,6 @@ async function captureCodeFromRequest() {
   // 清除之前的消息，只保留最新的
   $.Messages = [];
   $.Messages.push(`${platformName} code获取成功: ${latestCode}`);
-  
-  // 发送通知
-  temp$.msg(temp$.name, 'code获取成功', `${latestCode}`);
-  temp$.log(`sent ${platformName} code: ${latestCode}`);
 }
 
 // 脚本执行入口
