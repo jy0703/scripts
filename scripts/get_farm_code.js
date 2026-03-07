@@ -1,10 +1,10 @@
 /**
  * 脚本名称：经典农场获取code
- * 功能说明：根据platform参数区分是QQ还是微信的code，并分别存储和通知
+ * 功能说明：根据platform参数识别QQ/微信，按批次收敛后仅通知最后一个code
  * 使用方法：
  *  - 拦截请求URL:
  *    https://gate-obt.nqf.qq.com/prod/ws?platform=qq&os=iOS&ver=1.6.1.16_20251224&code=xxxx&openID=
- *  - 直接捕获并通知code（无持久化）
+ *  - 直接捕获并通知最终收敛后的code
  *
  * Surge 配置：
  * [MITM]
@@ -27,6 +27,9 @@
 
 const $ = new Env('QQ经典农场获取code');
 const NOTIFY_DEBOUNCE_MS = 3000;
+const QQ_BATCH_WINDOW_MS = 10000;
+const WX_BATCH_WINDOW_MS = 15000;
+const NOTIFY_POLL_INTERVAL_MS = 500;
 $.Messages = [];
 
 // 解析URL参数
@@ -47,6 +50,27 @@ function safeDecode(value) {
   }
 }
 
+function getBatchWindowMs(isWechat) {
+  return isWechat ? WX_BATCH_WINDOW_MS : QQ_BATCH_WINDOW_MS;
+}
+
+async function waitForSettledBatch(temp$, reqId, latestReqKey, batchDeadlineKey) {
+  while (true) {
+    const latestReqId = temp$.getdata(latestReqKey);
+    if (latestReqId !== reqId) {
+      return false;
+    }
+
+    const batchDeadline = Number(temp$.getdata(batchDeadlineKey) || 0);
+    const remainingMs = batchDeadline - Date.now();
+    if (remainingMs <= 0) {
+      return true;
+    }
+
+    await temp$.wait(Math.min(remainingMs, NOTIFY_POLL_INTERVAL_MS));
+  }
+}
+
 // 捕获code
 async function captureCodeFromRequest() {
   const url = ($request && $request.url) || '';
@@ -61,44 +85,50 @@ async function captureCodeFromRequest() {
   const platformName = isQQ ? 'QQ' : isWechat ? '微信' : '未知平台';
   const envName = `${platformName}经典农场获取code`;
   const temp$ = new Env(envName);
-  const LATEST_CODE_KEY = isQQ ? 'qq_farm_latest_code' : 'wechat_farm_latest_code';
-  const LATEST_REQ_KEY = isQQ ? 'qq_farm_latest_req' : 'wechat_farm_latest_req';
-  const LATEST_TIMESTAMP_KEY = isQQ ? 'qq_farm_latest_timestamp' : 'wechat_farm_latest_timestamp';
+  const batchWindowMs = getBatchWindowMs(isWechat);
+  const LATEST_CODE_KEY = 'farm_latest_code';
+  const LATEST_REQ_KEY = 'farm_latest_req';
+  const LATEST_TIMESTAMP_KEY = 'farm_latest_timestamp';
+  const LATEST_PLATFORM_KEY = 'farm_latest_platform';
+  const BATCH_FIRST_TIMESTAMP_KEY = 'farm_batch_first_timestamp';
+  const BATCH_DEADLINE_KEY = 'farm_batch_deadline';
 
   // 生成唯一请求ID和时间戳
   const reqId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const timestamp = Date.now();
+  const previousBatchDeadline = Number(temp$.getdata(BATCH_DEADLINE_KEY) || 0);
+  const previousBatchFirstTimestamp = Number(temp$.getdata(BATCH_FIRST_TIMESTAMP_KEY) || 0);
+  const batchFirstTimestamp =
+    previousBatchDeadline && previousBatchFirstTimestamp && timestamp <= previousBatchDeadline
+      ? previousBatchFirstTimestamp
+      : timestamp;
+  const batchDeadline = Math.max(batchFirstTimestamp + batchWindowMs, timestamp + NOTIFY_DEBOUNCE_MS);
   
-  // 检查是否是重复的code
-  const previousCode = temp$.getdata(LATEST_CODE_KEY);
-  if (previousCode === code) {
-    return;
-  }
 
-  // 存储当前code、请求ID和时间戳
+  // 存储当前批次的最新code、请求ID和时间戳
   temp$.setdata(code, LATEST_CODE_KEY);
   temp$.setdata(reqId, LATEST_REQ_KEY);
   temp$.setdata(timestamp.toString(), LATEST_TIMESTAMP_KEY);
-  temp$.log(`captured ${platformName} code: ${code}, reqId: ${reqId}, timestamp: ${timestamp}`);
+  temp$.setdata(platformName, LATEST_PLATFORM_KEY);
+  temp$.setdata(batchFirstTimestamp.toString(), BATCH_FIRST_TIMESTAMP_KEY);
+  temp$.setdata(batchDeadline.toString(), BATCH_DEADLINE_KEY);
+  temp$.log(`captured ${platformName} code: ${code}, reqId: ${reqId}, timestamp: ${timestamp}, batchDeadline: ${batchDeadline}`);
 
-  // 等待一段时间，确保只处理最后一次请求
-  await temp$.wait(NOTIFY_DEBOUNCE_MS);
+  // 等待当前批次真正收敛后，只由最后一条请求负责通知
+  const isFinalRequest = await waitForSettledBatch(temp$, reqId, LATEST_REQ_KEY, BATCH_DEADLINE_KEY);
 
-  // 检查是否是最新的请求
-  const latestReqId = temp$.getdata(LATEST_REQ_KEY);
-  const latestTimestamp = temp$.getdata(LATEST_TIMESTAMP_KEY);
-  
-  if (latestReqId !== reqId || latestTimestamp !== timestamp.toString()) {
+  if (!isFinalRequest) {
     temp$.log(`skip outdated ${platformName} code: ${code}, reqId: ${reqId}`);
     return;
   }
 
-  // 再次获取最新的code，确保使用的是最后一次存储的
+  // 再次获取最新的code，确保使用的是当前批次最后一次存储的
   const latestCode = temp$.getdata(LATEST_CODE_KEY) || code;
+  const latestPlatformName = temp$.getdata(LATEST_PLATFORM_KEY) || platformName;
   
   // 清除之前的消息，只保留最新的
   $.Messages = [];
-  $.Messages.push(`${platformName} code获取成功: ${latestCode}`);
+  $.Messages.push(`${latestPlatformName} code获取成功: ${latestCode}`);
 }
 
 // 脚本执行入口
