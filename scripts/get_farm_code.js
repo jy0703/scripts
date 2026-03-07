@@ -27,8 +27,8 @@
 
 const $ = new Env('QQ经典农场获取code');
 const NOTIFY_DEBOUNCE_MS = 3000;
-const QQ_BATCH_WINDOW_MS = 10000;
-const WX_BATCH_WINDOW_MS = 15000;
+const QQ_BATCH_WINDOW_MS = 5000;
+const WX_BATCH_WINDOW_MS = 8000;
 const NOTIFY_POLL_INTERVAL_MS = 500;
 $.Messages = [];
 
