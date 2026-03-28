@@ -401,102 +401,77 @@ function GetCookie() {
 
 async function doTasks(ctx, tasks) {
     let notifyMsg = '';
+    const taskHandlers = {
+        'interactive.view.article': {
+            handler: doViewTask
+        },
+        'interactive.share': {
+            handler: doShareTask
+        },
+        'guide.crowd': {
+            handler: doCrowdTask,
+            shouldNotify: result => result.code !== 99
+        },
+        'interactive.follow.user': {
+            handler: doFollowUserTask
+        },
+        'interactive.follow.tag': {
+            handler: doFollowTagTask
+        },
+        'interactive.follow.brand': {
+            handler: doFollowBrandTask
+        },
+        'interactive.favorite': {
+            handler: doFavoriteTask
+        },
+        'interactive.rating': {
+            handler: doRatingTask
+        },
+        'interactive.comment': {
+            guard: () => RUNTIME_ENV.SMZDM_COMMENT && String(RUNTIME_ENV.SMZDM_COMMENT).length > 10,
+            onGuardFail(currentCtx) {
+                currentCtx.$env.log('\u{1F7E1}\u8BF7\u8BBE\u7F6E SMZDM_COMMENT \u73AF\u5883\u53D8\u91CF\u540E\u624D\u80FD\u505A\u8BC4\u8BBA\u4EFB\u52A1\uFF01');
+            },
+            handler: doCommentTask
+        }
+    };
 
     for (let i = 0; i < tasks.length; i++) {
       const task = tasks[i];
 
-      // 待领取任务
+      // claimable task
       if (task.task_status == '3') {
-        ctx.$env.log(`领取[${task.task_name}]奖励:`);
+        ctx.$env.log(`\u9886\u53D6[${task.task_name}]\u5956\u52B1:`);
 
         const { isSuccess } = await receiveReward(ctx, task.task_id);
 
-        notifyMsg += `${isSuccess ? '🟢' : '❌'}领取[${task.task_name}]奖励${isSuccess ? '成功' : '失败！请查看日志'}\n`;
+        notifyMsg += `${isSuccess ? '🟢' : '❌'}\u9886\u53D6[${task.task_name}]\u5956\u52B1${isSuccess ? '\u6210\u529F' : '\u5931\u8D25\uFF01\u8BF7\u67E5\u770B\u65E5\u5FD7'}\n`;
 
         await wait(5, 15);
+        continue;
       }
-      // 未完成任务
-      else if (task.task_status == '2') {
-        // 浏览文章任务
-        if (task.task_event_type == 'interactive.view.article') {
-          const { isSuccess } = await doViewTask(ctx, task);
 
-          notifyMsg += getTaskNotifyMessage(ctx, isSuccess, task);
-
-          await wait(5, 15);
-        }
-        // 分享任务
-        else if (task.task_event_type == 'interactive.share') {
-          const { isSuccess } = await doShareTask(ctx, task);
-
-          notifyMsg += getTaskNotifyMessage(ctx, isSuccess, task);
-
-          await wait(5, 15);
-        }
-        // 抽奖任务
-        else if (task.task_event_type == 'guide.crowd') {
-          const { isSuccess, code } = await doCrowdTask(ctx, task);
-
-          if (code !== 99) {
-            notifyMsg += getTaskNotifyMessage(ctx, isSuccess, task);
-          }
-
-          await wait(5, 15);
-        }
-        // 关注用户任务
-        else if (task.task_event_type == 'interactive.follow.user') {
-          const { isSuccess } = await doFollowUserTask(ctx, task);
-
-          notifyMsg += getTaskNotifyMessage(ctx, isSuccess, task);
-
-          await wait(5, 15);
-        }
-        // 关注栏目任务
-        else if (task.task_event_type == 'interactive.follow.tag') {
-          const { isSuccess } = await doFollowTagTask(ctx, task);
-
-          notifyMsg += getTaskNotifyMessage(ctx, isSuccess, task);
-
-          await wait(5, 15);
-        }
-        // 关注品牌
-        else if (task.task_event_type == 'interactive.follow.brand') {
-          const { isSuccess } = await doFollowBrandTask(ctx, task);
-
-          notifyMsg += getTaskNotifyMessage(ctx, isSuccess, task);
-
-          await wait(5, 15);
-        }
-        // 收藏任务
-        else if (task.task_event_type == 'interactive.favorite') {
-          const { isSuccess } = await doFavoriteTask(ctx, task);
-
-          notifyMsg += getTaskNotifyMessage(ctx, isSuccess, task);
-
-          await wait(5, 15);
-        }
-        // 点赞任务
-        else if (task.task_event_type == 'interactive.rating') {
-          const { isSuccess } = await doRatingTask(ctx, task);
-
-          notifyMsg += getTaskNotifyMessage(ctx, isSuccess, task);
-
-          await wait(5, 15);
-        }
-        // 评论任务
-        else if (task.task_event_type == 'interactive.comment') {
-          if (RUNTIME_ENV.SMZDM_COMMENT && String(RUNTIME_ENV.SMZDM_COMMENT).length > 10) {
-            const { isSuccess } = await doCommentTask(ctx, task);
-
-            notifyMsg += getTaskNotifyMessage(ctx, isSuccess, task);
-
-            await wait(5, 15);
-          }
-          else {
-            ctx.$env.log('🟡请设置 SMZDM_COMMENT 环境变量后才能做评论任务！');
-          }
-        }
+      // unfinished task
+      if (task.task_status != '2') {
+        continue;
       }
+
+      const taskHandler = taskHandlers[task.task_event_type];
+      if (!taskHandler) {
+        continue;
+      }
+
+      if (taskHandler.guard && !taskHandler.guard(task, ctx)) {
+        taskHandler.onGuardFail && taskHandler.onGuardFail(ctx, task);
+        continue;
+      }
+
+      const result = await taskHandler.handler(ctx, task);
+      if (!taskHandler.shouldNotify || taskHandler.shouldNotify(result, task, ctx)) {
+        notifyMsg += getTaskNotifyMessage(ctx, result.isSuccess, task);
+      }
+
+      await wait(5, 15);
     }
 
     return notifyMsg;
@@ -504,6 +479,12 @@ async function doTasks(ctx, tasks) {
 
 function getTaskNotifyMessage(ctx, isSuccess, task) {
     return `${isSuccess ? '🟢' : '❌'}完成[${task.task_name}]任务${isSuccess ? '成功' : '失败！请查看日志'}\n`;
+}
+
+async function claimTaskReward(ctx, task, minSecond = 5, maxSecond = 15) {
+    ctx.$env.log('\u9886\u53D6\u5956\u52B1');
+    await wait(minSecond, maxSecond);
+    return await receiveReward(ctx, task.task_id);
 }
 
 async function doCommentTask(ctx, task) {
@@ -546,11 +527,7 @@ async function doCommentTask(ctx, task) {
       // 不成功再执行一次删除
       await removeComment(ctx, data.data.comment_ID);
     }
-
-    ctx.$env.log('领取奖励');
-    await wait(5, 15);
-
-    return await receiveReward(ctx, task.task_id);
+    return await claimTaskReward(ctx, task);
 }
 
 async function doRatingTask(ctx, task) {
@@ -673,11 +650,7 @@ async function doRatingTask(ctx, task) {
         channelId: article.article_channel_id
       });
     }
-
-    ctx.$env.log('领取奖励');
-    await wait(5, 15);
-
-    return await receiveReward(ctx, task.task_id);
+    return await claimTaskReward(ctx, task);
 }
 
 async function doFavoriteTask(ctx, task) {
@@ -769,11 +742,7 @@ async function doFavoriteTask(ctx, task) {
       id: articleId,
       channelId
     });
-
-    ctx.$env.log('领取奖励');
-    await wait(5, 15);
-
-    return await receiveReward(ctx, task.task_id);
+    return await claimTaskReward(ctx, task);
 }
 
 async function doFollowUserTask(ctx, task) {
@@ -819,11 +788,7 @@ async function doFollowUserTask(ctx, task) {
 
       await wait(3, 10);
     }
-
-    ctx.$env.log('领取奖励');
-    await wait(5, 15);
-
-    return await receiveReward(ctx, task.task_id);
+    return await claimTaskReward(ctx, task);
 }
 
 async function doFollowTagTask(ctx, task) {
@@ -885,11 +850,7 @@ async function doFollowTagTask(ctx, task) {
       keywordId: tagDetail.lanmu_id,
       keyword: tagDetail.lanmu_info.lanmu_name
     });
-
-    ctx.$env.log('领取奖励');
-    await wait(5, 15);
-
-    return await receiveReward(ctx, task.task_id);
+    return await claimTaskReward(ctx, task);
 }
 
 async function doFollowBrandTask(ctx, task) {
@@ -927,11 +888,7 @@ async function doFollowBrandTask(ctx, task) {
       keywordId: brandDetail.id,
       keyword: brandDetail.title
     });
-
-    ctx.$env.log('领取奖励');
-    await wait(5, 15);
-
-    return await receiveReward(ctx, task.task_id);
+    return await claimTaskReward(ctx, task);
 }
 
 async function doCrowdTask(ctx, task) {
@@ -969,11 +926,7 @@ async function doCrowdTask(ctx, task) {
         isSuccess: result.isSuccess
       };
     }
-
-    ctx.$env.log('领取奖励');
-    await wait(5, 15);
-
-    return await receiveReward(ctx, task.task_id);
+    return await claimTaskReward(ctx, task);
 }
 
 async function doShareTask(ctx, task) {
@@ -1016,11 +969,7 @@ async function doShareTask(ctx, task) {
 
       await wait(5, 15);
     }
-
-    ctx.$env.log('领取奖励');
-    await wait(3, 10);
-
-    return await receiveReward(ctx, task.task_id);
+    return await claimTaskReward(ctx, task, 3, 10);
 }
 
 async function doViewTask(ctx, task) {
@@ -1083,11 +1032,7 @@ async function doViewTask(ctx, task) {
 
       await wait(5, 15);
     }
-
-    ctx.$env.log('领取奖励');
-    await wait(3, 10);
-
-    return await receiveReward(ctx, task.task_id);
+    return await claimTaskReward(ctx, task, 3, 10);
 }
 
 async function follow(ctx, {keywordId, keyword, type, method}) {
