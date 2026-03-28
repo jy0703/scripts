@@ -132,8 +132,17 @@ function parseFormBody(body = '') {
     return result;
 }
 
+function stripWhitespace(value) {
+    return String(value).replace(/\s+/g, '');
+}
+
+function trimUndefinedFields(data = {}) {
+    Object.keys(data).forEach(key => data[key] === undefined && delete data[key]);
+    return data;
+}
+
 function signFormData(data = {}) {
-    const newData = {
+    const formData = {
         weixin: 1,
         basic_v: 0,
         f: 'android',
@@ -141,24 +150,35 @@ function signFormData(data = {}) {
         time: `${Math.round(Date.now() / 1000)}000`,
         ...data
     };
-    const keys = Object.keys(newData).filter(key => newData[key] !== '').sort();
-    const signData = keys.map(key => `${key}=${String(newData[key]).replace(/\s+/g, '')}`).join('&');
-    const sign = md5(`${signData}&key=${SIGN_KEY}`).toUpperCase();
+    const signData = Object.keys(formData)
+        .filter(key => formData[key] !== '')
+        .sort()
+        .map(key => `${key}=${stripWhitespace(formData[key])}`)
+        .join('&');
+
     return {
-        ...newData,
-        sign
+        ...formData,
+        sign: MD5(`${signData}&key=${SIGN_KEY}`).toUpperCase()
     };
 }
 
 function encodeFormData(data = {}) {
-    return Object.keys(data).filter(key => data[key] !== undefined && data[key] !== null).map(key => `${encodeURIComponent(key)}=${encodeURIComponent(typeof data[key] === 'object' ? JSON.stringify(data[key]) : String(data[key]))}`).join('&');
+    return Object.keys(data)
+        .filter(key => data[key] !== undefined && data[key] !== null)
+        .map(key => {
+            const value = typeof data[key] === 'object' ? JSON.stringify(data[key]) : String(data[key]);
+            return `${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
+        })
+        .join('&');
 }
 
 async function requestApi(url, inputOptions = {}) {
-    const options = { ...inputOptions };
-    options.method = String(options.method || 'get').toLowerCase();
-    options.data = options.data || {};
-    Object.keys(options.data).forEach(key => options.data[key] === undefined && delete options.data[key]);
+    const options = {
+        ...inputOptions,
+        method: String(inputOptions.method || 'get').toLowerCase(),
+        data: trimUndefinedFields({ ...(inputOptions.data || {}) })
+    };
+
     if (options.sign !== false) {
         options.data = signFormData(options.data);
     }
@@ -204,221 +224,81 @@ async function requestApi(url, inputOptions = {}) {
     };
 }
 
-class SmzdmBot {
-    constructor(cookie) {
-        this.cookie = String(cookie || '').trim();
-        const match = this.cookie.match(/(?:^|;\s*)sess=([^;]*)/);
-        this.token = match ? match[1] : '';
-        this.userAgentApp = '';
-        this.userAgentWeb = '';
-
-        this.androidCookie = this.cookie.replace(/iphone/ig, 'android').replace(/iPhone/g, 'Android');
-        this.androidCookie = updateCookie(this.androidCookie, 'smzdm_version', APP_VERSION);
-        this.androidCookie = updateCookie(this.androidCookie, 'device_smzdm_version', APP_VERSION);
-        this.androidCookie = updateCookie(this.androidCookie, 'v', APP_VERSION);
-        this.androidCookie = updateCookie(this.androidCookie, 'device_smzdm_version_code', APP_VERSION_REV);
-        this.androidCookie = updateCookie(this.androidCookie, 'device_system_version', '10.0');
-        this.androidCookie = updateCookie(this.androidCookie, 'apk_partner_name', 'smzdm_download');
-        this.androidCookie = updateCookie(this.androidCookie, 'partner_name', 'smzdm_download');
-        this.androidCookie = updateCookie(this.androidCookie, 'device_type', 'Android');
-        this.androidCookie = updateCookie(this.androidCookie, 'device_smzdm', 'android');
-        this.androidCookie = updateCookie(this.androidCookie, 'device_name', 'Android');
-    }
-
-    getHeaders() {
-        let userAgent = this.userAgentApp || getEnv('SMZDM_USER_AGENT_APP') || DEFAULT_USER_AGENT_APP;
-        userAgent = userAgent.replace(RE_VERSION, `$1${APP_VERSION}`).replace(RE_REV, `rv:${APP_VERSION_REV}`);
-        return {
-            Accept: '*/*',
-            'Accept-Language': 'zh-Hans-CN;q=1',
-            'Accept-Encoding': 'gzip, deflate, br',
-            request_key: randomStr(18),
-            'User-Agent': userAgent,
-            Cookie: this.androidCookie
-        };
-    }
-
-    getHeadersForWeb() {
-        let userAgent = this.userAgentWeb || getEnv('SMZDM_USER_AGENT_WEB') || DEFAULT_USER_AGENT_WEB;
-        userAgent = userAgent.replace(RE_VERSION, `$1${APP_VERSION}`).replace(RE_REV, `rv:${APP_VERSION_REV}`);
-        return {
-            Accept: '*/*',
-            'Accept-Language': 'zh-CN,zh-Hans;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'User-Agent': userAgent,
-            Cookie: this.androidCookie
-        };
-    }
-
-    getOneByRandom(listing = []) {
-        return listing[Math.floor(Math.random() * listing.length)];
-    }
+function postApi(url, inputOptions = {}) {
+    return requestApi(url, {
+        ...inputOptions,
+        method: 'post'
+    });
 }
 
-function md5(string) {
-    if ($.isNode()) {
-        try {
-            return require('crypto').createHash('md5').update(String(string), 'utf8').digest('hex');
-        } catch (e) {
-            $.log(`⚠️ Node crypto 计算 MD5 失败，改用纯 JS：${e.message || e}`);
-        }
-    }
-    return md5Fallback(String(string));
+function createBotContext(user = {}) {
+    return normalizeBotContext({
+        $env: $,
+        user,
+        cookie: user.cookie || '',
+        userAgentApp: user.userAgentApp || '',
+        userAgentWeb: user.userAgentWeb || '',
+        sk: user.sk || ''
+    });
 }
 
-function md5Fallback(string) {
-    function safeAdd(x, y) {
-        const lsw = (x & 0xffff) + (y & 0xffff);
-        const msw = (x >> 16) + (y >> 16) + (lsw >> 16);
-        return (msw << 16) | (lsw & 0xffff);
-    }
-    function bitRotateLeft(num, cnt) {
-        return (num << cnt) | (num >>> (32 - cnt));
-    }
-    function md5cmn(q, a, b, x, s, t) {
-        return safeAdd(bitRotateLeft(safeAdd(safeAdd(a, q), safeAdd(x, t)), s), b);
-    }
-    function md5ff(a, b, c, d, x, s, t) {
-        return md5cmn((b & c) | ((~b) & d), a, b, x, s, t);
-    }
-    function md5gg(a, b, c, d, x, s, t) {
-        return md5cmn((b & d) | (c & (~d)), a, b, x, s, t);
-    }
-    function md5hh(a, b, c, d, x, s, t) {
-        return md5cmn(b ^ c ^ d, a, b, x, s, t);
-    }
-    function md5ii(a, b, c, d, x, s, t) {
-        return md5cmn(c ^ (b | (~d)), a, b, x, s, t);
-    }
-    function binlMD5(x, len) {
-        x[len >> 5] |= 0x80 << (len % 32);
-        x[(((len + 64) >>> 9) << 4) + 14] = len;
-        let i;
-        let olda;
-        let oldb;
-        let oldc;
-        let oldd;
-        let a = 1732584193;
-        let b = -271733879;
-        let c = -1732584194;
-        let d = 271733878;
-        for (i = 0; i < x.length; i += 16) {
-            olda = a;
-            oldb = b;
-            oldc = c;
-            oldd = d;
-            a = md5ff(a, b, c, d, x[i], 7, -680876936);
-            d = md5ff(d, a, b, c, x[i + 1], 12, -389564586);
-            c = md5ff(c, d, a, b, x[i + 2], 17, 606105819);
-            b = md5ff(b, c, d, a, x[i + 3], 22, -1044525330);
-            a = md5ff(a, b, c, d, x[i + 4], 7, -176418897);
-            d = md5ff(d, a, b, c, x[i + 5], 12, 1200080426);
-            c = md5ff(c, d, a, b, x[i + 6], 17, -1473231341);
-            b = md5ff(b, c, d, a, x[i + 7], 22, -45705983);
-            a = md5ff(a, b, c, d, x[i + 8], 7, 1770035416);
-            d = md5ff(d, a, b, c, x[i + 9], 12, -1958414417);
-            c = md5ff(c, d, a, b, x[i + 10], 17, -42063);
-            b = md5ff(b, c, d, a, x[i + 11], 22, -1990404162);
-            a = md5ff(a, b, c, d, x[i + 12], 7, 1804603682);
-            d = md5ff(d, a, b, c, x[i + 13], 12, -40341101);
-            c = md5ff(c, d, a, b, x[i + 14], 17, -1502002290);
-            b = md5ff(b, c, d, a, x[i + 15], 22, 1236535329);
-            a = md5gg(a, b, c, d, x[i + 1], 5, -165796510);
-            d = md5gg(d, a, b, c, x[i + 6], 9, -1069501632);
-            c = md5gg(c, d, a, b, x[i + 11], 14, 643717713);
-            b = md5gg(b, c, d, a, x[i], 20, -373897302);
-            a = md5gg(a, b, c, d, x[i + 5], 5, -701558691);
-            d = md5gg(d, a, b, c, x[i + 10], 9, 38016083);
-            c = md5gg(c, d, a, b, x[i + 15], 14, -660478335);
-            b = md5gg(b, c, d, a, x[i + 4], 20, -405537848);
-            a = md5gg(a, b, c, d, x[i + 9], 5, 568446438);
-            d = md5gg(d, a, b, c, x[i + 14], 9, -1019803690);
-            c = md5gg(c, d, a, b, x[i + 3], 14, -187363961);
-            b = md5gg(b, c, d, a, x[i + 8], 20, 1163531501);
-            a = md5gg(a, b, c, d, x[i + 13], 5, -1444681467);
-            d = md5gg(d, a, b, c, x[i + 2], 9, -51403784);
-            c = md5gg(c, d, a, b, x[i + 7], 14, 1735328473);
-            b = md5gg(b, c, d, a, x[i + 12], 20, -1926607734);
-            a = md5hh(a, b, c, d, x[i + 5], 4, -378558);
-            d = md5hh(d, a, b, c, x[i + 8], 11, -2022574463);
-            c = md5hh(c, d, a, b, x[i + 11], 16, 1839030562);
-            b = md5hh(b, c, d, a, x[i + 14], 23, -35309556);
-            a = md5hh(a, b, c, d, x[i + 1], 4, -1530992060);
-            d = md5hh(d, a, b, c, x[i + 4], 11, 1272893353);
-            c = md5hh(c, d, a, b, x[i + 7], 16, -155497632);
-            b = md5hh(b, c, d, a, x[i + 10], 23, -1094730640);
-            a = md5hh(a, b, c, d, x[i + 13], 4, 681279174);
-            d = md5hh(d, a, b, c, x[i], 11, -358537222);
-            c = md5hh(c, d, a, b, x[i + 3], 16, -722521979);
-            b = md5hh(b, c, d, a, x[i + 6], 23, 76029189);
-            a = md5hh(a, b, c, d, x[i + 9], 4, -640364487);
-            d = md5hh(d, a, b, c, x[i + 12], 11, -421815835);
-            c = md5hh(c, d, a, b, x[i + 15], 16, 530742520);
-            b = md5hh(b, c, d, a, x[i + 2], 23, -995338651);
-            a = md5ii(a, b, c, d, x[i], 6, -198630844);
-            d = md5ii(d, a, b, c, x[i + 7], 10, 1126891415);
-            c = md5ii(c, d, a, b, x[i + 14], 15, -1416354905);
-            b = md5ii(b, c, d, a, x[i + 5], 21, -57434055);
-            a = md5ii(a, b, c, d, x[i + 12], 6, 1700485571);
-            d = md5ii(d, a, b, c, x[i + 3], 10, -1894986606);
-            c = md5ii(c, d, a, b, x[i + 10], 15, -1051523);
-            b = md5ii(b, c, d, a, x[i + 1], 21, -2054922799);
-            a = md5ii(a, b, c, d, x[i + 8], 6, 1873313359);
-            d = md5ii(d, a, b, c, x[i + 15], 10, -30611744);
-            c = md5ii(c, d, a, b, x[i + 6], 15, -1560198380);
-            b = md5ii(b, c, d, a, x[i + 13], 21, 1309151649);
-            a = md5ii(a, b, c, d, x[i + 4], 6, -145523070);
-            d = md5ii(d, a, b, c, x[i + 11], 10, -1120210379);
-            c = md5ii(c, d, a, b, x[i + 2], 15, 718787259);
-            b = md5ii(b, c, d, a, x[i + 9], 21, -343485551);
-            a = safeAdd(a, olda);
-            b = safeAdd(b, oldb);
-            c = safeAdd(c, oldc);
-            d = safeAdd(d, oldd);
-        }
-        return [a, b, c, d];
-    }
-    function binl2rstr(input) {
-        let i;
-        let output = '';
-        const length32 = input.length * 32;
-        for (i = 0; i < length32; i += 8) {
-            output += String.fromCharCode((input[i >> 5] >>> (i % 32)) & 0xff);
-        }
-        return output;
-    }
-    function rstr2binl(input) {
-        let i;
-        const output = [];
-        output[(input.length >> 2) - 1] = undefined;
-        for (i = 0; i < output.length; i += 1) {
-            output[i] = 0;
-        }
-        const length8 = input.length * 8;
-        for (i = 0; i < length8; i += 8) {
-            output[i >> 5] |= (input.charCodeAt(i / 8) & 0xff) << (i % 32);
-        }
-        return output;
-    }
-    function rstrMD5(s) {
-        return binl2rstr(binlMD5(rstr2binl(s), s.length * 8));
-    }
-    function rstr2hex(input) {
-        const hexTab = '0123456789abcdef';
-        let output = '';
-        let x;
-        let i;
-        for (i = 0; i < input.length; i += 1) {
-            x = input.charCodeAt(i);
-            output += hexTab.charAt((x >>> 4) & 0x0f) + hexTab.charAt(x & 0x0f);
-        }
-        return output;
-    }
-    function str2rstrUTF8(input) {
-        return unescape(encodeURIComponent(input));
-    }
-    return rstr2hex(rstrMD5(str2rstrUTF8(string)));
+function normalizeBotContext(inputCtx = {}) {
+    const ctx = {
+        $env: inputCtx.$env || $,
+        user: inputCtx.user || {},
+        cookie: String(inputCtx.cookie || '').trim(),
+        token: '',
+        userAgentApp: String(inputCtx.userAgentApp || '').trim(),
+        userAgentWeb: String(inputCtx.userAgentWeb || '').trim(),
+        sk: String(inputCtx.sk || '').trim(),
+        androidCookie: ''
+    };
+    const match = ctx.cookie.match(/(?:^|;\s*)sess=([^;]*)/);
+    ctx.token = match ? match[1] : '';
+
+    ctx.androidCookie = ctx.cookie.replace(/iphone/ig, 'android').replace(/iPhone/g, 'Android');
+    ctx.androidCookie = updateCookie(ctx.androidCookie, 'smzdm_version', APP_VERSION);
+    ctx.androidCookie = updateCookie(ctx.androidCookie, 'device_smzdm_version', APP_VERSION);
+    ctx.androidCookie = updateCookie(ctx.androidCookie, 'v', APP_VERSION);
+    ctx.androidCookie = updateCookie(ctx.androidCookie, 'device_smzdm_version_code', APP_VERSION_REV);
+    ctx.androidCookie = updateCookie(ctx.androidCookie, 'device_system_version', '10.0');
+    ctx.androidCookie = updateCookie(ctx.androidCookie, 'apk_partner_name', 'smzdm_download');
+    ctx.androidCookie = updateCookie(ctx.androidCookie, 'partner_name', 'smzdm_download');
+    ctx.androidCookie = updateCookie(ctx.androidCookie, 'device_type', 'Android');
+    ctx.androidCookie = updateCookie(ctx.androidCookie, 'device_smzdm', 'android');
+    ctx.androidCookie = updateCookie(ctx.androidCookie, 'device_name', 'Android');
+    return ctx;
 }
+
+function getHeaders(ctx) {
+    let userAgent = ctx.userAgentApp || getEnv('SMZDM_USER_AGENT_APP') || DEFAULT_USER_AGENT_APP;
+    userAgent = userAgent.replace(RE_VERSION, `$1${APP_VERSION}`).replace(RE_REV, `rv:${APP_VERSION_REV}`);
+    return {
+        Accept: '*/*',
+        'Accept-Language': 'zh-Hans-CN;q=1',
+        'Accept-Encoding': 'gzip, deflate, br',
+        request_key: randomStr(18),
+        'User-Agent': userAgent,
+        Cookie: ctx.androidCookie
+    };
+}
+
+function getHeadersForWeb(ctx) {
+    let userAgent = ctx.userAgentWeb || getEnv('SMZDM_USER_AGENT_WEB') || DEFAULT_USER_AGENT_WEB;
+    userAgent = userAgent.replace(RE_VERSION, `$1${APP_VERSION}`).replace(RE_REV, `rv:${APP_VERSION_REV}`);
+    return {
+        Accept: '*/*',
+        'Accept-Language': 'zh-CN,zh-Hans;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'User-Agent': userAgent,
+        Cookie: ctx.androidCookie
+    };
+}
+
+function getOneByRandom(ctx, listing = []) {
+    return listing[Math.floor(Math.random() * listing.length)];
+}
+
 
 function loadUsers() {
     const stored = getEnv(USER_STORAGE_KEY);
@@ -526,126 +406,140 @@ function GetCookie() {
 
 // ------------------------------------
 
-class SmzdmTaskBot extends SmzdmBot {
-  constructor(cookie, env) {
-    super(cookie);
-
-    this.$env = env;
-  }
-
-  // 执行任务列表中的任务
-  async doTasks(tasks) {
+async function doTasks(ctx, tasks) {
     let notifyMsg = '';
+    const taskHandlers = {
+        'interactive.view.article': {
+            handler: doViewTask
+        },
+        'interactive.share': {
+            handler: doShareTask
+        },
+        'guide.crowd': {
+            handler: doCrowdTask,
+            shouldNotify: result => result.code !== 99
+        },
+        'interactive.follow.user': {
+            handler: doFollowUserTask
+        },
+        'interactive.follow.tag': {
+            handler: doFollowTagTask
+        },
+        'interactive.follow.brand': {
+            handler: doFollowBrandTask
+        },
+        'interactive.favorite': {
+            handler: doFavoriteTask
+        },
+        'interactive.rating': {
+            handler: doRatingTask
+        },
+        'interactive.comment': {
+            guard: () => RUNTIME_ENV.SMZDM_COMMENT && String(RUNTIME_ENV.SMZDM_COMMENT).length > 10,
+            onGuardFail(currentCtx) {
+                currentCtx.$env.log('\u{1F7E1}\u8BF7\u8BBE\u7F6E SMZDM_COMMENT \u73AF\u5883\u53D8\u91CF\u540E\u624D\u80FD\u505A\u8BC4\u8BBA\u4EFB\u52A1\uFF01');
+            },
+            handler: doCommentTask
+        }
+    };
 
     for (let i = 0; i < tasks.length; i++) {
       const task = tasks[i];
 
-      // 待领取任务
+      // claimable task
       if (task.task_status == '3') {
-        this.$env.log(`领取[${task.task_name}]奖励:`);
+        ctx.$env.log(`\u9886\u53D6[${task.task_name}]\u5956\u52B1:`);
 
-        const { isSuccess } = await this.receiveReward(task.task_id);
+        const { isSuccess } = await receiveReward(ctx, task.task_id);
 
-        notifyMsg += `${isSuccess ? '🟢' : '❌'}领取[${task.task_name}]奖励${isSuccess ? '成功' : '失败！请查看日志'}\n`;
+        notifyMsg += `${isSuccess ? '🟢' : '❌'}\u9886\u53D6[${task.task_name}]\u5956\u52B1${isSuccess ? '\u6210\u529F' : '\u5931\u8D25\uFF01\u8BF7\u67E5\u770B\u65E5\u5FD7'}\n`;
 
         await wait(5, 15);
+        continue;
       }
-      // 未完成任务
-      else if (task.task_status == '2') {
-        // 浏览文章任务
-        if (task.task_event_type == 'interactive.view.article') {
-          const { isSuccess } = await this.doViewTask(task);
 
-          notifyMsg += this.getTaskNotifyMessage(isSuccess, task);
-
-          await wait(5, 15);
-        }
-        // 分享任务
-        else if (task.task_event_type == 'interactive.share') {
-          const { isSuccess } = await this.doShareTask(task);
-
-          notifyMsg += this.getTaskNotifyMessage(isSuccess, task);
-
-          await wait(5, 15);
-        }
-        // 抽奖任务
-        else if (task.task_event_type == 'guide.crowd') {
-          const { isSuccess, code } = await this.doCrowdTask(task);
-
-          if (code !== 99) {
-            notifyMsg += this.getTaskNotifyMessage(isSuccess, task);
-          }
-
-          await wait(5, 15);
-        }
-        // 关注用户任务
-        else if (task.task_event_type == 'interactive.follow.user') {
-          const { isSuccess } = await this.doFollowUserTask(task);
-
-          notifyMsg += this.getTaskNotifyMessage(isSuccess, task);
-
-          await wait(5, 15);
-        }
-        // 关注栏目任务
-        else if (task.task_event_type == 'interactive.follow.tag') {
-          const { isSuccess } = await this.doFollowTagTask(task);
-
-          notifyMsg += this.getTaskNotifyMessage(isSuccess, task);
-
-          await wait(5, 15);
-        }
-        // 关注品牌
-        else if (task.task_event_type == 'interactive.follow.brand') {
-          const { isSuccess } = await this.doFollowBrandTask(task);
-
-          notifyMsg += this.getTaskNotifyMessage(isSuccess, task);
-
-          await wait(5, 15);
-        }
-        // 收藏任务
-        else if (task.task_event_type == 'interactive.favorite') {
-          const { isSuccess } = await this.doFavoriteTask(task);
-
-          notifyMsg += this.getTaskNotifyMessage(isSuccess, task);
-
-          await wait(5, 15);
-        }
-        // 点赞任务
-        else if (task.task_event_type == 'interactive.rating') {
-          const { isSuccess } = await this.doRatingTask(task);
-
-          notifyMsg += this.getTaskNotifyMessage(isSuccess, task);
-
-          await wait(5, 15);
-        }
-        // 评论任务
-        else if (task.task_event_type == 'interactive.comment') {
-          if (RUNTIME_ENV.SMZDM_COMMENT && String(RUNTIME_ENV.SMZDM_COMMENT).length > 10) {
-            const { isSuccess } = await this.doCommentTask(task);
-
-            notifyMsg += this.getTaskNotifyMessage(isSuccess, task);
-
-            await wait(5, 15);
-          }
-          else {
-            this.$env.log('🟡请设置 SMZDM_COMMENT 环境变量后才能做评论任务！');
-          }
-        }
+      // unfinished task
+      if (task.task_status != '2') {
+        continue;
       }
+
+      const taskHandler = taskHandlers[task.task_event_type];
+      if (!taskHandler) {
+        continue;
+      }
+
+      if (taskHandler.guard && !taskHandler.guard(task, ctx)) {
+        taskHandler.onGuardFail && taskHandler.onGuardFail(ctx, task);
+        continue;
+      }
+
+      const result = await taskHandler.handler(ctx, task);
+      if (!taskHandler.shouldNotify || taskHandler.shouldNotify(result, task, ctx)) {
+        notifyMsg += getTaskNotifyMessage(ctx, result.isSuccess, task);
+      }
+
+      await wait(5, 15);
     }
 
     return notifyMsg;
-  }
+}
 
-  getTaskNotifyMessage(isSuccess, task) {
+function getTaskNotifyMessage(ctx, isSuccess, task) {
     return `${isSuccess ? '🟢' : '❌'}完成[${task.task_name}]任务${isSuccess ? '成功' : '失败！请查看日志'}\n`;
-  }
+}
 
-  // 执行评论任务
-  async doCommentTask(task) {
-    this.$env.log(`开始任务: ${task.task_name}`);
+async function claimTaskReward(ctx, task, minSecond = 5, maxSecond = 15) {
+    ctx.$env.log('\u9886\u53D6\u5956\u52B1');
+    await wait(minSecond, maxSecond);
+    return await receiveReward(ctx, task.task_id);
+}
 
-    const articles = await this.getArticleList(20);
+async function runActionSequence(ctx, steps = [], waitRange = [3, 10]) {
+    if (!steps.length) {
+      return;
+    }
+
+    await wait(waitRange[0], waitRange[1]);
+
+    for (let i = 0; i < steps.length; i++) {
+      await steps[i]();
+
+      if (i < steps.length - 1) {
+        await wait(waitRange[0], waitRange[1]);
+      }
+    }
+}
+
+async function getTaskArticles(ctx, task, num, repeatFixedArticle = false) {
+    if (task.article_id == '0') {
+      const articles = await getArticleList(ctx, num);
+
+      await wait(3, 10);
+
+      return articles;
+    }
+
+    const article = {
+      article_id: task.article_id,
+      article_channel_id: task.channel_id
+    };
+
+    return repeatFixedArticle ? Array.from({ length: num }, () => ({ ...article })) : [article];
+}
+
+async function openTaskArticle(ctx, task, article) {
+    if (/detail_haojia/i.test(task.task_redirect_url.scheme_url)) {
+      await getHaojiaDetail(ctx, article.article_id);
+    }
+    else {
+      await getArticleDetail(ctx, article.article_id);
+    }
+}
+
+async function doCommentTask(ctx, task) {
+    ctx.$env.log(`开始任务: ${task.task_name}`);
+
+    const articles = await getArticleList(ctx, 20);
 
     if (articles.length < 1) {
       return {
@@ -658,7 +552,7 @@ class SmzdmTaskBot extends SmzdmBot {
 
     await wait(3, 10);
 
-    const {isSuccess, data } = await this.submitComment({
+    const {isSuccess, data } = await submitComment(ctx, {
       articleId: article.article_id,
       channelId: article.article_channel_id,
       content: RUNTIME_ENV.SMZDM_COMMENT
@@ -670,34 +564,29 @@ class SmzdmTaskBot extends SmzdmBot {
       };
     }
 
-    this.$env.log('删除评论');
+    ctx.$env.log('删除评论');
     await wait(20, 30);
 
-    const {isSuccess: result } = await this.removeComment(data.data.comment_ID);
+    const {isSuccess: result } = await removeComment(ctx, data.data.comment_ID);
 
     if (!result) {
-      this.$env.log('再试一次');
+      ctx.$env.log('再试一次');
       await wait(10, 20);
 
       // 不成功再执行一次删除
-      await this.removeComment(data.data.comment_ID);
+      await removeComment(ctx, data.data.comment_ID);
     }
+    return await claimTaskReward(ctx, task);
+}
 
-    this.$env.log('领取奖励');
-    await wait(5, 15);
-
-    return await this.receiveReward(task.task_id);
-  }
-
-  // 执行点赞任务
-  async doRatingTask(task) {
-    this.$env.log(`开始任务: ${task.task_name}`);
+async function doRatingTask(ctx, task) {
+    ctx.$env.log(`开始任务: ${task.task_name}`);
 
     let article;
 
     if (task.task_description.indexOf('任意') >= 0 || task.task_redirect_url.link_val == '0' || !task.task_redirect_url.link_val) {
       // 随机选一篇文章
-      const articles = await this.getArticleList(20);
+      const articles = await getArticleList(ctx, 20);
 
       if (articles.length < 1) {
         return {
@@ -705,11 +594,11 @@ class SmzdmTaskBot extends SmzdmBot {
         };
       }
 
-      article = this.getOneByRandom(articles);
+      article = getOneByRandom(ctx, articles);
     }
     else if (task.task_redirect_url.link_type === 'lanmu') {
       // 从栏目获取文章
-      const articles = await this.getArticleListFromLanmu(task.task_redirect_url.link_val, 20);
+      const articles = await getArticleListFromLanmu(ctx, task.task_redirect_url.link_val, 20);
 
       if (articles.length < 1) {
         return {
@@ -717,10 +606,10 @@ class SmzdmTaskBot extends SmzdmBot {
         };
       }
 
-      article = this.getOneByRandom(articles);
+      article = getOneByRandom(ctx, articles);
     }
     else if (task.task_redirect_url.link != '' && task.task_redirect_url.link_val != '') {
-      const channelId = await this.getArticleChannelIdForTesting(task.task_redirect_url.link);
+      const channelId = await getArticleChannelIdForTesting(ctx, task.task_redirect_url.link);
 
       if (!channelId) {
         return {
@@ -734,99 +623,78 @@ class SmzdmTaskBot extends SmzdmBot {
       };
     }
     else {
-      this.$env.log('尚未支持');
+      ctx.$env.log('尚未支持');
 
       return {
         isSuccess: false
       };
     }
 
-    await wait(3, 10);
-
     if (article.article_price) {
       // 点值
-      await this.rating({
-        method: 'worth_cancel',
-        type: 3,
-        id: article.article_id,
-        channelId: article.article_channel_id
-      });
-
-      await wait(3, 10);
-
-      await this.rating({
-        method: 'worth_create',
-        type: 1,
-        id: article.article_id,
-        channelId: article.article_channel_id
-      });
-
-      await wait(3, 10);
-
-      await this.rating({
-        method: 'worth_cancel',
-        type: 3,
-        id: article.article_id,
-        channelId: article.article_channel_id
-      });
+      await runActionSequence(ctx, [
+        () => rating(ctx, {
+          method: 'worth_cancel',
+          type: 3,
+          id: article.article_id,
+          channelId: article.article_channel_id
+        }),
+        () => rating(ctx, {
+          method: 'worth_create',
+          type: 1,
+          id: article.article_id,
+          channelId: article.article_channel_id
+        }),
+        () => rating(ctx, {
+          method: 'worth_cancel',
+          type: 3,
+          id: article.article_id,
+          channelId: article.article_channel_id
+        })
+      ]);
     }
     else {
       // 点赞
-      await this.rating({
-        method: 'like_cancel',
-        id: article.article_id,
-        channelId: article.article_channel_id
-      });
-
-      await wait(3, 10);
-
-      await this.rating({
-        method: 'like_create',
-        id: article.article_id,
-        channelId: article.article_channel_id
-      });
-
-      await wait(3, 10);
-
-      await this.rating({
-        method: 'like_cancel',
-        id: article.article_id,
-        channelId: article.article_channel_id
-      });
-
-      await wait(3, 10);
-
-      await this.rating({
-        method: 'like_create',
-        id: article.article_id,
-        channelId: article.article_channel_id
-      });
-
-      await wait(3, 10);
-
-      await this.rating({
-        method: 'like_cancel',
-        id: article.article_id,
-        channelId: article.article_channel_id
-      });
+      await runActionSequence(ctx, [
+        () => rating(ctx, {
+          method: 'like_cancel',
+          id: article.article_id,
+          channelId: article.article_channel_id
+        }),
+        () => rating(ctx, {
+          method: 'like_create',
+          id: article.article_id,
+          channelId: article.article_channel_id
+        }),
+        () => rating(ctx, {
+          method: 'like_cancel',
+          id: article.article_id,
+          channelId: article.article_channel_id
+        }),
+        () => rating(ctx, {
+          method: 'like_create',
+          id: article.article_id,
+          channelId: article.article_channel_id
+        }),
+        () => rating(ctx, {
+          method: 'like_cancel',
+          id: article.article_id,
+          channelId: article.article_channel_id
+        })
+      ]);
     }
+    return await claimTaskReward(ctx, task);
+}
 
-    this.$env.log('领取奖励');
-    await wait(5, 15);
-
-    return await this.receiveReward(task.task_id);
-  }
-
-  // 执行收藏任务
-  async doFavoriteTask(task) {
-    this.$env.log(`开始任务: ${task.task_name}`);
+async function doFavoriteTask(ctx, task) {
+    ctx.$env.log(`开始任务: ${task.task_name}`);
 
     let articleId = '';
     let channelId = '';
 
     if (task.task_redirect_url.link_type === 'lanmu') {
       // 从栏目获取文章
-      const articles = await this.getArticleListFromLanmu(task.task_redirect_url.link_val, 20);
+      const articles = await getArticleListFromLanmu(ctx, task.task_redirect_url.link_val, 20);
 
       if (articles.length < 1) {
         return {
@@ -834,14 +702,14 @@ class SmzdmTaskBot extends SmzdmBot {
         };
       }
 
-      const article = this.getOneByRandom(articles);
+      const article = getOneByRandom(ctx, articles);
 
       articleId = article.article_id;
       channelId = article.article_channel_id;
     }
     else if (task.task_redirect_url.link_type === 'tag') {
       // 从 Tag 获取文章
-      const articles = await this.getArticleListFromTag(task.task_redirect_url.link_val, task.task_redirect_url.link_title, 20);
+      const articles = await getArticleListFromTag(ctx, task.task_redirect_url.link_val, task.task_redirect_url.link_title, 20);
 
       if (articles.length < 1) {
         return {
@@ -849,14 +717,14 @@ class SmzdmTaskBot extends SmzdmBot {
         };
       }
 
-      const article = this.getOneByRandom(articles);
+      const article = getOneByRandom(ctx, articles);
 
       articleId = article.article_id;
       channelId = article.article_channel_id;
     }
     else if (task.task_redirect_url.link_val == '0' || !task.task_redirect_url.link_val) {
       // 随机选一篇文章
-      const articles = await this.getArticleList(20);
+      const articles = await getArticleList(ctx, 20);
 
       if (articles.length < 1) {
         return {
@@ -864,7 +732,7 @@ class SmzdmTaskBot extends SmzdmBot {
         };
       }
 
-      const article = this.getOneByRandom(articles);
+      const article = getOneByRandom(ctx, articles);
 
       articleId = article.article_id;
       channelId = article.article_channel_id;
@@ -873,7 +741,7 @@ class SmzdmTaskBot extends SmzdmBot {
       articleId = task.task_redirect_url.link_val;
 
       // 获取文章信息
-      const articleDetail = await this.getArticleDetail(articleId);
+      const articleDetail = await getArticleDetail(ctx, articleId);
 
       if (articleDetail === false) {
         return {
@@ -884,42 +752,31 @@ class SmzdmTaskBot extends SmzdmBot {
       channelId = articleDetail.channel_id;
     }
 
-    await wait(3, 10);
+    await runActionSequence(ctx, [
+      () => favorite(ctx, {
+        method: 'destroy',
+        id: articleId,
+        channelId
+      }),
+      () => favorite(ctx, {
+        method: 'create',
+        id: articleId,
+        channelId
+      }),
+      () => favorite(ctx, {
+        method: 'destroy',
+        id: articleId,
+        channelId
+      })
+    ]);
+    return await claimTaskReward(ctx, task);
+}
 
-    await this.favorite({
-      method: 'destroy',
-      id: articleId,
-      channelId
-    });
-
-    await wait(3, 10);
-
-    await this.favorite({
-      method: 'create',
-      id: articleId,
-      channelId
-    });
-
-    await wait(3, 10);
-
-    await this.favorite({
-      method: 'destroy',
-      id: articleId,
-      channelId
-    });
-
-    this.$env.log('领取奖励');
-    await wait(5, 15);
-
-    return await this.receiveReward(task.task_id);
-  }
-
-  // 执行关注用户任务
-  async doFollowUserTask(task) {
-    this.$env.log(`开始任务: ${task.task_name}`);
+async function doFollowUserTask(ctx, task) {
+    ctx.$env.log(`开始任务: ${task.task_name}`);
 
     // 随机选一个用户
-    const user = await this.getUserByRandom();
+    const user = await getUserByRandom(ctx);
 
     if (!user) {
       return {
@@ -931,7 +788,7 @@ class SmzdmTaskBot extends SmzdmBot {
 
     for (let i = 0; i < Number(task.task_even_num - task.task_finished_num); i++) {
       if (user.is_follow == '1') {
-        await this.follow({
+        await follow(ctx, {
           method: 'destroy',
           type: 'user',
           keyword: user.keyword
@@ -940,7 +797,7 @@ class SmzdmTaskBot extends SmzdmBot {
         await wait(3, 10);
       }
 
-      await this.follow({
+      await follow(ctx, {
         method: 'create',
         type: 'user',
         keyword: user.keyword
@@ -949,7 +806,7 @@ class SmzdmTaskBot extends SmzdmBot {
       await wait(3, 10);
 
       if (user.is_follow == '0') {
-        await this.follow({
+        await follow(ctx, {
           method: 'destroy',
           type: 'user',
           keyword: user.keyword
@@ -958,21 +815,16 @@ class SmzdmTaskBot extends SmzdmBot {
 
       await wait(3, 10);
     }
+    return await claimTaskReward(ctx, task);
+}
 
-    this.$env.log('领取奖励');
-    await wait(5, 15);
-
-    return await this.receiveReward(task.task_id);
-  }
-
-  // 执行关注栏目任务（先取关，再关注，最后取关）
-  async doFollowTagTask(task) {
-    this.$env.log(`开始任务: ${task.task_name}`);
+async function doFollowTagTask(ctx, task) {
+    ctx.$env.log(`开始任务: ${task.task_name}`);
 
     let lanmuId = '';
 
     if (task.task_redirect_url.link_val == '0') {
-      const tag = await this.getTagByRandom();
+      const tag = await getTagByRandom(ctx);
 
       if (tag === false) {
         return {
@@ -989,10 +841,10 @@ class SmzdmTaskBot extends SmzdmBot {
     }
 
     // 获取栏目信息
-    const tagDetail = await this.getTagDetail(lanmuId);
+    const tagDetail = await getTagDetail(ctx, lanmuId);
 
     if (!tagDetail.lanmu_id) {
-      this.$env.log('获取栏目信息失败！');
+      ctx.$env.log('获取栏目信息失败！');
 
       return {
         isSuccess: false
@@ -1001,7 +853,7 @@ class SmzdmTaskBot extends SmzdmBot {
 
     await wait(3, 10);
 
-    await this.follow({
+    await follow(ctx, {
       method: 'destroy',
       type: 'tag',
       keywordId: tagDetail.lanmu_id,
@@ -1010,7 +862,7 @@ class SmzdmTaskBot extends SmzdmBot {
 
     await wait(3, 10);
 
-    await this.follow({
+    await follow(ctx, {
       method: 'create',
       type: 'tag',
       keywordId: tagDetail.lanmu_id,
@@ -1019,25 +871,20 @@ class SmzdmTaskBot extends SmzdmBot {
 
     await wait(3, 10);
 
-    await this.follow({
+    await follow(ctx, {
       method: 'destroy',
       type: 'tag',
       keywordId: tagDetail.lanmu_id,
       keyword: tagDetail.lanmu_info.lanmu_name
     });
+    return await claimTaskReward(ctx, task);
+}
 
-    this.$env.log('领取奖励');
-    await wait(5, 15);
-
-    return await this.receiveReward(task.task_id);
-  }
-
-  // 执行关注品牌任务（先取关，再关注，最后取关）
-  async doFollowBrandTask(task) {
-    this.$env.log(`开始任务: ${task.task_name}`);
+async function doFollowBrandTask(ctx, task) {
+    ctx.$env.log(`开始任务: ${task.task_name}`);
 
     // 获取品牌信息
-    const brandDetail = await this.getBrandDetail(task.task_redirect_url.link_val);
+    const brandDetail = await getBrandDetail(ctx, task.task_redirect_url.link_val);
 
     if (!brandDetail.id) {
       return {
@@ -1047,7 +894,7 @@ class SmzdmTaskBot extends SmzdmBot {
 
     await wait(3, 10);
 
-    await this.followBrand({
+    await followBrand(ctx, {
       method: 'dingyue_lanmu_del',
       keywordId: brandDetail.id,
       keyword: brandDetail.title
@@ -1055,7 +902,7 @@ class SmzdmTaskBot extends SmzdmBot {
 
     await wait(3, 10);
 
-    await this.followBrand({
+    await followBrand(ctx, {
       method: 'dingyue_lanmu_add',
       keywordId: brandDetail.id,
       keyword: brandDetail.title
@@ -1063,27 +910,22 @@ class SmzdmTaskBot extends SmzdmBot {
 
     await wait(3, 10);
 
-    await this.followBrand({
+    await followBrand(ctx, {
       method: 'dingyue_lanmu_del',
       keywordId: brandDetail.id,
       keyword: brandDetail.title
     });
+    return await claimTaskReward(ctx, task);
+}
 
-    this.$env.log('领取奖励');
-    await wait(5, 15);
+async function doCrowdTask(ctx, task) {
+    ctx.$env.log(`开始任务: ${task.task_name}`);
 
-    return await this.receiveReward(task.task_id);
-  }
-
-  // 执行抽奖任务
-  async doCrowdTask(task) {
-    this.$env.log(`开始任务: ${task.task_name}`);
-
-    let { isSuccess, data } = await this.getCrowd('免费', 0);
+    let { isSuccess, data } = await getCrowd(ctx, '免费', 0);
 
     if (!isSuccess) {
       if (RUNTIME_ENV.SMZDM_CROWD_SILVER_5 == 'yes') {
-        ({ isSuccess, data } = await this.getCrowd('5碎银子', 5));
+        ({ isSuccess, data } = await getCrowd(ctx, '5碎银子', 5));
 
         if (!isSuccess) {
           return {
@@ -1093,7 +935,7 @@ class SmzdmTaskBot extends SmzdmBot {
         }
       }
       else {
-        this.$env.log('🟡请设置 SMZDM_CROWD_SILVER_5 环境变量值为 yes 后才能进行5碎银子抽奖！');
+        ctx.$env.log('🟡请设置 SMZDM_CROWD_SILVER_5 环境变量值为 yes 后才能进行5碎银子抽奖！');
 
         return {
           isSuccess,
@@ -1104,113 +946,62 @@ class SmzdmTaskBot extends SmzdmBot {
 
     await wait(5, 15);
 
-    const result = await this.joinCrowd(data);
+    const result = await joinCrowd(ctx, data);
 
     if (!result.isSuccess) {
       return {
         isSuccess: result.isSuccess
       };
     }
+    return await claimTaskReward(ctx, task);
+}
 
-    this.$env.log('领取奖励');
-    await wait(5, 15);
+async function doShareTask(ctx, task) {
+    ctx.$env.log(`开始任务: ${task.task_name}`);
 
-    return await this.receiveReward(task.task_id);
-  }
-
-  // 执行文章分享任务
-  async doShareTask(task) {
-    this.$env.log(`开始任务: ${task.task_name}`);
-
-    let articles = [];
-
-    if (task.article_id == '0') {
-      articles = await this.getArticleList(task.task_even_num - task.task_finished_num);
-
-      await wait(3, 10);
-    }
-    else {
-      articles = [{
-        article_id: task.article_id,
-        article_channel_id: task.channel_id
-      }];
-    }
+    const articles = await getTaskArticles(ctx, task, task.task_even_num - task.task_finished_num);
 
     for (let i = 0; i < articles.length; i++) {
-      this.$env.log(`开始分享第 ${i + 1} 篇文章...`);
+      ctx.$env.log(`开始分享第 ${i + 1} 篇文章...`);
 
       const article = articles[i];
 
       if (task.task_redirect_url.link_type != 'other') {
         // 模拟打开文章
-        if (/detail_haojia/i.test(task.task_redirect_url.scheme_url)) {
-          await this.getHaojiaDetail(article.article_id);
-        }
-        else {
-          await this.getArticleDetail(article.article_id);
-        }
-
+        await openTaskArticle(ctx, task, article);
         await wait(8, 20);
       }
 
-      await this.shareArticleDone(article.article_id, article.article_channel_id);
-      await this.shareDailyReward(article.article_channel_id);
-      await this.shareCallback(article.article_id, article.article_channel_id);
+      await shareArticleDone(ctx, article.article_id, article.article_channel_id);
+      await shareDailyReward(ctx, article.article_channel_id);
+      await shareCallback(ctx, article.article_id, article.article_channel_id);
 
       await wait(5, 15);
     }
+    return await claimTaskReward(ctx, task, 3, 10);
+}
 
-    this.$env.log('领取奖励');
-    await wait(3, 10);
+async function doViewTask(ctx, task) {
+    ctx.$env.log(`开始任务: ${task.task_name}`);
 
-    return await this.receiveReward(task.task_id);
-  }
-
-  // 执行浏览任务
-  async doViewTask(task) {
-    this.$env.log(`开始任务: ${task.task_name}`);
-
-    let articles = [];
-    let isRead = true;
-
-    if (task.article_id == '0') {
-      isRead = true;
-      articles = await this.getArticleList(task.task_even_num - task.task_finished_num);
-
-      await wait(3, 10);
-    }
-    else {
-      for (let i = 0; i < task.task_even_num - task.task_finished_num; i++) {
-        articles.push({
-          article_id: task.article_id,
-          article_channel_id: task.channel_id
-        });
-      }
-
-      isRead = task.task_redirect_url.link_val != '';
-    }
+    const isRead = task.article_id == '0' || task.task_redirect_url.link_val != '';
+    const articles = await getTaskArticles(ctx, task, task.task_even_num - task.task_finished_num, true);
 
     for (let i = 0; i < articles.length; i++) {
-      this.$env.log(`开始阅读第 ${i + 1} 篇文章...`);
+      ctx.$env.log(`开始阅读第 ${i + 1} 篇文章...`);
 
       const article = articles[i];
 
       if (isRead) {
         // 模拟打开文章
-        if (/detail_haojia/i.test(task.task_redirect_url.scheme_url)) {
-          await this.getHaojiaDetail(article.article_id);
-        }
-        else {
-          await this.getArticleDetail(article.article_id);
-        }
+        await openTaskArticle(ctx, task, article);
       }
 
-      this.$env.log('模拟阅读文章');
+      ctx.$env.log('模拟阅读文章');
       await wait(20, 50);
 
-      const { isSuccess, response } = await requestApi('https://user-api.smzdm.com/task/event_view_article_sync', {
-        method: 'post',
-        headers: this.getHeaders(),
+      const { isSuccess, response } = await postApi('https://user-api.smzdm.com/task/event_view_article_sync', {
+        headers: getHeaders(ctx),
         data: {
           article_id: article.article_id,
           channel_id: article.article_channel_id,
@@ -1219,27 +1010,22 @@ class SmzdmTaskBot extends SmzdmBot {
       });
 
       if (isSuccess) {
-        this.$env.log('完成阅读成功。');
+        ctx.$env.log('完成阅读成功。');
       }
       else {
-        this.$env.log(`完成阅读失败！${response}`);
+        ctx.$env.log(`完成阅读失败！${response}`);
       }
 
       await wait(5, 15);
     }
+    return await claimTaskReward(ctx, task, 3, 10);
+}
 
-    this.$env.log('领取奖励');
-    await wait(3, 10);
-
-    return await this.receiveReward(task.task_id);
-  }
-
-  // 关注/取关
-  async follow({keywordId, keyword, type, method}) {
+async function follow(ctx, {keywordId, keyword, type, method}) {
     let touchstone = '';
 
     if (type === 'user') {
-      touchstone = this.getTouchstoneEvent({
+      touchstone = getTouchstoneEvent(ctx, {
         event_value: {
           cid: 'null',
           is_detail: false,
@@ -1251,7 +1037,7 @@ class SmzdmTaskBot extends SmzdmBot {
       });
     }
     else if (type === 'tag') {
-      touchstone = this.getTouchstoneEvent({
+      touchstone = getTouchstoneEvent(ctx, {
         event_value: {
           cid: 'null',
           is_detail: false
@@ -1267,9 +1053,8 @@ class SmzdmTaskBot extends SmzdmBot {
       });
     }
 
-    const { isSuccess, response } = await requestApi(`https://dingyue-api.smzdm.com/dingyue/${method}`, {
-      method: 'post',
-      headers: this.getHeaders(),
+    const { isSuccess, response } = await postApi(`https://dingyue-api.smzdm.com/dingyue/${method}`, {
+      headers: getHeaders(ctx),
       data: {
         touchstone_event: touchstone,
         refer: '',
@@ -1280,23 +1065,21 @@ class SmzdmTaskBot extends SmzdmBot {
     });
 
     if (isSuccess) {
-      this.$env.log(`${method} 关注成功: ${keyword}`);
+      ctx.$env.log(`${method} 关注成功: ${keyword}`);
     }
     else {
-      this.$env.log(`${method} 关注失败！${response}`);
+      ctx.$env.log(`${method} 关注失败！${response}`);
     }
 
     return {
       isSuccess,
       response
     };
-  }
+}
 
-  // 随机获取用户
-  async getUserByRandom() {
-    const { isSuccess, data, response } = await requestApi('https://dingyue-api.smzdm.com/tuijian/search_result', {
-      method: 'post',
-      headers: this.getHeaders(),
+async function getUserByRandom(ctx) {
+    const { isSuccess, data, response } = await postApi('https://dingyue-api.smzdm.com/tuijian/search_result', {
+      headers: getHeaders(ctx),
       data: {
         nav_id: 0,
         page: 1,
@@ -1309,19 +1092,17 @@ class SmzdmTaskBot extends SmzdmBot {
       return data.data.rows[Math.floor(Math.random() * data.data.rows.length)];
     }
     else {
-      this.$env.log(`获取用户列表失败！${response}`);
+      ctx.$env.log(`获取用户列表失败！${response}`);
 
       return false;
     }
-  }
+}
 
-  // 参加抽奖
-  async joinCrowd(id) {
-    const { isSuccess, data, response } = await requestApi('https://zhiyou.m.smzdm.com/user/crowd/ajax_participate', {
-      method: 'post',
+async function joinCrowd(ctx, id) {
+    const { isSuccess, data, response } = await postApi('https://zhiyou.m.smzdm.com/user/crowd/ajax_participate', {
       sign: false,
       headers: {
-        ...this.getHeadersForWeb(),
+        ...getHeadersForWeb(ctx),
         Origin: 'https://zhiyou.m.smzdm.com',
         Referer: `https://zhiyou.m.smzdm.com/user/crowd/p/${id}/`
       },
@@ -1336,24 +1117,23 @@ class SmzdmTaskBot extends SmzdmBot {
     });
 
     if (isSuccess) {
-      this.$env.log(removeTags(data.data.msg));
+      ctx.$env.log(removeTags(data.data.msg));
     }
     else {
-      this.$env.log(`参加免费抽奖失败: ${response}`);
+      ctx.$env.log(`参加免费抽奖失败: ${response}`);
     }
 
     return {
       isSuccess,
       response
     };
-  }
+}
 
-  // 获取抽奖信息
-  async getCrowd(name, price) {
+async function getCrowd(ctx, name, price) {
     const { isSuccess, data, response } = await requestApi('https://zhiyou.smzdm.com/user/crowd/', {
       sign: false,
       parseJSON: false,
-      headers: this.getHeadersForWeb()
+      headers: getHeadersForWeb(ctx)
     });
 
     const re = new RegExp(`<button\\s+([^>]+?)>\\s+?<div\\s+[^>]+?>\\s*${name}(?:抽奖)?\\s*<\\/div>\\s+<span\\s+class="reduceNumber">-${price}<\\/span>[\\s\\S]+?<\\/button>`, 'ig');
@@ -1367,7 +1147,7 @@ class SmzdmTaskBot extends SmzdmBot {
       }
 
       if (crowds.length < 1) {
-        this.$env.log(`未找到${name}抽奖`);
+        ctx.$env.log(`未找到${name}抽奖`);
 
         return {
           isSuccess: false
@@ -1384,18 +1164,18 @@ class SmzdmTaskBot extends SmzdmBot {
         });
 
         if (!crowd) {
-          this.$env.log('未找到符合关键词的抽奖，执行随机选取');
-          crowd = this.getOneByRandom(crowds);
+          ctx.$env.log('未找到符合关键词的抽奖，执行随机选取');
+          crowd = getOneByRandom(ctx, crowds);
         }
       }
       else {
-        crowd = this.getOneByRandom(crowds);
+        crowd = getOneByRandom(ctx, crowds);
       }
 
       const matchCrowd = crowd.match(/data-crowd_id="(\d+)"/i);
 
       if (matchCrowd) {
-        this.$env.log(`${name}抽奖ID: ${matchCrowd[1]}`);
+        ctx.$env.log(`${name}抽奖ID: ${matchCrowd[1]}`);
 
         return {
           isSuccess: true,
@@ -1403,7 +1183,7 @@ class SmzdmTaskBot extends SmzdmBot {
         };
       }
       else {
-        this.$env.log(`未找到${name}抽奖ID`);
+        ctx.$env.log(`未找到${name}抽奖ID`);
 
         return {
           isSuccess: false
@@ -1411,21 +1191,19 @@ class SmzdmTaskBot extends SmzdmBot {
       }
     }
     else {
-      this.$env.log(`获取${name}抽奖失败: ${response}`);
+      ctx.$env.log(`获取${name}抽奖失败: ${response}`);
 
       return {
         isSuccess: false
       };
     }
-  }
+}
 
-  // 分享完成
-  async shareArticleDone(articleId, channelId) {
-    const { isSuccess, response } = await requestApi('https://user-api.smzdm.com/share/complete_share_rule', {
-      method: 'post',
-      headers: this.getHeaders(),
+async function shareArticleDone(ctx, articleId, channelId) {
+    const { isSuccess, response } = await postApi('https://user-api.smzdm.com/share/complete_share_rule', {
+      headers: getHeaders(ctx),
       data: {
-        token: this.token,
+        token: ctx.token,
         article_id: articleId,
         channel_id: channelId,
         tag_name: 'gerenzhongxin'
@@ -1433,7 +1211,7 @@ class SmzdmTaskBot extends SmzdmBot {
     });
 
     if (isSuccess) {
-      this.$env.log('完成分享成功。');
+      ctx.$env.log('完成分享成功。');
 
       return {
         isSuccess,
@@ -1441,25 +1219,23 @@ class SmzdmTaskBot extends SmzdmBot {
       };
     }
     else {
-      this.$env.log(`完成分享失败！${response}`);
+      ctx.$env.log(`完成分享失败！${response}`);
 
       return {
         isSuccess: false,
         msg: '完成分享失败！'
       };
     }
-  }
+}
 
-  // 分享完成后回调接口
-  async shareCallback(articleId, channelId) {
-    const { isSuccess, response } = await requestApi('https://user-api.smzdm.com/share/callback', {
-      method: 'post',
-      headers: this.getHeaders(),
+async function shareCallback(ctx, articleId, channelId) {
+    const { isSuccess, response } = await postApi('https://user-api.smzdm.com/share/callback', {
+      headers: getHeaders(ctx),
       data: {
-        token: this.token,
+        token: ctx.token,
         article_id: articleId,
         channel_id: channelId,
-        touchstone_event: this.getTouchstoneEvent({
+        touchstone_event: getTouchstoneEvent(ctx, {
           event_value: {
             aid: articleId,
             cid: channelId,
@@ -1474,7 +1250,7 @@ class SmzdmTaskBot extends SmzdmBot {
     });
 
     if (isSuccess) {
-      this.$env.log('分享回调完成。');
+      ctx.$env.log('分享回调完成。');
 
       return {
         isSuccess,
@@ -1482,28 +1258,26 @@ class SmzdmTaskBot extends SmzdmBot {
       };
     }
     else {
-      this.$env.log(`分享回调失败！${response}`);
+      ctx.$env.log(`分享回调失败！${response}`);
 
       return {
         isSuccess,
         msg: '分享回调失败！'
       };
     }
-  }
+}
 
-  // 分享的每日奖励（貌似没啥用）
-  async shareDailyReward(channelId) {
-    const { isSuccess, data, response } = await requestApi('https://user-api.smzdm.com/share/daily_reward', {
-      method: 'post',
-      headers: this.getHeaders(),
+async function shareDailyReward(ctx, channelId) {
+    const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/share/daily_reward', {
+      headers: getHeaders(ctx),
       data: {
-        token: this.token,
+        token: ctx.token,
         channel_id: channelId
       }
     });
 
     if (isSuccess) {
-      this.$env.log(data.data.reward_desc);
+      ctx.$env.log(data.data.reward_desc);
 
       return {
         isSuccess,
@@ -1512,7 +1286,7 @@ class SmzdmTaskBot extends SmzdmBot {
     }
     else {
       if (data) {
-        this.$env.log(data.error_msg);
+        ctx.$env.log(data.error_msg);
 
         return {
           isSuccess,
@@ -1520,7 +1294,7 @@ class SmzdmTaskBot extends SmzdmBot {
         };
       }
       else {
-        this.$env.log(`分享每日奖励请求失败！${response}`);
+        ctx.$env.log(`分享每日奖励请求失败！${response}`);
 
         return {
           isSuccess,
@@ -1528,12 +1302,11 @@ class SmzdmTaskBot extends SmzdmBot {
         };
       }
     }
-  }
+}
 
-  // 获取文章列表
-  async getArticleList(num = 1) {
+async function getArticleList(ctx, num = 1) {
     const { isSuccess, data, response } = await requestApi('https://article-api.smzdm.com/ranking_list/articles', {
-      headers: this.getHeaders(),
+      headers: getHeaders(ctx),
       data: {
         offset: 0,
         channel_id: 76,
@@ -1551,31 +1324,29 @@ class SmzdmTaskBot extends SmzdmBot {
       return data.data.rows.slice(0, num);
     }
     else {
-      this.$env.log(`获取文章列表失败: ${response}`);
+      ctx.$env.log(`获取文章列表失败: ${response}`);
       return [];
     }
-  }
+}
 
-  async getRobotToken() {
-    const { isSuccess, data, response } = await requestApi('https://user-api.smzdm.com/robot/token', {
-      method: 'post',
-      headers: this.getHeaders()
+async function getRobotToken(ctx) {
+    const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/robot/token', {
+      headers: getHeaders(ctx)
     });
 
     if (isSuccess) {
       return data.data.token;
     }
     else {
-      this.$env.log(`Robot Token 获取失败！${response}`);
+      ctx.$env.log(`Robot Token 获取失败！${response}`);
 
       return false;
     }
-  }
+}
 
-  // 获取栏目信息
-  async getTagDetail(id) {
+async function getTagDetail(ctx, id) {
     const { isSuccess, data, response } = await requestApi('https://common-api.smzdm.com/lanmu/config_data', {
-      headers: this.getHeaders(),
+      headers: getHeaders(ctx),
       data: {
         middle_page: '',
         tab_selects: '',
@@ -1587,16 +1358,15 @@ class SmzdmTaskBot extends SmzdmBot {
       return data.data;
     }
     else {
-      this.$env.log(`获取栏目信息失败！${response}`);
+      ctx.$env.log(`获取栏目信息失败！${response}`);
 
       return {};
     }
-  }
+}
 
-  // 获取栏目列表
-  async getTagByRandom() {
+async function getTagByRandom(ctx) {
     const { isSuccess, data, response } = await requestApi('https://dingyue-api.smzdm.com/tuijian/search_result', {
-      headers: this.getHeaders(),
+      headers: getHeaders(ctx),
       data: {
         time_code: '',
         nav_id: '',
@@ -1609,16 +1379,15 @@ class SmzdmTaskBot extends SmzdmBot {
       return data.data.rows[Math.floor(Math.random() * data.data.rows.length)];
     }
     else {
-      this.$env.log(`获取栏目列表失败！${response}`);
+      ctx.$env.log(`获取栏目列表失败！${response}`);
 
       return false;
     }
-  }
+}
 
-  // 获取文章详情
-  async getArticleDetail(id) {
+async function getArticleDetail(ctx, id) {
     const { isSuccess, data, response } = await requestApi(`https://article-api.smzdm.com/article_detail/${id}`, {
-      headers: this.getHeaders(),
+      headers: getHeaders(ctx),
       data: {
         comment_flow: '',
         hashcode: '',
@@ -1634,16 +1403,15 @@ class SmzdmTaskBot extends SmzdmBot {
       return data.data;
     }
     else {
-      this.$env.log(`获取文章详情失败！${response}`);
+      ctx.$env.log(`获取文章详情失败！${response}`);
 
       return false;
     }
-  }
+}
 
-  // 获取好价详情
-  async getHaojiaDetail(id) {
+async function getHaojiaDetail(ctx, id) {
     const { isSuccess, data, response } = await requestApi(`https://haojia-api.smzdm.com/detail/${id}`, {
-      headers: this.getHeaders(),
+      headers: getHeaders(ctx),
       data: {
         imgmode: 0,
         hashcode: '',
@@ -1655,19 +1423,17 @@ class SmzdmTaskBot extends SmzdmBot {
       return data.data;
     }
     else {
-      this.$env.log(`获取好价详情失败！${response}`);
+      ctx.$env.log(`获取好价详情失败！${response}`);
 
       return false;
     }
-  }
+}
 
-  // 收藏
-  async favorite({id, channelId, method}) {
-    const { isSuccess, response } = await requestApi(`https://user-api.smzdm.com/favorites/${method}`, {
-      method: 'post',
-      headers: this.getHeaders(),
+async function favorite(ctx, {id, channelId, method}) {
+    const { isSuccess, response } = await postApi(`https://user-api.smzdm.com/favorites/${method}`, {
+      headers: getHeaders(ctx),
       data: {
-        touchstone_event: this.getTouchstoneEvent({
+        touchstone_event: getTouchstoneEvent(ctx, {
           event_value: {
             aid: id,
             cid: channelId,
@@ -1677,26 +1443,26 @@ class SmzdmTaskBot extends SmzdmBot {
           sourcePage: `Android/长图文/P/${id}/`,
           upperLevel_url: '个人中心/赚奖励/'
         }),
-        token: this.token,
+        token: ctx.token,
         id,
         channel_id: channelId
       }
     });
 
     if (isSuccess) {
-      this.$env.log(`${method} 收藏成功: ${id}`);
+      ctx.$env.log(`${method} 收藏成功: ${id}`);
     }
     else {
-      this.$env.log(`${method} 收藏失败！${response}`);
+      ctx.$env.log(`${method} 收藏失败！${response}`);
     }
 
     return {
       isSuccess,
       response
     };
-  }
+}
 
-  getTouchstoneEvent(obj) {
+function getTouchstoneEvent(ctx, obj) {
     const defaultObj = {
       search_tv: 'f',
       sourceRoot: '个人中心',
@@ -1705,11 +1471,10 @@ class SmzdmTaskBot extends SmzdmBot {
     };
 
     return JSON.stringify({...defaultObj, ...obj});
-  }
+}
 
-  // 关注品牌
-  async followBrand({keywordId, keyword, method}) {
-    const touchstone = this.getTouchstoneEvent({
+async function followBrand(ctx, {keywordId, keyword, method}) {
+    const touchstone = getTouchstoneEvent(ctx, {
       event_value: {
         cid: '44',
         is_detail: true,
@@ -1720,9 +1485,8 @@ class SmzdmTaskBot extends SmzdmBot {
       upperLevel_url: '个人中心/赚奖励/'
     });
 
-    const { isSuccess, response } = await requestApi(`https://dingyue-api.smzdm.com/dy/util/api/user_action`, {
-      method: 'post',
-      headers: this.getHeaders(),
+    const { isSuccess, response } = await postApi(`https://dingyue-api.smzdm.com/dy/util/api/user_action`, {
+      headers: getHeaders(ctx),
       data: {
         action: method,
         params: JSON.stringify({
@@ -1736,22 +1500,21 @@ class SmzdmTaskBot extends SmzdmBot {
     });
 
     if (isSuccess) {
-      this.$env.log(`${method} 关注成功: ${keyword}`);
+      ctx.$env.log(`${method} 关注成功: ${keyword}`);
     }
     else {
-      this.$env.log(`${method} 关注失败！${response}`);
+      ctx.$env.log(`${method} 关注失败！${response}`);
     }
 
     return {
       isSuccess,
       response
     };
-  }
+}
 
-  // 获取品牌信息
-  async getBrandDetail(id) {
+async function getBrandDetail(ctx, id) {
     const { isSuccess, data, response } = await requestApi('https://brand-api.smzdm.com/brand/brand_basic', {
-      headers: this.getHeaders(),
+      headers: getHeaders(ctx),
       data: {
         brand_id: id
       }
@@ -1761,22 +1524,21 @@ class SmzdmTaskBot extends SmzdmBot {
       return data.data;
     }
     else {
-      this.$env.log(`获取品牌信息失败！${response}`);
+      ctx.$env.log(`获取品牌信息失败！${response}`);
 
       return {};
     }
-  }
+}
 
-  // 根据栏目信息获取文章列表
-  async getArticleListFromLanmu(id, num = 1) {
-    const lanmuDetail = await this.getTagDetail(id);
+async function getArticleListFromLanmu(ctx, id, num = 1) {
+    const lanmuDetail = await getTagDetail(ctx, id);
 
     if (!lanmuDetail.lanmu_id) {
       return [];
     }
 
     const { isSuccess, data, response } = await requestApi('https://common-api.smzdm.com/lanmu/list_data', {
-      headers: this.getHeaders(),
+      headers: getHeaders(ctx),
       data: {
         price_lt: '',
         order: '',
@@ -1798,18 +1560,16 @@ class SmzdmTaskBot extends SmzdmBot {
       return data.data.rows.slice(0, num);
     }
     else {
-      this.$env.log(`获取文章列表失败: ${response}`);
+      ctx.$env.log(`获取文章列表失败: ${response}`);
       return [];
     }
-  }
+}
 
-  // 点赞
-  async rating({id, channelId, method, type}) {
-    const { isSuccess, response } = await requestApi(`https://user-api.smzdm.com/rating/${method}`, {
-      method: 'post',
-      headers: this.getHeaders(),
+async function rating(ctx, {id, channelId, method, type}) {
+    const { isSuccess, response } = await postApi(`https://user-api.smzdm.com/rating/${method}`, {
+      headers: getHeaders(ctx),
       data: {
-        touchstone_event: this.getTouchstoneEvent({
+        touchstone_event: getTouchstoneEvent(ctx, {
           event_value: {
             aid: id,
             cid: channelId,
@@ -1819,7 +1579,7 @@ class SmzdmTaskBot extends SmzdmBot {
           sourcePage: `Android//P/${id}/`,
           upperLevel_url: '栏目页///'
         }),
-        token: this.token,
+        token: ctx.token,
         id,
         channel_id: channelId,
         wtype: type
@@ -1827,25 +1587,23 @@ class SmzdmTaskBot extends SmzdmBot {
     });
 
     if (isSuccess) {
-      this.$env.log(`${method} 点赞成功: ${id}`);
+      ctx.$env.log(`${method} 点赞成功: ${id}`);
     }
     else {
-      this.$env.log(`${method} 点赞失败！${response}`);
+      ctx.$env.log(`${method} 点赞失败！${response}`);
     }
 
     return {
       isSuccess,
       response
     };
-  }
+}
 
-  // 发表评论
-  async submitComment({ articleId, channelId, content }) {
-    const { isSuccess, data, response } = await requestApi('https://comment-api.smzdm.com/comments/submit', {
-      method: 'post',
-      headers: this.getHeaders(),
+async function submitComment(ctx, { articleId, channelId, content }) {
+    const { isSuccess, data, response } = await postApi('https://comment-api.smzdm.com/comments/submit', {
+      headers: getHeaders(ctx),
       data: {
-        touchstone_event: this.getTouchstoneEvent({
+        touchstone_event: getTouchstoneEvent(ctx, {
           event_value: {
             aid: articleId,
             cid: channelId,
@@ -1861,7 +1619,7 @@ class SmzdmTaskBot extends SmzdmBot {
         smiles: 0,
         atta: 0,
         parentid: 0,
-        token: this.token,
+        token: ctx.token,
         article_id: articleId,
         channel_id: channelId,
         content
@@ -1869,10 +1627,10 @@ class SmzdmTaskBot extends SmzdmBot {
     });
 
     if (isSuccess) {
-      this.$env.log(`评论发表成功: ${data.data.comment_ID}`);
+      ctx.$env.log(`评论发表成功: ${data.data.comment_ID}`);
     }
     else {
-      this.$env.log(`评论发表失败！${response}`);
+      ctx.$env.log(`评论发表失败！${response}`);
     }
 
     return {
@@ -1880,36 +1638,32 @@ class SmzdmTaskBot extends SmzdmBot {
       data,
       response
     };
-  }
+}
 
-  // 删除评论
-  async removeComment(id) {
-    const { isSuccess, response } = await requestApi('https://comment-api.smzdm.com/comments/delete_comment', {
-      method: 'post',
-      headers: this.getHeaders(),
+async function removeComment(ctx, id) {
+    const { isSuccess, response } = await postApi('https://comment-api.smzdm.com/comments/delete_comment', {
+      headers: getHeaders(ctx),
       data: {
         comment_id: id
       }
     });
 
     if (isSuccess) {
-      this.$env.log(`评论删除成功: ${id}`);
+      ctx.$env.log(`评论删除成功: ${id}`);
     }
     else {
-      this.$env.log(`评论删除失败！${response}`);
+      ctx.$env.log(`评论删除失败！${response}`);
     }
 
     return {
       isSuccess,
       response
     };
-  }
+}
 
-  // 获取 Dingyue 状态
-  async getDingyueStatus(name) {
-    const { isSuccess, data, response } = await requestApi('https://dingyue-api.smzdm.com/dingyue/follow_status', {
-      method: 'post',
-      headers: this.getHeaders(),
+async function getDingyueStatus(ctx, name) {
+    const { isSuccess, data, response } = await postApi('https://dingyue-api.smzdm.com/dingyue/follow_status', {
+      headers: getHeaders(ctx),
       data: {
         rules: JSON.stringify([{
           type: 'tag',
@@ -1922,17 +1676,16 @@ class SmzdmTaskBot extends SmzdmBot {
       return data;
     }
     else {
-      this.$env.log(`获取订阅状态失败: ${response}`);
+      ctx.$env.log(`获取订阅状态失败: ${response}`);
       return {};
     }
-  }
+}
 
-  // 根据 Tag ID 获取文章列表
-  async getArticleListFromTag(id, name, num = 1) {
-    const status = this.getDingyueStatus(name);
+async function getArticleListFromTag(ctx, id, name, num = 1) {
+    const status = await getDingyueStatus(ctx, name);
 
     const { isSuccess, data, response } = await requestApi('https://tag-api.smzdm.com/theme/detail_feed', {
-      headers: this.getHeaders(),
+      headers: getHeaders(ctx),
       data: {
         article_source: 1,
         past_num: 0,
@@ -1952,22 +1705,21 @@ class SmzdmTaskBot extends SmzdmBot {
       return data.data.rows.slice(0, num);
     }
     else {
-      this.$env.log(`获取文章列表失败: ${response}`);
+      ctx.$env.log(`获取文章列表失败: ${response}`);
       return [];
     }
-  }
+}
 
-  // 通过 url 获取文章 channel_id
-  async getArticleChannelIdForTesting(url) {
+async function getArticleChannelIdForTesting(ctx, url) {
     const { isSuccess, response } = await requestApi(url, {
       method: 'get',
-      headers: this.getHeaders(),
+      headers: getHeaders(ctx),
       parseJSON: false,
       sign: false
     });
 
     if (!isSuccess) {
-      this.$env.log(`获取文章信息失败！${response}`);
+      ctx.$env.log(`获取文章信息失败！${response}`);
 
       return false;
     }
@@ -1977,77 +1729,67 @@ class SmzdmTaskBot extends SmzdmBot {
     const matchRet = response.match(re);
 
     if (!matchRet) {
-      this.$env.log(`获取文章信息失败！${response}`);
+      ctx.$env.log(`获取文章信息失败！${response}`);
 
       return false;
     }
 
     return matchRet[1];
-  }
 }
 
 
-class SmzdmDailyBot extends SmzdmTaskBot {
-    constructor(user) {
-        super(user.cookie, $);
-        this.user = user;
-        this.userAgentApp = user.userAgentApp || '';
-        this.userAgentWeb = user.userAgentWeb || '';
-        this.sk = user.sk || '';
-    }
 
-    async run() {
+async function runAccount(ctx) {
         let notifyMsg = '';
 
-        const { msg: msg1 } = await this.checkin();
+        const { msg: msg1 } = await checkin(ctx);
         notifyMsg += msg1 || '';
 
         await wait(2, 4);
-        const { msg: msg2 } = await this.allReward();
+        const { msg: msg2 } = await allReward(ctx);
         notifyMsg += msg2 || '';
 
         await wait(2, 4);
-        const { msg: msg3 } = await this.extraReward();
+        const { msg: msg3 } = await extraReward(ctx);
         notifyMsg += msg3 || '';
 
         await wait(3, 5);
-        notifyMsg += await this.runTasks();
+        notifyMsg += await runTasks(ctx);
 
         return notifyMsg.trim();
-    }
+}
 
-    async runTasks() {
+async function runTasks(ctx) {
         $.log('获取任务列表');
-        const { tasks, detail } = await this.getTaskList();
+        const { tasks, detail } = await getTaskList(ctx);
         if (!tasks.length) {
             return '🟡 未获取到可执行任务\n';
         }
 
         await wait(3, 5);
-        let notifyMsg = await this.doTasks(tasks);
+        let notifyMsg = await doTasks(ctx, tasks);
 
         $.log('查询是否有限时累计活动阶段奖励');
         await wait(3, 5);
         if (detail?.cell_data && detail.cell_data.activity_reward_status == '1') {
             $.log('有奖励，领取奖励');
             await wait(3, 5);
-            const { isSuccess } = await this.receiveActivity(detail.cell_data);
+            const { isSuccess } = await receiveActivity(ctx, detail.cell_data);
             notifyMsg += `${isSuccess ? '🟢' : '❌'}限时累计活动阶段奖励领取${isSuccess ? '成功' : '失败！请查看日志'}\n`;
         } else {
             $.log('无阶段奖励');
         }
 
         return notifyMsg || '无可执行任务\n';
-    }
+}
 
-    async checkin() {
-        const { isSuccess, data, response } = await requestApi('https://user-api.smzdm.com/checkin', {
-            method: 'post',
-            headers: this.getHeaders(),
+async function checkin(ctx) {
+        const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/checkin', {
+            headers: getHeaders(ctx),
             data: {
                 touchstone_event: '',
-                sk: this.sk || '1',
-                token: this.token,
+                sk: ctx.sk || '1',
+                token: ctx.token,
                 captcha: ''
             }
         });
@@ -2055,7 +1797,7 @@ class SmzdmDailyBot extends SmzdmTaskBot {
         if (isSuccess) {
             let msg = `⭐ 签到成功 ${data.data.daily_num} 天\n🏅 金币: ${data.data.cgold}\n🏅 碎银: ${data.data.pre_re_silver}\n🏅 补签卡: ${data.data.cards}`;
             await wait(2, 4);
-            const vip = await this.getVipInfo();
+            const vip = await getVipInfo(ctx);
             if (vip?.vip) {
                 msg += `\n🏅 经验: ${vip.vip.exp_current}\n🏅 值会员等级: ${vip.vip.exp_level}\n🏅 值会员经验: ${vip.vip.exp_current_level}\n🏅 值会员有效期至: ${vip.vip.exp_level_expire}`;
             }
@@ -2071,12 +1813,11 @@ class SmzdmDailyBot extends SmzdmTaskBot {
             isSuccess,
             msg: '❌ 签到失败！\n'
         };
-    }
+}
 
-    async allReward() {
-        const { isSuccess, data, response } = await requestApi('https://user-api.smzdm.com/checkin/all_reward', {
-            method: 'post',
-            headers: this.getHeaders(),
+async function allReward(ctx) {
+        const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/checkin/all_reward', {
+            headers: getHeaders(ctx),
             debug: $.is_debug === 'true'
         });
 
@@ -2097,10 +1838,10 @@ class SmzdmDailyBot extends SmzdmTaskBot {
             isSuccess,
             msg: ''
         };
-    }
+}
 
-    async extraReward() {
-        const isContinue = await this.isContinueCheckin();
+async function extraReward(ctx) {
+        const isContinue = await isContinueCheckin(ctx);
         if (!isContinue) {
             const msg = '今天没有额外奖励';
             $.log(`${msg}\n`);
@@ -2111,9 +1852,8 @@ class SmzdmDailyBot extends SmzdmTaskBot {
         }
 
         await wait(3, 5);
-        const { isSuccess, data, response } = await requestApi('https://user-api.smzdm.com/checkin/extra_reward', {
-            method: 'post',
-            headers: this.getHeaders()
+        const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/checkin/extra_reward', {
+            headers: getHeaders(ctx)
         });
 
         if (isSuccess) {
@@ -2130,12 +1870,11 @@ class SmzdmDailyBot extends SmzdmTaskBot {
             isSuccess: false,
             msg: ''
         };
-    }
+}
 
-    async isContinueCheckin() {
-        const { isSuccess, data, response } = await requestApi('https://user-api.smzdm.com/checkin/show_view_v2', {
-            method: 'post',
-            headers: this.getHeaders()
+async function isContinueCheckin(ctx) {
+        const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/checkin/show_view_v2', {
+            headers: getHeaders(ctx)
         });
 
         if (isSuccess) {
@@ -2145,14 +1884,13 @@ class SmzdmDailyBot extends SmzdmTaskBot {
 
         $.log(`查询是否有额外奖励失败！${response}`);
         return false;
-    }
+}
 
-    async getVipInfo() {
-        const { isSuccess, data, response } = await requestApi('https://user-api.smzdm.com/vip', {
-            method: 'post',
-            headers: this.getHeaders(),
+async function getVipInfo(ctx) {
+        const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/vip', {
+            headers: getHeaders(ctx),
             data: {
-                token: this.token
+                token: ctx.token
             }
         });
 
@@ -2162,12 +1900,11 @@ class SmzdmDailyBot extends SmzdmTaskBot {
 
         $.log(`查询信息失败！${response}`);
         return false;
-    }
+}
 
-    async getTaskList() {
-        const { isSuccess, data, response } = await requestApi('https://user-api.smzdm.com/task/list_v2', {
-            method: 'post',
-            headers: this.getHeaders()
+async function getTaskList(ctx) {
+        const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/task/list_v2', {
+            headers: getHeaders(ctx)
         });
 
         if (isSuccess && data.data.rows[0]?.cell_data?.activity_task?.default_list_v2) {
@@ -2186,13 +1923,12 @@ class SmzdmDailyBot extends SmzdmTaskBot {
             tasks: [],
             detail: {}
         };
-    }
+}
 
-    async receiveActivity(activity) {
+async function receiveActivity(ctx, activity) {
         $.log(`领取奖励: ${activity.activity_name}`);
-        const { isSuccess, data, response } = await requestApi('https://user-api.smzdm.com/task/activity_receive', {
-            method: 'post',
-            headers: this.getHeaders(),
+        const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/task/activity_receive', {
+            headers: getHeaders(ctx),
             data: {
                 activity_id: activity.activity_id
             }
@@ -2205,10 +1941,10 @@ class SmzdmDailyBot extends SmzdmTaskBot {
 
         $.log(`领取奖励失败！${response}`);
         return { isSuccess };
-    }
+}
 
-    async receiveReward(taskId) {
-        const robotToken = await this.getRobotToken();
+async function receiveReward(ctx, taskId) {
+        const robotToken = await getRobotToken(ctx);
         if (robotToken === false) {
             return {
                 isSuccess: false,
@@ -2216,9 +1952,8 @@ class SmzdmDailyBot extends SmzdmTaskBot {
             };
         }
 
-        const { isSuccess, data, response } = await requestApi('https://user-api.smzdm.com/task/activity_task_receive', {
-            method: 'post',
-            headers: this.getHeaders(),
+        const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/task/activity_task_receive', {
+            headers: getHeaders(ctx),
             data: {
                 robot_token: robotToken,
                 geetest_seccode: '',
@@ -2243,8 +1978,8 @@ class SmzdmDailyBot extends SmzdmTaskBot {
             isSuccess,
             msg: '领取任务奖励失败！'
         };
-    }
 }
+
 
 async function main() {
     const users = loadUsers();
@@ -2258,8 +1993,8 @@ async function main() {
         $.beforeMsgs = '';
         $.messages = [];
         $.log(`\n----- ${buildAccountTitle(user, i)} 开始执行 -----\n`);
-        const bot = new SmzdmDailyBot(user);
-        const message = await bot.run();
+        const ctx = createBotContext(user);
+        const message = await runAccount(ctx);
         $.beforeMsgs = `账号: ${buildAccountTitle(user, i)}${user.updateTime ? `\n更新时间: ${user.updateTime}` : ''}`;
         $.messages.push(message || '无可执行结果');
         $.messages.splice(0, 0, $.beforeMsgs);
@@ -2367,6 +2102,9 @@ function debug(content, title = "debug") {
         }
     }
 }
+
+//MD5加密
+function MD5(string) { function RotateLeft(lValue, iShiftBits) { return (lValue << iShiftBits) | (lValue >>> (32 - iShiftBits)); } function AddUnsigned(lX, lY) { var lX4, lY4, lX8, lY8, lResult; lX8 = (lX & 0x80000000); lY8 = (lY & 0x80000000); lX4 = (lX & 0x40000000); lY4 = (lY & 0x40000000); lResult = (lX & 0x3FFFFFFF) + (lY & 0x3FFFFFFF); if (lX4 & lY4) { return (lResult ^ 0x80000000 ^ lX8 ^ lY8); } if (lX4 | lY4) { if (lResult & 0x40000000) { return (lResult ^ 0xC0000000 ^ lX8 ^ lY8); } else { return (lResult ^ 0x40000000 ^ lX8 ^ lY8); } } else { return (lResult ^ lX8 ^ lY8); } } function F(x, y, z) { return (x & y) | ((~x) & z); } function G(x, y, z) { return (x & z) | (y & (~z)); } function H(x, y, z) { return (x ^ y ^ z); } function I(x, y, z) { return (y ^ (x | (~z))); } function FF(a, b, c, d, x, s, ac) { a = AddUnsigned(a, AddUnsigned(AddUnsigned(F(b, c, d), x), ac)); return AddUnsigned(RotateLeft(a, s), b); }; function GG(a, b, c, d, x, s, ac) { a = AddUnsigned(a, AddUnsigned(AddUnsigned(G(b, c, d), x), ac)); return AddUnsigned(RotateLeft(a, s), b); }; function HH(a, b, c, d, x, s, ac) { a = AddUnsigned(a, AddUnsigned(AddUnsigned(H(b, c, d), x), ac)); return AddUnsigned(RotateLeft(a, s), b); }; function II(a, b, c, d, x, s, ac) { a = AddUnsigned(a, AddUnsigned(AddUnsigned(I(b, c, d), x), ac)); return AddUnsigned(RotateLeft(a, s), b); }; function ConvertToWordArray(string) { var lWordCount; var lMessageLength = string.length; var lNumberOfWords_temp1 = lMessageLength + 8; var lNumberOfWords_temp2 = (lNumberOfWords_temp1 - (lNumberOfWords_temp1 % 64)) / 64; var lNumberOfWords = (lNumberOfWords_temp2 + 1) * 16; var lWordArray = Array(lNumberOfWords - 1); var lBytePosition = 0; var lByteCount = 0; while (lByteCount < lMessageLength) { lWordCount = (lByteCount - (lByteCount % 4)) / 4; lBytePosition = (lByteCount % 4) * 8; lWordArray[lWordCount] = (lWordArray[lWordCount] | (string.charCodeAt(lByteCount) << lBytePosition)); lByteCount++; } lWordCount = (lByteCount - (lByteCount % 4)) / 4; lBytePosition = (lByteCount % 4) * 8; lWordArray[lWordCount] = lWordArray[lWordCount] | (0x80 << lBytePosition); lWordArray[lNumberOfWords - 2] = lMessageLength << 3; lWordArray[lNumberOfWords - 1] = lMessageLength >>> 29; return lWordArray; }; function WordToHex(lValue) { var WordToHexValue = "", WordToHexValue_temp = "", lByte, lCount; for (lCount = 0; lCount <= 3; lCount++) { lByte = (lValue >>> (lCount * 8)) & 255; WordToHexValue_temp = "0" + lByte.toString(16); WordToHexValue = WordToHexValue + WordToHexValue_temp.substr(WordToHexValue_temp.length - 2, 2); } return WordToHexValue; }; function Utf8Encode(string) { string = string.replace(/\r\n/g, "\n"); var utftext = ""; for (var n = 0; n < string.length; n++) { var c = string.charCodeAt(n); if (c < 128) { utftext += String.fromCharCode(c); } else if ((c > 127) && (c < 2048)) { utftext += String.fromCharCode((c >> 6) | 192); utftext += String.fromCharCode((c & 63) | 128); } else { utftext += String.fromCharCode((c >> 12) | 224); utftext += String.fromCharCode(((c >> 6) & 63) | 128); utftext += String.fromCharCode((c & 63) | 128); } } return utftext; }; var x = Array(); var k, AA, BB, CC, DD, a, b, c, d; var S11 = 7, S12 = 12, S13 = 17, S14 = 22; var S21 = 5, S22 = 9, S23 = 14, S24 = 20; var S31 = 4, S32 = 11, S33 = 16, S34 = 23; var S41 = 6, S42 = 10, S43 = 15, S44 = 21; string = Utf8Encode(string); x = ConvertToWordArray(string); a = 0x67452301; b = 0xEFCDAB89; c = 0x98BADCFE; d = 0x10325476; for (k = 0; k < x.length; k += 16) { AA = a; BB = b; CC = c; DD = d; a = FF(a, b, c, d, x[k + 0], S11, 0xD76AA478); d = FF(d, a, b, c, x[k + 1], S12, 0xE8C7B756); c = FF(c, d, a, b, x[k + 2], S13, 0x242070DB); b = FF(b, c, d, a, x[k + 3], S14, 0xC1BDCEEE); a = FF(a, b, c, d, x[k + 4], S11, 0xF57C0FAF); d = FF(d, a, b, c, x[k + 5], S12, 0x4787C62A); c = FF(c, d, a, b, x[k + 6], S13, 0xA8304613); b = FF(b, c, d, a, x[k + 7], S14, 0xFD469501); a = FF(a, b, c, d, x[k + 8], S11, 0x698098D8); d = FF(d, a, b, c, x[k + 9], S12, 0x8B44F7AF); c = FF(c, d, a, b, x[k + 10], S13, 0xFFFF5BB1); b = FF(b, c, d, a, x[k + 11], S14, 0x895CD7BE); a = FF(a, b, c, d, x[k + 12], S11, 0x6B901122); d = FF(d, a, b, c, x[k + 13], S12, 0xFD987193); c = FF(c, d, a, b, x[k + 14], S13, 0xA679438E); b = FF(b, c, d, a, x[k + 15], S14, 0x49B40821); a = GG(a, b, c, d, x[k + 1], S21, 0xF61E2562); d = GG(d, a, b, c, x[k + 6], S22, 0xC040B340); c = GG(c, d, a, b, x[k + 11], S23, 0x265E5A51); b = GG(b, c, d, a, x[k + 0], S24, 0xE9B6C7AA); a = GG(a, b, c, d, x[k + 5], S21, 0xD62F105D); d = GG(d, a, b, c, x[k + 10], S22, 0x2441453); c = GG(c, d, a, b, x[k + 15], S23, 0xD8A1E681); b = GG(b, c, d, a, x[k + 4], S24, 0xE7D3FBC8); a = GG(a, b, c, d, x[k + 9], S21, 0x21E1CDE6); d = GG(d, a, b, c, x[k + 14], S22, 0xC33707D6); c = GG(c, d, a, b, x[k + 3], S23, 0xF4D50D87); b = GG(b, c, d, a, x[k + 8], S24, 0x455A14ED); a = GG(a, b, c, d, x[k + 13], S21, 0xA9E3E905); d = GG(d, a, b, c, x[k + 2], S22, 0xFCEFA3F8); c = GG(c, d, a, b, x[k + 7], S23, 0x676F02D9); b = GG(b, c, d, a, x[k + 12], S24, 0x8D2A4C8A); a = HH(a, b, c, d, x[k + 5], S31, 0xFFFA3942); d = HH(d, a, b, c, x[k + 8], S32, 0x8771F681); c = HH(c, d, a, b, x[k + 11], S33, 0x6D9D6122); b = HH(b, c, d, a, x[k + 14], S34, 0xFDE5380C); a = HH(a, b, c, d, x[k + 1], S31, 0xA4BEEA44); d = HH(d, a, b, c, x[k + 4], S32, 0x4BDECFA9); c = HH(c, d, a, b, x[k + 7], S33, 0xF6BB4B60); b = HH(b, c, d, a, x[k + 10], S34, 0xBEBFBC70); a = HH(a, b, c, d, x[k + 13], S31, 0x289B7EC6); d = HH(d, a, b, c, x[k + 0], S32, 0xEAA127FA); c = HH(c, d, a, b, x[k + 3], S33, 0xD4EF3085); b = HH(b, c, d, a, x[k + 6], S34, 0x4881D05); a = HH(a, b, c, d, x[k + 9], S31, 0xD9D4D039); d = HH(d, a, b, c, x[k + 12], S32, 0xE6DB99E5); c = HH(c, d, a, b, x[k + 15], S33, 0x1FA27CF8); b = HH(b, c, d, a, x[k + 2], S34, 0xC4AC5665); a = II(a, b, c, d, x[k + 0], S41, 0xF4292244); d = II(d, a, b, c, x[k + 7], S42, 0x432AFF97); c = II(c, d, a, b, x[k + 14], S43, 0xAB9423A7); b = II(b, c, d, a, x[k + 5], S44, 0xFC93A039); a = II(a, b, c, d, x[k + 12], S41, 0x655B59C3); d = II(d, a, b, c, x[k + 3], S42, 0x8F0CCC92); c = II(c, d, a, b, x[k + 10], S43, 0xFFEFF47D); b = II(b, c, d, a, x[k + 1], S44, 0x85845DD1); a = II(a, b, c, d, x[k + 8], S41, 0x6FA87E4F); d = II(d, a, b, c, x[k + 15], S42, 0xFE2CE6E0); c = II(c, d, a, b, x[k + 6], S43, 0xA3014314); b = II(b, c, d, a, x[k + 13], S44, 0x4E0811A1); a = II(a, b, c, d, x[k + 4], S41, 0xF7537E82); d = II(d, a, b, c, x[k + 11], S42, 0xBD3AF235); c = II(c, d, a, b, x[k + 2], S43, 0x2AD7D2BB); b = II(b, c, d, a, x[k + 9], S44, 0xEB86D391); a = AddUnsigned(a, AA); b = AddUnsigned(b, BB); c = AddUnsigned(c, CC); d = AddUnsigned(d, DD); } var temp = WordToHex(a) + WordToHex(b) + WordToHex(c) + WordToHex(d); return temp.toLowerCase(); }
 
 // prettier-ignore
 function Env(t, e) { class s { constructor(t) { this.env = t } send(t, e = "GET") { t = "string" == typeof t ? { url: t } : t; let s = this.get; return "POST" === e && (s = this.post), new Promise(((e, r) => { s.call(this, t, ((t, s, a) => { t ? r(t) : e(s) })) })) } get(t) { return this.send.call(this.env, t) } post(t) { return this.send.call(this.env, t, "POST") } } return new class { constructor(t, e) { this.name = t, this.http = new s(this), this.data = null, this.dataFile = "box.dat", this.logs = [], this.isMute = !1, this.isNeedRewrite = !1, this.logSeparator = "\n", this.encoding = "utf-8", this.startTime = (new Date).getTime(), Object.assign(this, e), this.log("", `🔔${this.name}, 开始!`) } getEnv() { return "undefined" != typeof $environment && $environment["surge-version"] ? "Surge" : "undefined" != typeof $environment && $environment["stash-version"] ? "Stash" : "undefined" != typeof module && module.exports ? "Node.js" : "undefined" != typeof $task ? "Quantumult X" : "undefined" != typeof $loon ? "Loon" : "undefined" != typeof $rocket ? "Shadowrocket" : void 0 } isNode() { return "Node.js" === this.getEnv() } isQuanX() { return "Quantumult X" === this.getEnv() } isSurge() { return "Surge" === this.getEnv() } isLoon() { return "Loon" === this.getEnv() } isShadowrocket() { return "Shadowrocket" === this.getEnv() } isStash() { return "Stash" === this.getEnv() } toObj(t, e = null) { try { return JSON.parse(t) } catch { return e } } toStr(t, e = null) { try { return JSON.stringify(t) } catch { return e } } getjson(t, e) { let s = e; if (this.getdata(t)) try { s = JSON.parse(this.getdata(t)) } catch { } return s } setjson(t, e) { try { return this.setdata(JSON.stringify(t), e) } catch { return !1 } } getScript(t) { return new Promise((e => { this.get({ url: t }, ((t, s, r) => e(r))) })) } runScript(t, e) { return new Promise((s => { let r = this.getdata("@chavy_boxjs_userCfgs.httpapi"); r = r ? r.replace(/\n/g, "").trim() : r; let a = this.getdata("@chavy_boxjs_userCfgs.httpapi_timeout"); a = a ? 1 * a : 20, a = e && e.timeout ? e.timeout : a; const [i, o] = r.split("@"), n = { url: `http://${o}/v1/scripting/evaluate`, body: { script_text: t, mock_type: "cron", timeout: a }, headers: { "X-Key": i, Accept: "*/*" }, timeout: a }; this.post(n, ((t, e, r) => s(r))) })).catch((t => this.logErr(t))) } loaddata() { if (!this.isNode()) return {}; { this.fs = this.fs ? this.fs : require("fs"), this.path = this.path ? this.path : require("path"); const t = this.path.resolve(this.dataFile), e = this.path.resolve(process.cwd(), this.dataFile), s = this.fs.existsSync(t), r = !s && this.fs.existsSync(e); if (!s && !r) return {}; { const r = s ? t : e; try { return JSON.parse(this.fs.readFileSync(r)) } catch (t) { return {} } } } } writedata() { if (this.isNode()) { this.fs = this.fs ? this.fs : require("fs"), this.path = this.path ? this.path : require("path"); const t = this.path.resolve(this.dataFile), e = this.path.resolve(process.cwd(), this.dataFile), s = this.fs.existsSync(t), r = !s && this.fs.existsSync(e), a = JSON.stringify(this.data); s ? this.fs.writeFileSync(t, a) : r ? this.fs.writeFileSync(e, a) : this.fs.writeFileSync(t, a) } } lodash_get(t, e, s = void 0) { const r = e.replace(/\[(\d+)\]/g, ".$1").split("."); let a = t; for (const t of r) if (a = Object(a)[t], void 0 === a) return s; return a } lodash_set(t, e, s) { return Object(t) !== t || (Array.isArray(e) || (e = e.toString().match(/[^.[\]]+/g) || []), e.slice(0, -1).reduce(((t, s, r) => Object(t[s]) === t[s] ? t[s] : t[s] = Math.abs(e[r + 1]) >> 0 == +e[r + 1] ? [] : {}), t)[e[e.length - 1]] = s), t } getdata(t) { let e = this.getval(t); if (/^@/.test(t)) { const [, s, r] = /^@(.*?)\.(.*?)$/.exec(t), a = s ? this.getval(s) : ""; if (a) try { const t = JSON.parse(a); e = t ? this.lodash_get(t, r, "") : e } catch (t) { e = "" } } return e } setdata(t, e) { let s = !1; if (/^@/.test(e)) { const [, r, a] = /^@(.*?)\.(.*?)$/.exec(e), i = this.getval(r), o = r ? "null" === i ? null : i || "{}" : "{}"; try { const e = JSON.parse(o); this.lodash_set(e, a, t), s = this.setval(JSON.stringify(e), r) } catch (e) { const i = {}; this.lodash_set(i, a, t), s = this.setval(JSON.stringify(i), r) } } else s = this.setval(t, e); return s } getval(t) { switch (this.getEnv()) { case "Surge": case "Loon": case "Stash": case "Shadowrocket": return $persistentStore.read(t); case "Quantumult X": return $prefs.valueForKey(t); case "Node.js": return this.data = this.loaddata(), this.data[t]; default: return this.data && this.data[t] || null } } setval(t, e) { switch (this.getEnv()) { case "Surge": case "Loon": case "Stash": case "Shadowrocket": return $persistentStore.write(t, e); case "Quantumult X": return $prefs.setValueForKey(t, e); case "Node.js": return this.data = this.loaddata(), this.data[e] = t, this.writedata(), !0; default: return this.data && this.data[e] || null } } initGotEnv(t) { this.got = this.got ? this.got : require("got"), this.cktough = this.cktough ? this.cktough : require("tough-cookie"), this.ckjar = this.ckjar ? this.ckjar : new this.cktough.CookieJar, t && (t.headers = t.headers ? t.headers : {}, void 0 === t.headers.Cookie && void 0 === t.cookieJar && (t.cookieJar = this.ckjar)) } get(t, e = (() => { })) { switch (t.headers && (delete t.headers["Content-Type"], delete t.headers["Content-Length"], delete t.headers["content-type"], delete t.headers["content-length"]), t.params && (t.url += "?" + this.queryStr(t.params)), void 0 === t.followRedirect || t.followRedirect || ((this.isSurge() || this.isLoon()) && (t["auto-redirect"] = !1), this.isQuanX() && (t.opts ? t.opts.redirection = !1 : t.opts = { redirection: !1 })), this.getEnv()) { case "Surge": case "Loon": case "Stash": case "Shadowrocket": default: this.isSurge() && this.isNeedRewrite && (t.headers = t.headers || {}, Object.assign(t.headers, { "X-Surge-Skip-Scripting": !1 })), $httpClient.get(t, ((t, s, r) => { !t && s && (s.body = r, s.statusCode = s.status ? s.status : s.statusCode, s.status = s.statusCode), e(t, s, r) })); break; case "Quantumult X": this.isNeedRewrite && (t.opts = t.opts || {}, Object.assign(t.opts, { hints: !1 })), $task.fetch(t).then((t => { const { statusCode: s, statusCode: r, headers: a, body: i, bodyBytes: o } = t; e(null, { status: s, statusCode: r, headers: a, body: i, bodyBytes: o }, i, o) }), (t => e(t && t.error || "UndefinedError"))); break; case "Node.js": let s = require("iconv-lite"); this.initGotEnv(t), this.got(t).on("redirect", ((t, e) => { try { if (t.headers["set-cookie"]) { const s = t.headers["set-cookie"].map(this.cktough.Cookie.parse).toString(); s && this.ckjar.setCookieSync(s, null), e.cookieJar = this.ckjar } } catch (t) { this.logErr(t) } })).then((t => { const { statusCode: r, statusCode: a, headers: i, rawBody: o } = t, n = s.decode(o, this.encoding); e(null, { status: r, statusCode: a, headers: i, rawBody: o, body: n }, n) }), (t => { const { message: r, response: a } = t; e(r, a, a && s.decode(a.rawBody, this.encoding)) })) } } post(t, e = (() => { })) { const s = t.method ? t.method.toLocaleLowerCase() : "post"; switch (t.body && t.headers && !t.headers["Content-Type"] && !t.headers["content-type"] && (t.headers["content-type"] = "application/x-www-form-urlencoded"), t.headers && (delete t.headers["Content-Length"], delete t.headers["content-length"]), void 0 === t.followRedirect || t.followRedirect || ((this.isSurge() || this.isLoon()) && (t["auto-redirect"] = !1), this.isQuanX() && (t.opts ? t.opts.redirection = !1 : t.opts = { redirection: !1 })), this.getEnv()) { case "Surge": case "Loon": case "Stash": case "Shadowrocket": default: this.isSurge() && this.isNeedRewrite && (t.headers = t.headers || {}, Object.assign(t.headers, { "X-Surge-Skip-Scripting": !1 })), $httpClient[s](t, ((t, s, r) => { !t && s && (s.body = r, s.statusCode = s.status ? s.status : s.statusCode, s.status = s.statusCode), e(t, s, r) })); break; case "Quantumult X": t.method = s, this.isNeedRewrite && (t.opts = t.opts || {}, Object.assign(t.opts, { hints: !1 })), $task.fetch(t).then((t => { const { statusCode: s, statusCode: r, headers: a, body: i, bodyBytes: o } = t; e(null, { status: s, statusCode: r, headers: a, body: i, bodyBytes: o }, i, o) }), (t => e(t && t.error || "UndefinedError"))); break; case "Node.js": let r = require("iconv-lite"); this.initGotEnv(t); const { url: a, ...i } = t; this.got[s](a, i).then((t => { const { statusCode: s, statusCode: a, headers: i, rawBody: o } = t, n = r.decode(o, this.encoding); e(null, { status: s, statusCode: a, headers: i, rawBody: o, body: n }, n) }), (t => { const { message: s, response: a } = t; e(s, a, a && r.decode(a.rawBody, this.encoding)) })) } } time(t, e = null) { const s = e ? new Date(e) : new Date; let r = { "M+": s.getMonth() + 1, "d+": s.getDate(), "H+": s.getHours(), "m+": s.getMinutes(), "s+": s.getSeconds(), "q+": Math.floor((s.getMonth() + 3) / 3), S: s.getMilliseconds() }; /(y+)/.test(t) && (t = t.replace(RegExp.$1, (s.getFullYear() + "").substr(4 - RegExp.$1.length))); for (let e in r) new RegExp("(" + e + ")").test(t) && (t = t.replace(RegExp.$1, 1 == RegExp.$1.length ? r[e] : ("00" + r[e]).substr(("" + r[e]).length))); return t } queryStr(t) { let e = ""; for (const s in t) { let r = t[s]; null != r && "" !== r && ("object" == typeof r && (r = JSON.stringify(r)), e += `${s}=${r}&`) } return e = e.substring(0, e.length - 1), e } msg(e = t, s = "", r = "", a) { const i = t => { switch (typeof t) { case void 0: return t; case "string": switch (this.getEnv()) { case "Surge": case "Stash": default: return { url: t }; case "Loon": case "Shadowrocket": return t; case "Quantumult X": return { "open-url": t }; case "Node.js": return }case "object": switch (this.getEnv()) { case "Surge": case "Stash": case "Shadowrocket": default: return { url: t.url || t.openUrl || t["open-url"] }; case "Loon": return { openUrl: t.openUrl || t.url || t["open-url"], mediaUrl: t.mediaUrl || t["media-url"] }; case "Quantumult X": return { "open-url": t["open-url"] || t.url || t.openUrl, "media-url": t["media-url"] || t.mediaUrl, "update-pasteboard": t["update-pasteboard"] || t.updatePasteboard }; case "Node.js": return }default: return } }; if (!this.isMute) switch (this.getEnv()) { case "Surge": case "Loon": case "Stash": case "Shadowrocket": default: $notification.post(e, s, r, i(a)); break; case "Quantumult X": $notify(e, s, r, i(a)); case "Node.js": }if (!this.isMuteLog) { let t = ["", "==============📣系统通知📣=============="]; t.push(e), s && t.push(s), r && t.push(r), console.log(t.join("\n")), this.logs = this.logs.concat(t) } } log(...t) { t.length > 0 && (this.logs = [...this.logs, ...t]), console.log(t.join(this.logSeparator)) } logErr(t, e) { switch (this.getEnv()) { case "Surge": case "Loon": case "Stash": case "Shadowrocket": case "Quantumult X": default: this.log("", `❗️${this.name}, 错误!`, t); break; case "Node.js": this.log("", `❗️${this.name}, 错误!`, t.stack) } } wait(t) { return new Promise((e => setTimeout(e, t))) } done(t = {}) { const e = ((new Date).getTime() - this.startTime) / 1e3; switch (this.log("", `🔔${this.name}, 结束! 🕛 ${e} 秒`), this.log(), this.getEnv()) { case "Surge": case "Loon": case "Stash": case "Shadowrocket": case "Quantumult X": default: $done(t); break; case "Node.js": process.exit(1) } } }(t, e) }
