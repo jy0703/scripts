@@ -487,6 +487,48 @@ async function claimTaskReward(ctx, task, minSecond = 5, maxSecond = 15) {
     return await receiveReward(ctx, task.task_id);
 }
 
+async function runActionSequence(ctx, steps = [], waitRange = [3, 10]) {
+    if (!steps.length) {
+      return;
+    }
+
+    await wait(waitRange[0], waitRange[1]);
+
+    for (let i = 0; i < steps.length; i++) {
+      await steps[i]();
+
+      if (i < steps.length - 1) {
+        await wait(waitRange[0], waitRange[1]);
+      }
+    }
+}
+
+async function getTaskArticles(ctx, task, num, repeatFixedArticle = false) {
+    if (task.article_id == '0') {
+      const articles = await getArticleList(ctx, num);
+
+      await wait(3, 10);
+
+      return articles;
+    }
+
+    const article = {
+      article_id: task.article_id,
+      article_channel_id: task.channel_id
+    };
+
+    return repeatFixedArticle ? Array.from({ length: num }, () => ({ ...article })) : [article];
+}
+
+async function openTaskArticle(ctx, task, article) {
+    if (/detail_haojia/i.test(task.task_redirect_url.scheme_url)) {
+      await getHaojiaDetail(ctx, article.article_id);
+    }
+    else {
+      await getArticleDetail(ctx, article.article_id);
+    }
+}
+
 async function doCommentTask(ctx, task) {
     ctx.$env.log(`开始任务: ${task.task_name}`);
 
@@ -581,74 +623,58 @@ async function doRatingTask(ctx, task) {
       };
     }
 
-    await wait(3, 10);
-
     if (article.article_price) {
       // 点值
-      await rating(ctx, {
-        method: 'worth_cancel',
-        type: 3,
-        id: article.article_id,
-        channelId: article.article_channel_id
-      });
-
-      await wait(3, 10);
-
-      await rating(ctx, {
-        method: 'worth_create',
-        type: 1,
-        id: article.article_id,
-        channelId: article.article_channel_id
-      });
-
-      await wait(3, 10);
-
-      await rating(ctx, {
-        method: 'worth_cancel',
-        type: 3,
-        id: article.article_id,
-        channelId: article.article_channel_id
-      });
+      await runActionSequence(ctx, [
+        () => rating(ctx, {
+          method: 'worth_cancel',
+          type: 3,
+          id: article.article_id,
+          channelId: article.article_channel_id
+        }),
+        () => rating(ctx, {
+          method: 'worth_create',
+          type: 1,
+          id: article.article_id,
+          channelId: article.article_channel_id
+        }),
+        () => rating(ctx, {
+          method: 'worth_cancel',
+          type: 3,
+          id: article.article_id,
+          channelId: article.article_channel_id
+        })
+      ]);
     }
     else {
       // 点赞
-      await rating(ctx, {
-        method: 'like_cancel',
-        id: article.article_id,
-        channelId: article.article_channel_id
-      });
-
-      await wait(3, 10);
-
-      await rating(ctx, {
-        method: 'like_create',
-        id: article.article_id,
-        channelId: article.article_channel_id
-      });
-
-      await wait(3, 10);
-
-      await rating(ctx, {
-        method: 'like_cancel',
-        id: article.article_id,
-        channelId: article.article_channel_id
-      });
-
-      await wait(3, 10);
-
-      await rating(ctx, {
-        method: 'like_create',
-        id: article.article_id,
-        channelId: article.article_channel_id
-      });
-
-      await wait(3, 10);
-
-      await rating(ctx, {
-        method: 'like_cancel',
-        id: article.article_id,
-        channelId: article.article_channel_id
-      });
+      await runActionSequence(ctx, [
+        () => rating(ctx, {
+          method: 'like_cancel',
+          id: article.article_id,
+          channelId: article.article_channel_id
+        }),
+        () => rating(ctx, {
+          method: 'like_create',
+          id: article.article_id,
+          channelId: article.article_channel_id
+        }),
+        () => rating(ctx, {
+          method: 'like_cancel',
+          id: article.article_id,
+          channelId: article.article_channel_id
+        }),
+        () => rating(ctx, {
+          method: 'like_create',
+          id: article.article_id,
+          channelId: article.article_channel_id
+        }),
+        () => rating(ctx, {
+          method: 'like_cancel',
+          id: article.article_id,
+          channelId: article.article_channel_id
+        })
+      ]);
     }
     return await claimTaskReward(ctx, task);
 }
@@ -719,29 +745,23 @@ async function doFavoriteTask(ctx, task) {
       channelId = articleDetail.channel_id;
     }
 
-    await wait(3, 10);
-
-    await favorite(ctx, {
-      method: 'destroy',
-      id: articleId,
-      channelId
-    });
-
-    await wait(3, 10);
-
-    await favorite(ctx, {
-      method: 'create',
-      id: articleId,
-      channelId
-    });
-
-    await wait(3, 10);
-
-    await favorite(ctx, {
-      method: 'destroy',
-      id: articleId,
-      channelId
-    });
+    await runActionSequence(ctx, [
+      () => favorite(ctx, {
+        method: 'destroy',
+        id: articleId,
+        channelId
+      }),
+      () => favorite(ctx, {
+        method: 'create',
+        id: articleId,
+        channelId
+      }),
+      () => favorite(ctx, {
+        method: 'destroy',
+        id: articleId,
+        channelId
+      })
+    ]);
     return await claimTaskReward(ctx, task);
 }
 
@@ -932,19 +952,7 @@ async function doCrowdTask(ctx, task) {
 async function doShareTask(ctx, task) {
     ctx.$env.log(`开始任务: ${task.task_name}`);
 
-    let articles = [];
-
-    if (task.article_id == '0') {
-      articles = await getArticleList(ctx, task.task_even_num - task.task_finished_num);
-
-      await wait(3, 10);
-    }
-    else {
-      articles = [{
-        article_id: task.article_id,
-        article_channel_id: task.channel_id
-      }];
-    }
+    const articles = await getTaskArticles(ctx, task, task.task_even_num - task.task_finished_num);
 
     for (let i = 0; i < articles.length; i++) {
       ctx.$env.log(`开始分享第 ${i + 1} 篇文章...`);
@@ -953,13 +961,7 @@ async function doShareTask(ctx, task) {
 
       if (task.task_redirect_url.link_type != 'other') {
         // 模拟打开文章
-        if (/detail_haojia/i.test(task.task_redirect_url.scheme_url)) {
-          await getHaojiaDetail(ctx, article.article_id);
-        }
-        else {
-          await getArticleDetail(ctx, article.article_id);
-        }
-
+        await openTaskArticle(ctx, task, article);
         await wait(8, 20);
       }
 
@@ -975,25 +977,8 @@ async function doShareTask(ctx, task) {
 async function doViewTask(ctx, task) {
     ctx.$env.log(`开始任务: ${task.task_name}`);
 
-    let articles = [];
-    let isRead = true;
-
-    if (task.article_id == '0') {
-      isRead = true;
-      articles = await getArticleList(ctx, task.task_even_num - task.task_finished_num);
-
-      await wait(3, 10);
-    }
-    else {
-      for (let i = 0; i < task.task_even_num - task.task_finished_num; i++) {
-        articles.push({
-          article_id: task.article_id,
-          article_channel_id: task.channel_id
-        });
-      }
-
-      isRead = task.task_redirect_url.link_val != '';
-    }
+    const isRead = task.article_id == '0' || task.task_redirect_url.link_val != '';
+    const articles = await getTaskArticles(ctx, task, task.task_even_num - task.task_finished_num, true);
 
     for (let i = 0; i < articles.length; i++) {
       ctx.$env.log(`开始阅读第 ${i + 1} 篇文章...`);
@@ -1002,12 +987,7 @@ async function doViewTask(ctx, task) {
 
       if (isRead) {
         // 模拟打开文章
-        if (/detail_haojia/i.test(task.task_redirect_url.scheme_url)) {
-          await getHaojiaDetail(ctx, article.article_id);
-        }
-        else {
-          await getArticleDetail(ctx, article.article_id);
-        }
+        await openTaskArticle(ctx, task, article);
       }
 
       ctx.$env.log('模拟阅读文章');
