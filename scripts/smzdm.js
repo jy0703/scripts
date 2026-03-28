@@ -1682,7 +1682,7 @@ async function getDingyueStatus(ctx, name) {
 }
 
 async function getArticleListFromTag(ctx, id, name, num = 1) {
-    const status = getDingyueStatus(ctx, name);
+    const status = await getDingyueStatus(ctx, name);
 
     const { isSuccess, data, response } = await requestApi('https://tag-api.smzdm.com/theme/detail_feed', {
       headers: getHeaders(ctx),
