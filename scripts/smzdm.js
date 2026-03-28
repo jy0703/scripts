@@ -224,6 +224,13 @@ async function requestApi(url, inputOptions = {}) {
     };
 }
 
+function postApi(url, inputOptions = {}) {
+    return requestApi(url, {
+        ...inputOptions,
+        method: 'post'
+    });
+}
+
 function createBotContext(user = {}) {
     return normalizeBotContext({
         $env: $,
@@ -993,8 +1000,7 @@ async function doViewTask(ctx, task) {
       ctx.$env.log('模拟阅读文章');
       await wait(20, 50);
 
-      const { isSuccess, response } = await requestApi('https://user-api.smzdm.com/task/event_view_article_sync', {
-        method: 'post',
+      const { isSuccess, response } = await postApi('https://user-api.smzdm.com/task/event_view_article_sync', {
         headers: getHeaders(ctx),
         data: {
           article_id: article.article_id,
@@ -1047,8 +1053,7 @@ async function follow(ctx, {keywordId, keyword, type, method}) {
       });
     }
 
-    const { isSuccess, response } = await requestApi(`https://dingyue-api.smzdm.com/dingyue/${method}`, {
-      method: 'post',
+    const { isSuccess, response } = await postApi(`https://dingyue-api.smzdm.com/dingyue/${method}`, {
       headers: getHeaders(ctx),
       data: {
         touchstone_event: touchstone,
@@ -1073,8 +1078,7 @@ async function follow(ctx, {keywordId, keyword, type, method}) {
 }
 
 async function getUserByRandom(ctx) {
-    const { isSuccess, data, response } = await requestApi('https://dingyue-api.smzdm.com/tuijian/search_result', {
-      method: 'post',
+    const { isSuccess, data, response } = await postApi('https://dingyue-api.smzdm.com/tuijian/search_result', {
       headers: getHeaders(ctx),
       data: {
         nav_id: 0,
@@ -1095,8 +1099,7 @@ async function getUserByRandom(ctx) {
 }
 
 async function joinCrowd(ctx, id) {
-    const { isSuccess, data, response } = await requestApi('https://zhiyou.m.smzdm.com/user/crowd/ajax_participate', {
-      method: 'post',
+    const { isSuccess, data, response } = await postApi('https://zhiyou.m.smzdm.com/user/crowd/ajax_participate', {
       sign: false,
       headers: {
         ...getHeadersForWeb(ctx),
@@ -1197,8 +1200,7 @@ async function getCrowd(ctx, name, price) {
 }
 
 async function shareArticleDone(ctx, articleId, channelId) {
-    const { isSuccess, response } = await requestApi('https://user-api.smzdm.com/share/complete_share_rule', {
-      method: 'post',
+    const { isSuccess, response } = await postApi('https://user-api.smzdm.com/share/complete_share_rule', {
       headers: getHeaders(ctx),
       data: {
         token: ctx.token,
@@ -1227,8 +1229,7 @@ async function shareArticleDone(ctx, articleId, channelId) {
 }
 
 async function shareCallback(ctx, articleId, channelId) {
-    const { isSuccess, response } = await requestApi('https://user-api.smzdm.com/share/callback', {
-      method: 'post',
+    const { isSuccess, response } = await postApi('https://user-api.smzdm.com/share/callback', {
       headers: getHeaders(ctx),
       data: {
         token: ctx.token,
@@ -1267,8 +1268,7 @@ async function shareCallback(ctx, articleId, channelId) {
 }
 
 async function shareDailyReward(ctx, channelId) {
-    const { isSuccess, data, response } = await requestApi('https://user-api.smzdm.com/share/daily_reward', {
-      method: 'post',
+    const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/share/daily_reward', {
       headers: getHeaders(ctx),
       data: {
         token: ctx.token,
@@ -1330,8 +1330,7 @@ async function getArticleList(ctx, num = 1) {
 }
 
 async function getRobotToken(ctx) {
-    const { isSuccess, data, response } = await requestApi('https://user-api.smzdm.com/robot/token', {
-      method: 'post',
+    const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/robot/token', {
       headers: getHeaders(ctx)
     });
 
@@ -1431,8 +1430,7 @@ async function getHaojiaDetail(ctx, id) {
 }
 
 async function favorite(ctx, {id, channelId, method}) {
-    const { isSuccess, response } = await requestApi(`https://user-api.smzdm.com/favorites/${method}`, {
-      method: 'post',
+    const { isSuccess, response } = await postApi(`https://user-api.smzdm.com/favorites/${method}`, {
       headers: getHeaders(ctx),
       data: {
         touchstone_event: getTouchstoneEvent(ctx, {
@@ -1487,8 +1485,7 @@ async function followBrand(ctx, {keywordId, keyword, method}) {
       upperLevel_url: '个人中心/赚奖励/'
     });
 
-    const { isSuccess, response } = await requestApi(`https://dingyue-api.smzdm.com/dy/util/api/user_action`, {
-      method: 'post',
+    const { isSuccess, response } = await postApi(`https://dingyue-api.smzdm.com/dy/util/api/user_action`, {
       headers: getHeaders(ctx),
       data: {
         action: method,
@@ -1569,8 +1566,7 @@ async function getArticleListFromLanmu(ctx, id, num = 1) {
 }
 
 async function rating(ctx, {id, channelId, method, type}) {
-    const { isSuccess, response } = await requestApi(`https://user-api.smzdm.com/rating/${method}`, {
-      method: 'post',
+    const { isSuccess, response } = await postApi(`https://user-api.smzdm.com/rating/${method}`, {
       headers: getHeaders(ctx),
       data: {
         touchstone_event: getTouchstoneEvent(ctx, {
@@ -1604,8 +1600,7 @@ async function rating(ctx, {id, channelId, method, type}) {
 }
 
 async function submitComment(ctx, { articleId, channelId, content }) {
-    const { isSuccess, data, response } = await requestApi('https://comment-api.smzdm.com/comments/submit', {
-      method: 'post',
+    const { isSuccess, data, response } = await postApi('https://comment-api.smzdm.com/comments/submit', {
       headers: getHeaders(ctx),
       data: {
         touchstone_event: getTouchstoneEvent(ctx, {
@@ -1646,8 +1641,7 @@ async function submitComment(ctx, { articleId, channelId, content }) {
 }
 
 async function removeComment(ctx, id) {
-    const { isSuccess, response } = await requestApi('https://comment-api.smzdm.com/comments/delete_comment', {
-      method: 'post',
+    const { isSuccess, response } = await postApi('https://comment-api.smzdm.com/comments/delete_comment', {
       headers: getHeaders(ctx),
       data: {
         comment_id: id
@@ -1668,8 +1662,7 @@ async function removeComment(ctx, id) {
 }
 
 async function getDingyueStatus(ctx, name) {
-    const { isSuccess, data, response } = await requestApi('https://dingyue-api.smzdm.com/dingyue/follow_status', {
-      method: 'post',
+    const { isSuccess, data, response } = await postApi('https://dingyue-api.smzdm.com/dingyue/follow_status', {
       headers: getHeaders(ctx),
       data: {
         rules: JSON.stringify([{
@@ -1791,8 +1784,7 @@ async function runTasks(ctx) {
 }
 
 async function checkin(ctx) {
-        const { isSuccess, data, response } = await requestApi('https://user-api.smzdm.com/checkin', {
-            method: 'post',
+        const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/checkin', {
             headers: getHeaders(ctx),
             data: {
                 touchstone_event: '',
@@ -1824,8 +1816,7 @@ async function checkin(ctx) {
 }
 
 async function allReward(ctx) {
-        const { isSuccess, data, response } = await requestApi('https://user-api.smzdm.com/checkin/all_reward', {
-            method: 'post',
+        const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/checkin/all_reward', {
             headers: getHeaders(ctx),
             debug: $.is_debug === 'true'
         });
@@ -1861,8 +1852,7 @@ async function extraReward(ctx) {
         }
 
         await wait(3, 5);
-        const { isSuccess, data, response } = await requestApi('https://user-api.smzdm.com/checkin/extra_reward', {
-            method: 'post',
+        const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/checkin/extra_reward', {
             headers: getHeaders(ctx)
         });
 
@@ -1883,8 +1873,7 @@ async function extraReward(ctx) {
 }
 
 async function isContinueCheckin(ctx) {
-        const { isSuccess, data, response } = await requestApi('https://user-api.smzdm.com/checkin/show_view_v2', {
-            method: 'post',
+        const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/checkin/show_view_v2', {
             headers: getHeaders(ctx)
         });
 
@@ -1898,8 +1887,7 @@ async function isContinueCheckin(ctx) {
 }
 
 async function getVipInfo(ctx) {
-        const { isSuccess, data, response } = await requestApi('https://user-api.smzdm.com/vip', {
-            method: 'post',
+        const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/vip', {
             headers: getHeaders(ctx),
             data: {
                 token: ctx.token
@@ -1915,8 +1903,7 @@ async function getVipInfo(ctx) {
 }
 
 async function getTaskList(ctx) {
-        const { isSuccess, data, response } = await requestApi('https://user-api.smzdm.com/task/list_v2', {
-            method: 'post',
+        const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/task/list_v2', {
             headers: getHeaders(ctx)
         });
 
@@ -1940,8 +1927,7 @@ async function getTaskList(ctx) {
 
 async function receiveActivity(ctx, activity) {
         $.log(`领取奖励: ${activity.activity_name}`);
-        const { isSuccess, data, response } = await requestApi('https://user-api.smzdm.com/task/activity_receive', {
-            method: 'post',
+        const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/task/activity_receive', {
             headers: getHeaders(ctx),
             data: {
                 activity_id: activity.activity_id
@@ -1966,8 +1952,7 @@ async function receiveReward(ctx, taskId) {
             };
         }
 
-        const { isSuccess, data, response } = await requestApi('https://user-api.smzdm.com/task/activity_task_receive', {
-            method: 'post',
+        const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/task/activity_task_receive', {
             headers: getHeaders(ctx),
             data: {
                 robot_token: robotToken,
