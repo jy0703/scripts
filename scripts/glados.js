@@ -134,31 +134,57 @@ function GetCookie() {
     try {
         $.log("[GLaDOS] GetCookie 函数已触发");
         
-        if ($request) {
-            $.log(`[GLaDOS] 请求方法: ${$request.method}`);
-            $.log(`[GLaDOS] 请求URL: ${$request.url}`);
-            
-            if ($request.method === 'OPTIONS') {
-                $.log("[GLaDOS] OPTIONS 请求，跳过");
-                return;
-            }
+        if (typeof $request === 'undefined') {
+            $.log("[GLaDOS] $request 未定义，跳过");
+            return;
+        }
+        
+        if ($request && $request.method === 'OPTIONS') {
+            $.log("[GLaDOS] OPTIONS 请求，跳过");
+            return;
         }
 
-        const headers = $request?.headers || {};
-        $.log(`[GLaDOS] 请求头: ${JSON.stringify(headers)}`);
+        const headers = $request.headers || {};
+        const url = $request.url || '';
         
-        const header = Object.keys(headers).reduce((acc, key) => {
-            acc[key.toLowerCase()] = headers[key];
-            return acc;
-        }, {});
+        $.log(`[GLaDOS] 请求URL: ${url}`);
+        
+        let host = '';
+        if (url) {
+            try {
+                host = new URL(url).hostname;
+            } catch (e) {
+                $.log("[GLaDOS] 解析URL失败");
+            }
+        }
+        
+        if (!host && headers.Host) {
+            host = headers.Host;
+        }
+        if (!host && headers['host']) {
+            host = headers['host'];
+        }
 
-        const cookie = header['cookie'] || header['Cookie'] || '';
-        const host = header['host'] || header['Host'] || ($request?.url ? new URL($request.url).hostname : '');
-
-        $.log(`[GLaDOS] Cookie: ${cookie ? '存在 (' + cookie.length + '字符)' : '为空'}`);
+        let cookies = [];
+        if (Array.isArray(headers['cookie'])) {
+            cookies = headers['cookie'];
+        } else if (headers['cookie']) {
+            cookies = [headers['cookie']];
+        } else if (headers['Cookie']) {
+            if (Array.isArray(headers['Cookie'])) {
+                cookies = headers['Cookie'];
+            } else {
+                cookies = [headers['Cookie']];
+            }
+        }
+        
+        const cookieStr = cookies.map(c => String(c)).join('; ');
+        
+        $.log(`[GLaDOS] Cookie数量: ${cookies.length} 个`);
         $.log(`[GLaDOS] Host: ${host}`);
+        $.log(`[GLaDOS] Cookie: ${cookieStr ? cookieStr.substring(0, 100) + '...' : '为空'}`);
 
-        if (!cookie) {
+        if (!cookieStr) {
             throw new Error("Cookie 为空");
         }
 
@@ -172,7 +198,7 @@ function GetCookie() {
 
         const newData = {
             "userName": '用户',
-            "cookie": cookie,
+            "cookie": cookieStr,
             "domain": host
         };
 
