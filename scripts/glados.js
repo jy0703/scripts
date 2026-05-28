@@ -12,8 +12,8 @@
 hostname = glados.network, railgun.info, glados.vip
 
 [Script]
-GLaDOS获取Cookie = type=http-request,pattern=https:\/\/(glados\.network|railgun\.info|glados\.vip)\/console\/account,requires-body=0,max-size=0,timeout=600,script-path=./scripts/glados.js,script-update-interval=0
-GLaDOS = type=cron,cronexp="10 7 * * *",timeout=600,script-path=./scripts/glados.js,script-update-interval=0
+GLaDOS获取Cookie = type=http-request,pattern=https:\/\/(glados\.network|railgun\.info|glados\.vip)\/console\/account,requires-body=0,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/glados.js,script-update-interval=0
+GLaDOS = type=cron,cronexp="10 7 * * *",timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/glados.js,script-update-interval=0
 
 ------------------- Loon 配置 -------------------
 
@@ -21,8 +21,8 @@ GLaDOS = type=cron,cronexp="10 7 * * *",timeout=600,script-path=./scripts/glados
 hostname = glados.network, railgun.info, glados.vip
 
 [Script]
-http-request https:\/\/(glados\.network|railgun\.info|glados\.vip)\/console\/account tag=GLaDOS获取Cookie,script-path=./scripts/glados.js
-cron "10 7 * * *" script-path=./scripts/glados.js,tag=GLaDOS,enable=true
+http-request https:\/\/(glados\.network|railgun\.info|glados\.vip)\/console\/account tag=GLaDOS获取Cookie,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/glados.js
+cron "10 7 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/glados.js,tag=GLaDOS,enable=true
 
 --------------- Quantumult X 配置 ---------------
 
@@ -30,10 +30,10 @@ cron "10 7 * * *" script-path=./scripts/glados.js,tag=GLaDOS,enable=true
 hostname = %APPEND% glados.network, railgun.info, glados.vip
 
 [rewrite_local]
-^https:\/\/(glados\.network|railgun\.info|glados\.vip)\/console\/account$ url script-request-header ./scripts/glados.js
+^https:\/\/(glados\.network|railgun\.info|glados\.vip)\/console\/account$ url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/glados.js
 
 [task_local]
-10 7 * * * ./scripts/glados.js, tag=GLaDOS 签到, enabled=true
+10 7 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/glados.js, tag=GLaDOS 签到, enabled=true
 
  */
 
