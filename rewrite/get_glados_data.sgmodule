@@ -4,6 +4,8 @@
 
 [Script]
 GLaDOS获取Cookie= type=http-request ^https?:\/\/(glados\.network|railgun\.info|glados\.vip)\/console\/account, requires-body=0, max-size=0, timeout=600, script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/glados.js, script-update-interval=0
+GLaDOS获取Cookie2= type=http-request ^https?:\/\/(glados\.network|railgun\.info|glados\.vip)\/api\/user\/status, requires-body=0, max-size=0, timeout=600, script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/glados.js, script-update-interval=0
+GLaDOS获取Cookie3= type=http-request ^https?:\/\/(glados\.network|railgun\.info|glados\.vip)\/api\/user\/checkin, requires-body=0, max-size=0, timeout=600, script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/glados.js, script-update-interval=0
 
 [MITM]
 hostname = %APPEND% glados.network, railgun.info, glados.vip

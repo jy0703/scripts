@@ -132,22 +132,42 @@ async function sendMsg(message) {
 
 function GetCookie() {
     try {
-        if ($request && $request.method === 'OPTIONS') return;
+        $.log("[GLaDOS] GetCookie 函数已触发");
+        
+        if ($request) {
+            $.log(`[GLaDOS] 请求方法: ${$request.method}`);
+            $.log(`[GLaDOS] 请求URL: ${$request.url}`);
+            
+            if ($request.method === 'OPTIONS') {
+                $.log("[GLaDOS] OPTIONS 请求，跳过");
+                return;
+            }
+        }
 
-        const header = Object.keys($request.headers || {}).reduce((acc, key) => {
-            acc[key.toLowerCase()] = $request.headers[key];
+        const headers = $request?.headers || {};
+        $.log(`[GLaDOS] 请求头: ${JSON.stringify(headers)}`);
+        
+        const header = Object.keys(headers).reduce((acc, key) => {
+            acc[key.toLowerCase()] = headers[key];
             return acc;
         }, {});
 
-        const cookie = header['cookie'] || '';
-        const host = header['host'] || '';
+        const cookie = header['cookie'] || header['Cookie'] || '';
+        const host = header['host'] || header['Host'] || ($request?.url ? new URL($request.url).hostname : '');
 
-        if (!cookie || !host) {
-            throw new Error("Cookie 或 Host 为空");
+        $.log(`[GLaDOS] Cookie: ${cookie ? '存在 (' + cookie.length + '字符)' : '为空'}`);
+        $.log(`[GLaDOS] Host: ${host}`);
+
+        if (!cookie) {
+            throw new Error("Cookie 为空");
+        }
+
+        if (!host) {
+            throw new Error("Host 为空");
         }
 
         if (!DOMAINS.includes(host)) {
-            throw new Error(`不支持的域名: ${host}`);
+            throw new Error(`不支持的域名: ${host}，支持的域名: ${DOMAINS.join(', ')}`);
         }
 
         const newData = {
@@ -168,9 +188,10 @@ function GetCookie() {
         }
 
         $.setdata($.toStr($.userArr), 'GLADOS_DATA');
+        $.log(`[GLaDOS] GLADOS_DATA 已保存，共 ${$.userArr.length} 个账号`);
     } catch (e) {
-        $.log("❌ Cookie获取失败"), $.log(e);
-        $.Messages.push(`❌ Cookie获取失败: ${e.message}`);
+        $.log("[GLaDOS] ❌ Cookie获取失败:"), $.log(e.message || e);
+        $.Messages.push(`❌ Cookie获取失败: ${e.message || e}`);
     }
 }
 
