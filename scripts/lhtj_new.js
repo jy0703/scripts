@@ -394,12 +394,8 @@ async function doMiniProgramLottery(user) {
 async function doAppLotterySign(user) {
     let msg = '';
     try {
-        // 定义两组ID
+        // 定义ID组
         const idGroups = [
-            {
-                "component_no" : "CC16D30B58Y4B15D",
-                "activity_no" : "AP26N042T9O1TTQC"
-            },
             {
                 "component_no" : "C311908N01I94VR9",
                 "activity_no" : "AP26A052Q8CDQZMJ"
@@ -453,12 +449,8 @@ async function doAppLotterySign(user) {
 async function doAppLottery(user) {
     let msg = '';
     try {
-        // 定义两组ID
+        // 定义ID组
         const idGroups = [
-            {
-                "component_no" : "CC16D30B58Y4B15D",
-                "activity_no" : "AP26N042T9O1TTQC"
-            },
             {
                 "component_no" : "C311908N01I94VR9",
                 "activity_no" : "AP26A052Q8CDQZMJ"
