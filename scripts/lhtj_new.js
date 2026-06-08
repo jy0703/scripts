@@ -399,6 +399,10 @@ async function doAppLotterySign(user) {
             {
                 "component_no" : "CC16D30B58Y4B15D",
                 "activity_no" : "AP26N042T9O1TTQC"
+            },
+            {
+                "component_no" : "C311908N01I94VR9",
+                "activity_no" : "AP26A052Q8CDQZMJ"
             }
         ];
         
@@ -454,6 +458,10 @@ async function doAppLottery(user) {
             {
                 "component_no" : "CC16D30B58Y4B15D",
                 "activity_no" : "AP26N042T9O1TTQC"
+            },
+            {
+                "component_no" : "C311908N01I94VR9",
+                "activity_no" : "AP26A052Q8CDQZMJ"
             }
         ];
         
