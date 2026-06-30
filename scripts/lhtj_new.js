@@ -256,8 +256,8 @@ async function doMiniProgramLotterySign(user) {
                 "activity_no": "AP25O123K1HEE8DB"
             },*/
             {
-                "component_no": "CW16530P28V520GL",
-                "activity_no": "AP26P012R90F1UKX"
+                "component_no": "CJ11E56M39E686DZ",
+                "activity_no": "AP26S063J0D4P8EB"
             }
         ];
         
@@ -315,8 +315,8 @@ async function doMiniProgramLottery(user) {
                 "activity_no": "AP25O123K1HEE8DB"
             },*/
             {
-                "component_no": "CW16530P28V520GL",
-                "activity_no": "AP26P012R90F1UKX"
+                "component_no": "CJ11E56M39E686DZ",
+                "activity_no": "AP26S063J0D4P8EB"
             }
         ];
         
@@ -397,8 +397,8 @@ async function doAppLotterySign(user) {
         // 定义ID组
         const idGroups = [
             {
-                "component_no" : "C311908N01I94VR9",
-                "activity_no" : "AP26A052Q8CDQZMJ"
+                "component_no" : "CJ11E56M39E686DZ",
+                "activity_no" : "AP26S063J0D4P8EB"
             }
         ];
         
@@ -452,8 +452,8 @@ async function doAppLottery(user) {
         // 定义ID组
         const idGroups = [
             {
-                "component_no" : "C311908N01I94VR9",
-                "activity_no" : "AP26A052Q8CDQZMJ"
+                "component_no" : "CJ11E56M39E686DZ",
+                "activity_no" : "AP26S063J0D4P8EB"
             }
         ];
         
