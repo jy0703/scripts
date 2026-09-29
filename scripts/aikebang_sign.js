@@ -23,6 +23,7 @@ hostname = api.ikbang.cn
 
 [Script]
 http-request ^https?:\/\/api\.ikbang\.cn\/v2\/iclick-new\/usercenter\/getUserDetails tag=艾克帮签到获取Token,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aikebang_sign.js,requires-body=1
+http-response ^https?:\/\/api\.ikbang\.cn\/v2\/iclick-new\/usercenter\/getUserDetails tag=艾克帮签到获取Token2,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aikebang_sign.js,requires-body=1
 
 cron "0 8 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aikebang_sign.js,tag=艾克帮签到,enable=true
 
