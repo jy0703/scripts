@@ -11,9 +11,9 @@
 hostname = membergateway.zto.com, hdgateway.zto.com
 
 [Script]
-中通快递签到获取Token = type=http-request,pattern=https:\/\/membergateway\.zto\.com\/getMember,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,script-update-interval=0
+中通快递签到获取Token = type=http-request,pattern=^https?:\/\/membergateway\.zto\.com\/getMember,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,script-update-interval=0
 
-中通快递签到获取Token2 = type=http-response,pattern=https:\/\/membergateway\.zto\.com\/getMember,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,script-update-interval=0
+中通快递签到获取Token2 = type=http-response,pattern=^https?:\/\/membergateway\.zto\.com\/getMember,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,script-update-interval=0
 
 中通快递签到 = type=cron,cronexp="0 8 * * *",timeout=60,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,script-update-interval=0
 
@@ -23,8 +23,8 @@ hostname = membergateway.zto.com, hdgateway.zto.com
 hostname = membergateway.zto.com, hdgateway.zto.com
 
 [Script]
-http-request https:\/\/membergateway\.zto\.com\/getMember tag=中通快递签到获取Token,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,requires-body=1
-http-response https:\/\/membergateway\.zto\.com\/getMember tag=中通快递Token2,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,requires-body=1
+http-request ^https?:\/\/membergateway\.zto\.com\/getMember tag=中通快递签到获取Token,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,requires-body=1
+http-response ^https?:\/\/membergateway\.zto\.com\/getMember tag=中通快递Token2,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,requires-body=1
 
 cron "0 8 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,tag=中通快递签到,enable=true
 
@@ -34,8 +34,8 @@ cron "0 8 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/ma
 hostname = membergateway.zto.com, hdgateway.zto.com
 
 [rewrite_local]
-https:\/\/membergateway\.zto\.com\/getMember url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js
-https:\/\/membergateway\.zto\.com\/getMember url script-response-body https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js
+^https?:\/\/membergateway\.zto\.com\/getMember url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js
+^https?:\/\/membergateway\.zto\.com\/getMember url script-response-body https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js
 
 [task_local]
 0 8 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js, tag=中通快递签到, enabled=true
@@ -53,11 +53,11 @@ http:
     - "membergateway.zto.com"
     - "hdgateway.zto.com"
   script:
-    - match: https:\/\/membergateway\.zto\.com\/getMember
+    - match: ^https?:\/\/membergateway\.zto\.com\/getMember
       name: 中通快递签到获取Token
       type: request
       require-body: true
-    - match: https:\/\/membergateway\.zto\.com\/getMember
+    - match: ^https?:\/\/membergateway\.zto\.com\/getMember
       name: 中通快递Token2
       type: response
       require-body: true

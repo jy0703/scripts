@@ -11,7 +11,7 @@
 hostname = java-uapi.quanzhan888.com
 
 [Script]
-泉水签到获取Token = type=http-request,pattern=https:\/\/java-uapi\.quanzhan888\.com\/u\/user-center\/index,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/quanshui_sign.js,script-update-interval=0
+泉水签到获取Token = type=http-request,pattern=^https?:\/\/java-uapi\.quanzhan888\.com\/u\/user-center\/index,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/quanshui_sign.js,script-update-interval=0
 
 泉水签到 = type=cron,cronexp="0 8 * * *",timeout=60,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/quanshui_sign.js,script-update-interval=0
 
@@ -21,7 +21,7 @@ hostname = java-uapi.quanzhan888.com
 hostname = java-uapi.quanzhan888.com
 
 [Script]
-http-request https:\/\/java-uapi\.quanzhan888\.com\/u\/user-center\/index tag=泉水签到获取Token,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/quanshui_sign.js,requires-body=1
+http-request ^https?:\/\/java-uapi\.quanzhan888\.com\/u\/user-center\/index tag=泉水签到获取Token,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/quanshui_sign.js,requires-body=1
 
 cron "0 8 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/quanshui_sign.js,tag=泉水签到,enable=true
 
@@ -31,7 +31,7 @@ cron "0 8 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/ma
 hostname = java-uapi.quanzhan888.com
 
 [rewrite_local]
-https:\/\/java-uapi\.quanzhan888\.com\/u\/user-center\/index url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/quanshui_sign.js
+^https?:\/\/java-uapi\.quanzhan888\.com\/u\/user-center\/index url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/quanshui_sign.js
 
 [task_local]
 0 8 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/quanshui_sign.js, tag=泉水签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/images/quanshui.png, enabled=true
@@ -48,7 +48,7 @@ http:
   mitm:
     - "java-uapi.quanzhan888.com"
   script:
-    - match: https:\/\/java-uapi\.quanzhan888\.com\/u\/user-center\/index
+    - match: ^https?:\/\/java-uapi\.quanzhan888\.com\/u\/user-center\/index
       name: 泉水签到获取Token
       type: request
       require-body: true

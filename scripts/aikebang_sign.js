@@ -11,8 +11,8 @@
 hostname = api.ikbang.cn
 
 [Script]
-艾克帮签到获取Token = type=http-request,pattern=https:\/\/api\.ikbang\.cn\/v2\/iclick-new\/usercenter\/getUserDetails,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aikebang_sign.js,script-update-interval=0
-艾克帮签到获取Token2 = type=http-response,pattern=https:\/\/api\.ikbang\.cn\/v2\/iclick-new\/usercenter\/getUserDetails,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aikebang_sign.js,script-update-interval=0
+艾克帮签到获取Token = type=http-request,pattern=^https?:\/\/api\.ikbang\.cn\/v2\/iclick-new\/usercenter\/getUserDetails,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aikebang_sign.js,script-update-interval=0
+艾克帮签到获取Token2 = type=http-response,pattern=^https?:\/\/api\.ikbang\.cn\/v2\/iclick-new\/usercenter\/getUserDetails,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aikebang_sign.js,script-update-interval=0
 
 艾克帮签到 = type=cron,cronexp="0 8 * * *",timeout=60,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aikebang_sign.js,script-update-interval=0
 
@@ -22,7 +22,7 @@ hostname = api.ikbang.cn
 hostname = api.ikbang.cn
 
 [Script]
-http-request https:\/\/api\.ikbang\.cn\/v2\/iclick-new\/usercenter\/getUserDetails tag=艾克帮签到获取Token,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aikebang_sign.js,requires-body=1
+http-request ^https?:\/\/api\.ikbang\.cn\/v2\/iclick-new\/usercenter\/getUserDetails tag=艾克帮签到获取Token,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aikebang_sign.js,requires-body=1
 
 cron "0 8 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aikebang_sign.js,tag=艾克帮签到,enable=true
 
@@ -32,7 +32,7 @@ cron "0 8 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/ma
 hostname = api.ikbang.cn
 
 [rewrite_local]
-https:\/\/api\.ikbang\.cn\/v2\/iclick-new\/usercenter\/getUserDetails url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aikebang_sign.js
+^https?:\/\/api\.ikbang\.cn\/v2\/iclick-new\/usercenter\/getUserDetails url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aikebang_sign.js
 
 [task_local]
 0 8 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aikebang_sign.js, tag=艾克帮签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/images/aikebang.png, enabled=true
@@ -49,7 +49,7 @@ http:
   mitm:
     - "api.ikbang.cn"
   script:
-    - match: https:\/\/api\.ikbang\.cn\/v2\/iclick-new\/usercenter\/getUserDetails
+    - match: ^https?:\/\/api\.ikbang\.cn\/v2\/iclick-new\/usercenter\/getUserDetails
       name: 艾克帮签到获取Token
       type: request
       require-body: true

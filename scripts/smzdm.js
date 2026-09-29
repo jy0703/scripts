@@ -20,7 +20,7 @@
  * hostname = user-api.smzdm.com
  *
  * [Script]
- * 什么值得买获取Cookie = type=http-request,pattern=https?:\/\/user-api\.smzdm\.com\/(checkin|task\/list_v2),requires-body=1,max-size=0,timeout=60,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/smzdm.js,script-update-interval=0
+ * 什么值得买获取Cookie = type=http-request,pattern=^https?:\/\/user-api\.smzdm\.com\/(checkin|task\/list_v2),requires-body=1,max-size=0,timeout=60,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/smzdm.js,script-update-interval=0
  * 什么值得买 = type=cron,cronexp="10 8 * * *",timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/smzdm.js,script-update-interval=0
  *
  * ------------------- Loon 配置 -------------------
@@ -29,7 +29,7 @@
  * hostname = user-api.smzdm.com
  *
  * [Script]
- * http-request https?:\/\/user-api\.smzdm\.com\/(checkin|task\/list_v2) tag=什么值得买获取Cookie,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/smzdm.js,requires-body=1
+ * http-request ^https?:\/\/user-api\.smzdm\.com\/(checkin|task\/list_v2) tag=什么值得买获取Cookie,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/smzdm.js,requires-body=1
  * cron "10 8 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/smzdm.js,tag=什么值得买,enable=true
  *
  * --------------- Quantumult X 配置 ---------------
@@ -38,7 +38,7 @@
  * hostname = user-api.smzdm.com
  *
  * [rewrite_local]
- * https?:\/\/user-api\.smzdm\.com\/(checkin|task\/list_v2) url script-request-body https://raw.githubusercontent.com/jy0703/scripts/main/scripts/smzdm.js
+ * ^https?:\/\/user-api\.smzdm\.com\/(checkin|task\/list_v2) url script-request-body https://raw.githubusercontent.com/jy0703/scripts/main/scripts/smzdm.js
  *
  * [task_local]
  * 10 8 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/smzdm.js, tag=什么值得买, enabled=true

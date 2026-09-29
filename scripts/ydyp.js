@@ -11,7 +11,7 @@
 hostname = h.139.com
 
 [Script]
-移动云盘签到获取Token = type=http-request,pattern=https:\/\/h\.139\.com\/ccopapi\/share\/share5gMessage,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,script-update-interval=0
+移动云盘签到获取Token = type=http-request,pattern=^https?:\/\/h\.139\.com\/ccopapi\/share\/share5gMessage,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,script-update-interval=0
 移动云盘签到 = type=cron,cronexp="0 8 * * *",timeout=60,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,script-update-interval=0
 
 ------------------- Loon 配置 -------------------
@@ -27,7 +27,7 @@ cron "0 8 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/ma
 hostname = h.139.com
 
 [rewrite_local]
-https:\/\/h\.139\.com\/ccopapi\/share\/share5gMessage url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js
+^https?:\/\/h\.139\.com\/ccopapi\/share\/share5gMessage url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js
 
 [task_local]
 0 8 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js, tag=移动云盘签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/yidongyunpan.png, enabled=true
@@ -47,7 +47,7 @@ http:
     - "orches.yun.139.com"
     - "h.139.com"
   script:
-    - match: https:\/\/h\.139\.com\/ccopapi\/share\/share5gMessage
+    - match: ^https?:\/\/h\.139\.com\/ccopapi\/share\/share5gMessage
       name: 移动云盘签到获取Token
       type: request
       require-body: true
