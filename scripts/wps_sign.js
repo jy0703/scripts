@@ -3,7 +3,8 @@
  * 活动规则：每日签到获得积分奖励
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。
  * 环境变量：WPS_COOKIE
- * 更新时间：2026-09-30 获取 Cookie 改为拦截 activity-rubik/custom_page/info，且要求含 act_csrf_token
+ * 获取 Cookie：在 WPS 内从会员中心横幅进入签到活动页（触发 rubik2/portal 页面请求）即可抓取
+ * 更新时间：2026-09-30 获取 Cookie 改为拦截 rubik2/portal 活动页，且要求含 act_csrf_token
 
 ------------------ Surge 配置 ------------------
 
@@ -11,7 +12,7 @@
 hostname = personal-act.wps.cn
 
 [Script]
-WPS签到获取Cookie = type=http-request,pattern=^https?:\/\/personal-act\.wps\.cn\/activity-rubik\/custom_page\/info,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js,script-update-interval=0
+WPS签到获取Cookie = type=http-request,pattern=^https?:\/\/personal-act\.wps\.cn\/rubik2\/portal\/,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js,script-update-interval=0
 
 WPS签到 = type=cron,cronexp="0 8 * * *",timeout=60,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js,script-update-interval=0
 
@@ -21,7 +22,7 @@ WPS签到 = type=cron,cronexp="0 8 * * *",timeout=60,script-path=https://raw.git
 hostname = personal-act.wps.cn
 
 [Script]
-http-request ^https?:\/\/personal-act\.wps\.cn\/activity-rubik\/custom_page\/info tag=WPS签到获取Cookie,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js,requires-body=1
+http-request ^https?:\/\/personal-act\.wps\.cn\/rubik2\/portal\/ tag=WPS签到获取Cookie,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js,requires-body=1
 
 cron "0 8 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js,tag=WPS签到,enable=true
 
@@ -31,7 +32,7 @@ cron "0 8 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/ma
 hostname = personal-act.wps.cn
 
 [rewrite_local]
-^https?:\/\/personal-act\.wps\.cn\/activity-rubik\/custom_page\/info url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js
+^https?:\/\/personal-act\.wps\.cn\/rubik2\/portal\/ url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js
 
 [task_local]
 0 8 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js, tag=WPS签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/images/wps.png, enabled=true
@@ -50,7 +51,7 @@ http:
     - "personal-act.wps.cn" 
     - "account.wps.cn"
   script:
-    - match: ^https?:\/\/personal-act\.wps\.cn\/activity-rubik\/custom_page\/info
+    - match: ^https?:\/\/personal-act\.wps\.cn\/rubik2\/portal\/
       name: WPS签到获取Cookie
       type: request
       require-body: true
@@ -1170,8 +1171,8 @@ function GetCookie() {
 // 脚本执行入口
 !(async () => {
     if (typeof $request !== `undefined`) {
-        // 仅处理 activity-rubik/custom_page/info 的请求来获取 Cookie
-        if ($request.url.includes('personal-act.wps.cn/activity-rubik/custom_page/info')) {
+        // 仅处理 rubik2/portal 活动页请求来获取 Cookie（该页面会带上 act_csrf_token）
+        if ($request.url.includes('personal-act.wps.cn/rubik2/portal/')) {
             GetCookie();
         }
     } else {
