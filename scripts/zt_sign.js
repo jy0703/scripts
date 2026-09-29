@@ -23,8 +23,7 @@ hostname = membergateway.zto.com, hdgateway.zto.com
 hostname = membergateway.zto.com, hdgateway.zto.com
 
 [Script]
-http-request ^https?:\/\/membergateway\.zto\.com\/getMember tag=中通快递签到获取Token,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,requires-body=1
-http-response ^https?:\/\/membergateway\.zto\.com\/getMember tag=中通快递Token2,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,requires-body=1
+http-response ^https?:\/\/membergateway\.zto\.com\/getMember tag=中通快递Token,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,requires-body=1
 
 cron "0 8 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,tag=中通快递签到,enable=true
 
