@@ -3,7 +3,7 @@
  * 活动规则：每日签到获得积分奖励
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。
  * 环境变量：WPS_COOKIE
- * 更新时间：2026-09-30 获取 Cookie 改为拦截 activity-rubik/custom_page/info
+ * 更新时间：2026-09-30 获取 Cookie 改为拦截 activity-rubik/custom_page/info，且要求含 act_csrf_token
 
 ------------------ Surge 配置 ------------------
 
@@ -1132,6 +1132,12 @@ function GetCookie() {
             
             if (!uid) {
                 $.log(`❌ 无法从Cookie中提取uid`);
+                return;
+            }
+
+            // 缺少 act_csrf_token 的 Cookie 在签到时会被跳过，因此不入库
+            if (!extractCsrfTokenFromCookie(cookie)) {
+                $.log(`❌ Cookie 缺少 act_csrf_token，未存入，请在 WPS 内打开签到活动页后重新抓取`);
                 return;
             }
             
