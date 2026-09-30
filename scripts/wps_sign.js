@@ -4,7 +4,7 @@
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。
  * 环境变量：WPS_COOKIE
  * 获取 Cookie：在 WPS 内从会员中心横幅进入签到活动页（触发 rubik2/portal 页面请求）即可抓取
- * 更新时间：2026-09-30 获取 Cookie 改为拦截 rubik2/portal 活动页，且要求含 act_csrf_token
+ * 更新时间：2026-09-30 获取 Cookie 改为拦截 rubik2/portal 活动页
 
 ------------------ Surge 配置 ------------------
 
@@ -85,9 +85,8 @@ async function main() {
             $.messages = [];
             $.cookie = $.userArr[i].cookie;  // 从对象中提取cookie字符串
             $.uid = extractUidFromCookie($.userArr[i]);
-            $.act_csrf_token = extractCsrfTokenFromCookie($.userArr[i]);
 
-            if (!$.uid || !$.act_csrf_token) {
+            if (!$.uid) {
                 $.log(`❌ Cookie 格式不正确，缺少必要参数\n`);
                 continue;
             }
@@ -129,16 +128,6 @@ function extractUidFromCookie(cookieObj) {
     if (!cookieString) return null;
     
     const match = cookieString.match(/(?:^|;)\s*uid\s*=\s*([^;]+)/);
-    return match ? match[1] : null;
-}
-
-// 提取csrf token
-function extractCsrfTokenFromCookie(cookieObj) {
-    // 如果cookie是对象，从中提取cookie字符串
-    const cookieString = typeof cookieObj === 'string' ? cookieObj : cookieObj.cookie;
-    if (!cookieString) return null;
-    
-    const match = cookieString.match(/(?:^|;)\s*act_csrf_token\s*=\s*([^;]+)/);
     return match ? match[1] : null;
 }
 
@@ -283,7 +272,6 @@ async function doCommonTask(taskId, title, componentAction = 'task_center.finish
                 'sec-fetch-mode': 'cors',
                 'sec-fetch-site': 'same-origin',
                 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36 Edg/134.0.0.0',
-                'x-act-csrf-token': $.act_csrf_token,
                 'cookie': $.cookie
             },
             body: {
@@ -346,7 +334,6 @@ async function claimReward(taskId, title) {
                 'sec-fetch-mode': 'cors',
                 'sec-fetch-site': 'same-origin',
                 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36 Edg/134.0.0.0',
-                'x-act-csrf-token': $.act_csrf_token,
                 'cookie': $.cookie
             },
             body: {
@@ -631,7 +618,6 @@ async function doLottery(times) {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36 Edg/134.0.0.0',
                     'Accept': 'application/json, text/plain, */*',
                     'Content-Type': 'application/json',
-                    'X-Act-Csrf-Token': $.act_csrf_token,
                     'cookie': $.cookie
                 },
                 body: {
@@ -954,7 +940,6 @@ async function doLottery3SignIn() {
                 'sec-fetch-dest': 'empty',
                 'sec-fetch-mode': 'cors',
                 'sec-fetch-site': 'same-origin',
-                'x-act-csrf-token': $.act_csrf_token,
                 'cookie': $.cookie
             },
             body: {
@@ -1078,7 +1063,6 @@ async function doLottery3(times) {
                     'sec-fetch-dest': 'empty',
                     'sec-fetch-mode': 'cors',
                     'sec-fetch-site': 'same-origin',
-                    'x-act-csrf-token': $.act_csrf_token,
                     'cookie': $.cookie
                 },
                 body: {
@@ -1136,12 +1120,6 @@ function GetCookie() {
                 return;
             }
 
-            // 缺少 act_csrf_token 的 Cookie 在签到时会被跳过，因此不入库
-            if (!extractCsrfTokenFromCookie(cookie)) {
-                $.log(`❌ Cookie 缺少 act_csrf_token，未存入，请在 WPS 内打开签到活动页后重新抓取`);
-                return;
-            }
-            
             $.log(`✅ 成功获取 Cookie，提取到 UID: ${uid}`);
             
             // 使用 find() 方法找到与 uid 匹配的对象，以新增/更新用户 cookie
