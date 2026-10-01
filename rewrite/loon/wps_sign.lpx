@@ -1,0 +1,17 @@
+#!name = WPS签到
+#!desc = 自动抓取 WPS 签到 Cookie，并每日定时签到（在 WPS 会员中心横幅进入签到活动页自动获取）
+#!author = Fengzzzz
+#!homepage = https://github.com/jy0703/scripts
+#!tag = 签到,自动化
+#!type = normal
+
+[Argument]
+capture = switch,false,tag=捕获 Cookie,desc=打开后进入 WPS 签到活动页自动抓取 Cookie，抓取完成后建议关闭
+cronExpression = input,"0 8 * * *",tag=定时参数,desc=这里需要输入符合 CRON 表达式的参数
+
+[Script]
+http-request ^https?:\/\/personal-act\.wps\.cn\/rubik2\/portal\/ script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js,requires-body=true,timeout=30,tag=WPS签到获取Cookie,enable={capture}
+cron {cronExpression} script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js,timeout=600,tag=WPS签到,enable=true
+
+[Mitm]
+hostname = personal-act.wps.cn

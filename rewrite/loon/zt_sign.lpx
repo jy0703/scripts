@@ -1,0 +1,18 @@
+#!name = 中通快递签到
+#!desc = 自动抓取中通快递 Token，并每日定时签到（打开中通快递小程序进入签到中心自动获取）
+#!author = Fengzzzz
+#!homepage = https://github.com/jy0703/scripts
+#!tag = 签到,自动化
+#!type = normal
+
+[Argument]
+capture = switch,false,tag=捕获 Token,desc=打开后进入中通快递小程序签到中心自动抓取 Token，抓取完成后建议关闭
+cronExpression = input,"0 8 * * *",tag=定时参数,desc=这里需要输入符合 CRON 表达式的参数
+
+[Script]
+http-request ^https?:\/\/membergateway\.zto\.com\/getMember script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,requires-body=true,timeout=30,tag=中通快递签到获取Token,enable={capture}
+http-response ^https?:\/\/membergateway\.zto\.com\/getMember script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,requires-body=true,timeout=30,tag=中通快递签到获取Token2,enable={capture}
+cron {cronExpression} script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,timeout=600,tag=中通快递签到,enable=true
+
+[Mitm]
+hostname = membergateway.zto.com, hdgateway.zto.com

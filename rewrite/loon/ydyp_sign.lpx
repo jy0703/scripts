@@ -1,0 +1,17 @@
+#!name = 移动云盘签到
+#!desc = 自动抓取移动云盘 Token，并每日定时签到（打开移动云盘 App 活动页自动获取）
+#!author = Fengzzzz
+#!homepage = https://github.com/jy0703/scripts
+#!tag = 签到,自动化
+#!type = normal
+
+[Argument]
+capture = switch,false,tag=捕获 Token,desc=打开后进入移动云盘活动页自动抓取 Token，抓取完成后建议关闭
+cronExpression = input,"0 8 * * *",tag=定时参数,desc=这里需要输入符合 CRON 表达式的参数
+
+[Script]
+http-request ^https?:\/\/h\.139\.com\/ccopapi\/share\/share5gMessage script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,requires-body=true,timeout=30,tag=移动云盘签到获取Token,enable={capture}
+cron {cronExpression} script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,timeout=600,tag=移动云盘签到,enable=true
+
+[Mitm]
+hostname = h.139.com

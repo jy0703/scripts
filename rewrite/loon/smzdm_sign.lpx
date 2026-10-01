@@ -1,0 +1,17 @@
+#!name = 什么值得买
+#!desc = 自动抓取什么值得买 Cookie，并每日定时签到 + 完成每日任务（打开 App 进入签到页自动获取）
+#!author = Fengzzzz
+#!homepage = https://github.com/jy0703/scripts
+#!tag = 签到,自动化
+#!type = normal
+
+[Argument]
+capture = switch,false,tag=捕获 Cookie,desc=打开后在什么值得买 App 触发签到请求自动抓取，抓取完成后建议关闭
+cronExpression = input,"10 8 * * *",tag=定时参数,desc=这里需要输入符合 CRON 表达式的参数
+
+[Script]
+http-request ^https?:\/\/user-api\.smzdm\.com\/(checkin|task\/list_v2) script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/smzdm.js,requires-body=true,timeout=60,tag=什么值得买获取Cookie,enable={capture}
+cron {cronExpression} script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/smzdm.js,timeout=600,tag=什么值得买,enable=true
+
+[Mitm]
+hostname = user-api.smzdm.com

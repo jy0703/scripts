@@ -399,8 +399,8 @@ async function doAppLotterySign(user) {
         // 定义ID组
         const idGroups = [
             {
-                "component_no" : "C115E06Z10I56LTD",
-                "activity_no" : "AP26W083N10INOJP"
+                "component_no" : "CF09V55S45360MKT",
+                "activity_no" : "AP26W092U9CKJWLC"
             }
         ];
         
@@ -454,8 +454,8 @@ async function doAppLottery(user) {
         // 定义ID组
         const idGroups = [
             {
-                "component_no" : "C115E06Z10I56LTD",
-                "activity_no" : "AP26W083N10INOJP"
+                "component_no" : "CF09V55S45360MKT",
+                "activity_no" : "AP26W092U9CKJWLC"
             }
         ];
         

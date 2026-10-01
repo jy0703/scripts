@@ -1,0 +1,18 @@
+#!name = 龙湖天街签到
+#!desc = 自动抓取龙湖天街 Cookie，并每日定时签到、抽奖（打开龙湖天街小程序：我的 - 签到赚珑珠 - 任务赚奖励 - 马上签到）
+#!author = Fengzzzz
+#!homepage = https://github.com/jy0703/scripts
+#!icon = https://raw.githubusercontent.com/jy0703/scripts/main/icons/lhtj.png
+#!tag = 签到,自动化
+#!type = normal
+
+[Argument]
+capture = switch,false,tag=捕获 Cookie,desc=打开后按说明操作自动抓取 Cookie，抓取完成后建议关闭
+cronExpression = input,"0 1 * * *",tag=定时参数,desc=这里需要输入符合 CRON 表达式的参数
+
+[Script]
+http-request ^https?:\/\/gw2c\-hw\-open\.longfor\.com\/lmarketing\-task\-api\-mvc\-prod\/openapi\/task\/v1\/signature\/clock script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/lhtj.js,requires-body=false,timeout=600,tag=龙湖天街获取Cookie,enable={capture}
+cron {cronExpression} script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/lhtj.js,timeout=600,tag=龙湖天街,enable=true
+
+[Mitm]
+hostname = gw2c-hw-open.longfor.com
