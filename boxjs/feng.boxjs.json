@@ -12,8 +12,8 @@
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aikebang_sign.js",
       "descs_html": ["艾克帮签到，每日签到获得积分奖励，支持多账号"],
       "icons": [
-        "https://raw.githubusercontent.com/jy0703/scripts/main/images/aikebang.png",
-        "https://raw.githubusercontent.com/jy0703/scripts/main/images/aikebang.png"
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/aikebang.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/aikebang.png"
       ],
       "keys": ["AIKEBANG_TOKEN"],
       "settings": [
@@ -36,8 +36,8 @@
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/quanshui_sign.js",
       "descs_html": ["泉水签到，每日签到获得积分奖励，支持多账号"],
       "icons": [
-        "https://raw.githubusercontent.com/jy0703/scripts/main/images/quanshui.png",
-        "https://raw.githubusercontent.com/jy0703/scripts/main/images/quanshui.png"
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/quanshui.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/quanshui.png"
       ],
       "keys": ["QUANSHUI_TOKEN"],
       "settings": [
@@ -60,8 +60,8 @@
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js",
       "descs_html": ["WPS签到，每日签到获得积分奖励，支持多账号"],
       "icons": [
-        "https://raw.githubusercontent.com/jy0703/scripts/main/images/wps.png",
-        "https://raw.githubusercontent.com/jy0703/scripts/main/images/wps.png"
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/wps.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/wps.png"
       ],
       "keys": ["WPS_COOKIE"],
       "settings": [
@@ -108,8 +108,8 @@
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js",
       "descs_html": ["中通快递签到，每日签到获得奖励，支持多账号"],
       "icons": [
-        "https://raw.githubusercontent.com/jy0703/scripts/main/images/zt.png",
-        "https://raw.githubusercontent.com/jy0703/scripts/main/images/zt.png"
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/zt.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/zt.png"
       ],
       "keys": ["ZTO_TOKEN"],
       "settings": [
