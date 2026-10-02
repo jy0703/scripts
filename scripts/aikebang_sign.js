@@ -35,7 +35,7 @@ hostname = api.ikbang.cn
 ^https?:\/\/api\.ikbang\.cn\/v2\/iclick-new\/usercenter\/getUserDetails url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aikebang_sign.js
 
 [task_local]
-0 8 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aikebang_sign.js, tag=艾克帮签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/images/aikebang.png, enabled=true
+0 8 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aikebang_sign.js, tag=艾克帮签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/aikebang.png, enabled=true
 
 ------------------ Stash 配置 ------------------
 

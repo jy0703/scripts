@@ -37,7 +37,7 @@ hostname = membergateway.zto.com, hdgateway.zto.com
 ^https?:\/\/membergateway\.zto\.com\/getMember url script-response-body https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js
 
 [task_local]
-0 8 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js, tag=中通快递签到, enabled=true
+0 8 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js, tag=中通快递签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/zt.png, enabled=true
 
 ------------------ Stash 配置 ------------------
 

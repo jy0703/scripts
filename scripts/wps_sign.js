@@ -35,7 +35,7 @@ hostname = personal-act.wps.cn
 ^https?:\/\/personal-act\.wps\.cn\/rubik2\/portal\/ url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js
 
 [task_local]
-0 8 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js, tag=WPS签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/images/wps.png, enabled=true
+0 8 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js, tag=WPS签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/wps.png, enabled=true
 
 ------------------ Stash 配置 ------------------
 

@@ -41,7 +41,7 @@
  * ^https?:\/\/user-api\.smzdm\.com\/(checkin|task\/list_v2) url script-request-body https://raw.githubusercontent.com/jy0703/scripts/main/scripts/smzdm.js
  *
  * [task_local]
- * 10 8 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/smzdm.js, tag=什么值得买, enabled=true
+ * 10 8 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/smzdm.js, tag=什么值得买, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/smzdm.png, enabled=true
  */
 
 const $ = new Env('什么值得买');

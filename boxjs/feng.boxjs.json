@@ -148,6 +148,30 @@
           "desc": ""
         }
       ]
+    },
+    {
+      "id": "cll_sign",
+      "name": "车来了签到",
+      "author": "@Feng",
+      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js",
+      "descs_html": ["车来了签到，每日签到获得金币奖励，支持多账号"],
+      "icons": [
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/cll.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/cll.png"
+      ],
+      "keys": ["cll_data"],
+      "settings": [
+        {
+          "id": "cll_data",
+          "name": "车来了数据",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 5,
+          "placeholder": "",
+          "desc": ""
+        }
+      ]
     }
   ]
 }

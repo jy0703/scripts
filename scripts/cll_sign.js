@@ -1,53 +1,51 @@
 /**
- * 脚本名称：PingMe签到 - 签到、视频奖励
- * 活动规则：每日签到获得 Coins，可继续领取视频奖励
- * 脚本说明：支持多账号，支持 NE / Node.js 环境。签到参数（请求头 + 公共参数）由本脚本的 GetCookie 抓取后存入 pingme_data
- * 环境变量：pingme_data
- * 更新时间：2026-09-29
+ * 脚本名称：车来了签到 - 签到
+ * 活动规则：每日签到获得金币奖励
+ * 脚本说明：支持多账号，支持 NE / Node.js 环境。签到参数（URL 查询参数）由本脚本的 GetCookie 抓取后存入 cll_data
+ * 环境变量：cll_data
+ * 更新时间：2026-10-02
 
 ------------------ Surge 配置 ------------------
 
 [Script]
-PingMe获取签到参数= type=http-request ^https?:\/\/api\.pingmeapp\.net\/app\/queryBalanceAndBonus, requires-body=0, max-size=0, timeout=600, script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/pingme_sign.js, script-update-interval=0
+车来了获取签到参数= type=http-request ^https?:\/\/web\.chelaile\.net\.cn\/api\/op-activity-api\/daily-act\/signin, requires-body=0, max-size=0, timeout=600, script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js, script-update-interval=0
 
-PingMe签到= type=cron cronexp="30 8,20 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/pingme_sign.js, timeout=600, script-update-interval=0
+车来了签到= type=cron cronexp="0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js, timeout=600, script-update-interval=0
 
 [MITM]
-hostname = api.pingmeapp.net
+hostname = web.chelaile.net.cn
 
 ------------------- Loon 配置 -------------------
 
 [Script]
-http-request ^https?:\/\/api\.pingmeapp\.net\/app\/queryBalanceAndBonus script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/pingme_sign.js, timeout=600, tag=PingMe获取签到参数
+http-request ^https?:\/\/web\.chelaile\.net\.cn\/api\/op-activity-api\/daily-act\/signin script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js, timeout=600, tag=车来了获取签到参数
 
-cron "30 8,20 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/pingme_sign.js, timeout=600, tag=PingMe签到
+cron "0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js, timeout=600, tag=车来了签到
 
 [MITM]
-hostname = api.pingmeapp.net
+hostname = web.chelaile.net.cn
 
 --------------- Quantumult X 配置 ---------------
 
 [rewrite_local]
-^https?:\/\/api\.pingmeapp\.net\/app\/queryBalanceAndBonus url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/pingme_sign.js
+^https?:\/\/web\.chelaile\.net\.cn\/api\/op-activity-api\/daily-act\/signin url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js
 
 [task_local]
-"30 8,20 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/pingme_sign.js, tag=PingMe签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/pingme.png, enabled=true
+"0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js, tag=车来了签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/cll.png, enabled=true
 
 [MITM]
-hostname = api.pingmeapp.net
+hostname = web.chelaile.net.cn
 
  */
 
-const $ = new Env('PingMe签到');
+const $ = new Env('车来了签到');
 $.is_debug = getEnv('is_debug') || 'false';  // 调试模式
-$.userInfo = getEnv('pingme_data') || '';  // 获取账号
+$.userInfo = getEnv('cll_data') || '';  // 获取账号
 $.userArr = [].concat($.toObj($.userInfo) || []);  // 用户信息
 $.Messages = [];
 
-const HOST = 'api.pingmeapp.net';
-const SECRET = '0fOiukQq7jXZV2GRi9LGlO';  // 接口签名密钥
-const MAX_VIDEO = 5;  // 视频奖励最大领取次数
-const VIDEO_DELAY = 8000;  // 视频奖励间隔，单位毫秒
+const HOST = 'web.chelaile.net.cn';
+const API_PATH = '/api/op-activity-api/daily-act/signin';
 
 
 // 主函数
@@ -64,17 +62,8 @@ async function main() {
             $.beforeMsgs = '';
             $.user = $.userArr[i];
 
-            // 查询运行前余额
-            await getBalance($.user, '运行前余额');
-
             // 执行签到
             await doSign($.user);
-
-            // 领取视频奖励
-            await doVideoBonus($.user);
-
-            // 查询最新余额
-            await getBalance($.user, '最新余额');
 
             // 合并通知
             $.messages.splice(0, 0, $.beforeMsgs), $.Messages = $.Messages.concat($.messages);
@@ -82,25 +71,30 @@ async function main() {
 
         $.log(`\n----- 所有账号执行完成 -----\n`);
     } else {
-        throw new Error('未找到 pingme_data 变量 ❌');
+        throw new Error('未找到 cll_data 变量 ❌');
     }
 }
 
-// 获取Cookie数据
+// 获取签到参数
 function GetCookie() {
     try {
         if ($request && $request.method === 'OPTIONS') return;
 
+        const paramsRaw = parseRawQuery($request.url);
+        if (!paramsRaw.userId || !paramsRaw.secret) throw new Error('获取签到参数错误，值为空');
+
         const capture = {
-            'paramsRaw': parseRawQuery($request.url),
-            'headers': { ...$request.headers }
+            'paramsRaw': paramsRaw,
+            'headers': {
+                'user-agent': $request.headers['user-agent'] || $request.headers['User-Agent'],
+                'referer': $request.headers['referer'] || $request.headers['Referer']
+            }
         };
-        if (!Object.keys(capture.paramsRaw).length) throw new Error('获取签到参数错误，值为空');
 
         const id = getAccountId(capture);
         const index = $.userArr.findIndex(e => getAccountId(e) === id);
         index !== -1 ? $.userArr[index] = capture : $.userArr.push(capture);
-        $.setdata($.toStr($.userArr), 'pingme_data');
+        $.setdata($.toStr($.userArr), 'cll_data');
         $.Messages.push('🎉获取签到参数成功!');
         $.log('🎉获取签到参数成功!');
     } catch (e) {
@@ -108,126 +102,60 @@ function GetCookie() {
     }
 }
 
-// 查询余额
-async function getBalance(user, label) {
-    let msg = '';
-    try {
-        const options = {
-            url: buildUrl('queryBalanceAndBonus', user),
-            headers: buildHeaders(user)
-        };
-
-        const result = await Request(options);
-
-        if (result?.retcode === 0) {
-            // 最新余额作为该账号通知的开头
-            if (label === '最新余额') {
-                $.beforeMsgs = `💰 最新余额: ${result?.result?.balance} Coins\n`;
-                $.log($.beforeMsgs);
-            } else {
-                msg = `💰 ${label}: ${result?.result?.balance} Coins`;
-            }
-        } else {
-            msg = `💰 ${label}: ❌ ${result?.retmsg || $.toStr(result)}`;
-        }
-    } catch (e) {
-        msg = `💰 ${label}: ❌ ${e.message}`;
-    }
-    msg && $.messages.push(msg), $.log(msg);
-}
-
 // 签到
 async function doSign(user) {
     let msg = '';
     try {
         const options = {
-            url: buildUrl('checkIn', user),
+            url: buildUrl(user),
             headers: buildHeaders(user)
         };
 
         const result = await Request(options);
+        const status = result?.status;
 
-        if (result?.retcode === 0) {
-            msg = `✅ 签到: ${(result?.result?.bonusHint || result?.retmsg || '').replace(/\n/g, ' ')}`;
+        if (status === '00') {
+            const rewardType = result?.data?.rewardType || '';
+            const rewardValue = result?.data?.rewardValue || 0;
+            const rewardName = rewardType === 'coin' ? '金币' : rewardType;
+            $.user.rewardTotal = (Number($.user.rewardTotal) || 0) + (Number(rewardValue) || 0);
+            msg = `✅ 签到: 成功, 获得 ${rewardValue} ${rewardName}`;
+        } else if (status === '1002') {
+            msg = `📝 签到: 今日已签到`;
         } else {
-            msg = `📝 签到: ${result?.retmsg || $.toStr(result)}`;
+            msg = `❌ 签到: ${result?.errmsg || $.toStr(result)}`;
         }
     } catch (e) {
-        msg = `✅ 签到: ❌ ${e.message}`;
-    }
-    $.messages.push(msg), $.log(msg);
-}
-
-// 领取视频奖励
-async function doVideoBonus(user) {
-    let msg = '';
-    let total = 0;
-
-    for (let i = 1; i <= MAX_VIDEO; i++) {
-        // 首次等待 1.5 秒，之后按 VIDEO_DELAY 间隔
-        await $.wait(i === 1 ? 1500 : VIDEO_DELAY);
-
-        try {
-            const options = {
-                url: buildUrl('videoBonus', user),
-                headers: buildHeaders(user)
-            };
-
-            const result = await Request(options);
-
-            if (result?.retcode === 0) {
-                total += Number(result?.result?.bonus) || 0;
-                msg = `🎬 视频${i}: +${result?.result?.bonus} Coins`;
-            } else {
-                // 领取失败说明已领完或不满足条件，不再继续
-                msg = `⏸ 视频奖励: ${result?.retmsg}`;
-                $.messages.push(msg), $.log(msg);
-                break;
-            }
-        } catch (e) {
-            msg = `🎬 视频${i}: ❌ ${e.message}`;
-            $.messages.push(msg), $.log(msg);
-            break;
-        }
-        $.messages.push(msg), $.log(msg);
+        msg = `❌ 签到: ${e.message}`;
+        $.log(`❌ 签到失败: ${e.message}`);
     }
 
-    if (total) {
-        msg = `🎬 视频奖励合计: +${total} Coins`;
-        $.messages.push(msg), $.log(msg);
-    }
+    // 账号信息作为该账号通知的开头
+    if ($.beforeMsgs) $.beforeMsgs += '\n';
+    $.beforeMsgs += `🚌 账号 ${getAccountId(user)}: ${msg}`;
+    $.log(msg);
 }
 
-// 组装带签名的请求地址
-function buildUrl(path, user) {
-    const params = buildSignedParams(user);
-    const query = Object.keys(params).map(k => `${k}=${encodeURIComponent(params[k])}`).join('&');
-    return `https://${HOST}/app/${path}?${query}`;
+// 组装请求地址，原始参数直接回放（服务端按天判重，已验证可复用）
+function buildUrl(user) {
+    const params = user?.paramsRaw || {};
+    const query = Object.keys(params).map(k => `${k}=${params[k]}`).join('&');
+    return `https://${HOST}${API_PATH}?${query}`;
 }
 
-// 参与签名的参数需剔除上一次的 sign / signDate
-function buildSignedParams(user) {
-    const params = {};
-    Object.keys(user?.paramsRaw || {}).forEach(k => {
-        if (k !== 'sign' && k !== 'signDate') params[k] = user.paramsRaw[k];
-    });
-    params.signDate = getUTCSignDate();
-    const signBase = Object.keys(params).sort().map(k => `${k}=${params[k]}`).join('&');
-    params.sign = MD5(signBase + SECRET);
-    return params;
-}
-
-// 请求头沿用抓包内容，仅剔除不可复用的头部
+// 请求头沿用抓包内容
 function buildHeaders(user) {
     const headers = { ...user?.headers };
     delete headers['Content-Length']; delete headers['content-length'];
     delete headers[':authority']; delete headers[':method']; delete headers[':path']; delete headers[':scheme'];
+    // WAF 会话 Cookie 已过期，不携带
+    delete headers['cookie']; delete headers['Cookie'];
     headers['Host'] = HOST;
-    headers['Accept'] = headers['Accept'] || 'application/json';
+    headers['Accept'] = headers['Accept'] || 'application/json, text/plain, */*';
     return headers;
 }
 
-// 保留原始未解码的查询参数，签名与请求都基于原始值
+// 保留原始未解码的查询参数，回放请求基于原始值
 function parseRawQuery(url) {
     const query = (url.split('?')[1] || '').split('#')[0];
     const rawMap = {};
@@ -240,20 +168,10 @@ function parseRawQuery(url) {
     return rawMap;
 }
 
-// 账号标识，sign / signDate 每次请求都会变化，不能参与比较
+// 账号标识
 function getAccountId(capture) {
     const params = capture?.paramsRaw || {};
-    for (const key of ['userId', 'uid', 'openId', 'openid', 'account', 'token']) {
-        if (params[key]) return `${key}:${params[key]}`;
-    }
-    return Object.keys(params).filter(k => k !== 'sign' && k !== 'signDate').sort().map(k => `${k}=${params[k]}`).join('&');
-}
-
-// 签名时间使用 UTC
-function getUTCSignDate() {
-    const now = new Date();
-    const pad = n => String(n).padStart(2, '0');
-    return `${now.getUTCFullYear()}-${pad(now.getUTCMonth() + 1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}:${pad(now.getUTCSeconds())}`;
+    return params.userId || params.accountId || '未知';
 }
 
 
@@ -359,8 +277,6 @@ function debug(content, title = "debug") {
     }
 }
 
-//MD5加密
-function MD5(string) { function RotateLeft(lValue, iShiftBits) { return (lValue << iShiftBits) | (lValue >>> (32 - iShiftBits)); } function AddUnsigned(lX, lY) { var lX4, lY4, lX8, lY8, lResult; lX8 = (lX & 0x80000000); lY8 = (lY & 0x80000000); lX4 = (lX & 0x40000000); lY4 = (lY & 0x40000000); lResult = (lX & 0x3FFFFFFF) + (lY & 0x3FFFFFFF); if (lX4 & lY4) { return (lResult ^ 0x80000000 ^ lX8 ^ lY8); } if (lX4 | lY4) { if (lResult & 0x40000000) { return (lResult ^ 0xC0000000 ^ lX8 ^ lY8); } else { return (lResult ^ 0x40000000 ^ lX8 ^ lY8); } } else { return (lResult ^ lX8 ^ lY8); } } function F(x, y, z) { return (x & y) | ((~x) & z); } function G(x, y, z) { return (x & z) | (y & (~z)); } function H(x, y, z) { return (x ^ y ^ z); } function I(x, y, z) { return (y ^ (x | (~z))); } function FF(a, b, c, d, x, s, ac) { a = AddUnsigned(a, AddUnsigned(AddUnsigned(F(b, c, d), x), ac)); return AddUnsigned(RotateLeft(a, s), b); }; function GG(a, b, c, d, x, s, ac) { a = AddUnsigned(a, AddUnsigned(AddUnsigned(G(b, c, d), x), ac)); return AddUnsigned(RotateLeft(a, s), b); }; function HH(a, b, c, d, x, s, ac) { a = AddUnsigned(a, AddUnsigned(AddUnsigned(H(b, c, d), x), ac)); return AddUnsigned(RotateLeft(a, s), b); }; function II(a, b, c, d, x, s, ac) { a = AddUnsigned(a, AddUnsigned(AddUnsigned(I(b, c, d), x), ac)); return AddUnsigned(RotateLeft(a, s), b); }; function ConvertToWordArray(string) { var lWordCount; var lMessageLength = string.length; var lNumberOfWords_temp1 = lMessageLength + 8; var lNumberOfWords_temp2 = (lNumberOfWords_temp1 - (lNumberOfWords_temp1 % 64)) / 64; var lNumberOfWords = (lNumberOfWords_temp2 + 1) * 16; var lWordArray = Array(lNumberOfWords - 1); var lBytePosition = 0; var lByteCount = 0; while (lByteCount < lMessageLength) { lWordCount = (lByteCount - (lByteCount % 4)) / 4; lBytePosition = (lByteCount % 4) * 8; lWordArray[lWordCount] = (lWordArray[lWordCount] | (string.charCodeAt(lByteCount) << lBytePosition)); lByteCount++; } lWordCount = (lByteCount - (lByteCount % 4)) / 4; lBytePosition = (lByteCount % 4) * 8; lWordArray[lWordCount] = lWordArray[lWordCount] | (0x80 << lBytePosition); lWordArray[lNumberOfWords - 2] = lMessageLength << 3; lWordArray[lNumberOfWords - 1] = lMessageLength >>> 29; return lWordArray; }; function WordToHex(lValue) { var WordToHexValue = "", WordToHexValue_temp = "", lByte, lCount; for (lCount = 0; lCount <= 3; lCount++) { lByte = (lValue >>> (lCount * 8)) & 255; WordToHexValue_temp = "0" + lByte.toString(16); WordToHexValue = WordToHexValue + WordToHexValue_temp.substr(WordToHexValue_temp.length - 2, 2); } return WordToHexValue; }; function Utf8Encode(string) { string = string.replace(/\r\n/g, "\n"); var utftext = ""; for (var n = 0; n < string.length; n++) { var c = string.charCodeAt(n); if (c < 128) { utftext += String.fromCharCode(c); } else if ((c > 127) && (c < 2048)) { utftext += String.fromCharCode((c >> 6) | 192); utftext += String.fromCharCode((c & 63) | 128); } else { utftext += String.fromCharCode((c >> 12) | 224); utftext += String.fromCharCode(((c >> 6) & 63) | 128); utftext += String.fromCharCode((c & 63) | 128); } } return utftext; }; var x = Array(); var k, AA, BB, CC, DD, a, b, c, d; var S11 = 7, S12 = 12, S13 = 17, S14 = 22; var S21 = 5, S22 = 9, S23 = 14, S24 = 20; var S31 = 4, S32 = 11, S33 = 16, S34 = 23; var S41 = 6, S42 = 10, S43 = 15, S44 = 21; string = Utf8Encode(string); x = ConvertToWordArray(string); a = 0x67452301; b = 0xEFCDAB89; c = 0x98BADCFE; d = 0x10325476; for (k = 0; k < x.length; k += 16) { AA = a; BB = b; CC = c; DD = d; a = FF(a, b, c, d, x[k + 0], S11, 0xD76AA478); d = FF(d, a, b, c, x[k + 1], S12, 0xE8C7B756); c = FF(c, d, a, b, x[k + 2], S13, 0x242070DB); b = FF(b, c, d, a, x[k + 3], S14, 0xC1BDCEEE); a = FF(a, b, c, d, x[k + 4], S11, 0xF57C0FAF); d = FF(d, a, b, c, x[k + 5], S12, 0x4787C62A); c = FF(c, d, a, b, x[k + 6], S13, 0xA8304613); b = FF(b, c, d, a, x[k + 7], S14, 0xFD469501); a = FF(a, b, c, d, x[k + 8], S11, 0x698098D8); d = FF(d, a, b, c, x[k + 9], S12, 0x8B44F7AF); c = FF(c, d, a, b, x[k + 10], S13, 0xFFFF5BB1); b = FF(b, c, d, a, x[k + 11], S14, 0x895CD7BE); a = FF(a, b, c, d, x[k + 12], S11, 0x6B901122); d = FF(d, a, b, c, x[k + 13], S12, 0xFD987193); c = FF(c, d, a, b, x[k + 14], S13, 0xA679438E); b = FF(b, c, d, a, x[k + 15], S14, 0x49B40821); a = GG(a, b, c, d, x[k + 1], S21, 0xF61E2562); d = GG(d, a, b, c, x[k + 6], S22, 0xC040B340); c = GG(c, d, a, b, x[k + 11], S23, 0x265E5A51); b = GG(b, c, d, a, x[k + 0], S24, 0xE9B6C7AA); a = GG(a, b, c, d, x[k + 5], S21, 0xD62F105D); d = GG(d, a, b, c, x[k + 10], S22, 0x2441453); c = GG(c, d, a, b, x[k + 15], S23, 0xD8A1E681); b = GG(b, c, d, a, x[k + 4], S24, 0xE7D3FBC8); a = GG(a, b, c, d, x[k + 9], S21, 0x21E1CDE6); d = GG(d, a, b, c, x[k + 14], S22, 0xC33707D6); c = GG(c, d, a, b, x[k + 3], S23, 0xF4D50D87); b = GG(b, c, d, a, x[k + 8], S24, 0x455A14ED); a = GG(a, b, c, d, x[k + 13], S21, 0xA9E3E905); d = GG(d, a, b, c, x[k + 2], S22, 0xFCEFA3F8); c = GG(c, d, a, b, x[k + 7], S23, 0x676F02D9); b = GG(b, c, d, a, x[k + 12], S24, 0x8D2A4C8A); a = HH(a, b, c, d, x[k + 5], S31, 0xFFFA3942); d = HH(d, a, b, c, x[k + 8], S32, 0x8771F681); c = HH(c, d, a, b, x[k + 11], S33, 0x6D9D6122); b = HH(b, c, d, a, x[k + 14], S34, 0xFDE5380C); a = HH(a, b, c, d, x[k + 1], S31, 0xA4BEEA44); d = HH(d, a, b, c, x[k + 4], S32, 0x4BDECFA9); c = HH(c, d, a, b, x[k + 7], S33, 0xF6BB4B60); b = HH(b, c, d, a, x[k + 10], S34, 0xBEBFBC70); a = HH(a, b, c, d, x[k + 13], S31, 0x289B7EC6); d = HH(d, a, b, c, x[k + 0], S32, 0xEAA127FA); c = HH(c, d, a, b, x[k + 3], S33, 0xD4EF3085); b = HH(b, c, d, a, x[k + 6], S34, 0x4881D05); a = HH(a, b, c, d, x[k + 9], S31, 0xD9D4D039); d = HH(d, a, b, c, x[k + 12], S32, 0xE6DB99E5); c = HH(c, d, a, b, x[k + 15], S33, 0x1FA27CF8); b = HH(b, c, d, a, x[k + 2], S34, 0xC4AC5665); a = II(a, b, c, d, x[k + 0], S41, 0xF4292244); d = II(d, a, b, c, x[k + 7], S42, 0x432AFF97); c = II(c, d, a, b, x[k + 14], S43, 0xAB9423A7); b = II(b, c, d, a, x[k + 5], S44, 0xFC93A039); a = II(a, b, c, d, x[k + 12], S41, 0x655B59C3); d = II(d, a, b, c, x[k + 3], S42, 0x8F0CCC92); c = II(c, d, a, b, x[k + 10], S43, 0xFFEFF47D); b = II(b, c, d, a, x[k + 1], S44, 0x85845DD1); a = II(a, b, c, d, x[k + 8], S41, 0x6FA87E4F); d = II(d, a, b, c, x[k + 15], S42, 0xFE2CE6E0); c = II(c, d, a, b, x[k + 6], S43, 0xA3014314); b = II(b, c, d, a, x[k + 13], S44, 0x4E0811A1); a = II(a, b, c, d, x[k + 4], S41, 0xF7537E82); d = II(d, a, b, c, x[k + 11], S42, 0xBD3AF235); c = II(c, d, a, b, x[k + 2], S43, 0x2AD7D2BB); b = II(b, c, d, a, x[k + 9], S44, 0xEB86D391); a = AddUnsigned(a, AA); b = AddUnsigned(b, BB); c = AddUnsigned(c, CC); d = AddUnsigned(d, DD); } var temp = WordToHex(a) + WordToHex(b) + WordToHex(c) + WordToHex(d); return temp.toLowerCase(); }
-
+// prettier-ignore
 function Env(t, e) { class s { constructor(t) { this.env = t } send(t, e = "GET") { t = "string" == typeof t ? { url: t } : t; let s = this.get; return "POST" === e && (s = this.post), new Promise(((e, r) => { s.call(this, t, ((t, s, a) => { t ? r(t) : e(s) })) })) } get(t) { return this.send.call(this.env, t) } post(t) { return this.send.call(this.env, t, "POST") } } return new class { constructor(t, e) { this.name = t, this.http = new s(this), this.data = null, this.dataFile = "box.dat", this.logs = [], this.isMute = !1, this.isNeedRewrite = !1, this.logSeparator = "\n", this.encoding = "utf-8", this.startTime = (new Date).getTime(), Object.assign(this, e), this.log("", `🔔${this.name}, 开始!`) } getEnv() { return "undefined" != typeof $environment && $environment["surge-version"] ? "Surge" : "undefined" != typeof $environment && $environment["stash-version"] ? "Stash" : "undefined" != typeof module && module.exports ? "Node.js" : "undefined" != typeof $task ? "Quantumult X" : "undefined" != typeof $loon ? "Loon" : "undefined" != typeof $rocket ? "Shadowrocket" : void 0 } isNode() { return "Node.js" === this.getEnv() } isQuanX() { return "Quantumult X" === this.getEnv() } isSurge() { return "Surge" === this.getEnv() } isLoon() { return "Loon" === this.getEnv() } isShadowrocket() { return "Shadowrocket" === this.getEnv() } isStash() { return "Stash" === this.getEnv() } toObj(t, e = null) { try { return JSON.parse(t) } catch { return e } } toStr(t, e = null) { try { return JSON.stringify(t) } catch { return e } } getjson(t, e) { let s = e; if (this.getdata(t)) try { s = JSON.parse(this.getdata(t)) } catch { } return s } setjson(t, e) { try { return this.setdata(JSON.stringify(t), e) } catch { return !1 } } getScript(t) { return new Promise((e => { this.get({ url: t }, ((t, s, r) => e(r))) })) } runScript(t, e) { return new Promise((s => { let r = this.getdata("@chavy_boxjs_userCfgs.httpapi"); r = r ? r.replace(/\n/g, "").trim() : r; let a = this.getdata("@chavy_boxjs_userCfgs.httpapi_timeout"); a = a ? 1 * a : 20, a = e && e.timeout ? e.timeout : a; const [i, o] = r.split("@"), n = { url: `http://${o}/v1/scripting/evaluate`, body: { script_text: t, mock_type: "cron", timeout: a }, headers: { "X-Key": i, Accept: "*/*" }, timeout: a }; this.post(n, ((t, e, r) => s(r))) })).catch((t => this.logErr(t))) } loaddata() { if (!this.isNode()) return {}; { this.fs = this.fs ? this.fs : require("fs"), this.path = this.path ? this.path : require("path"); const t = this.path.resolve(this.dataFile), e = this.path.resolve(process.cwd(), this.dataFile), s = this.fs.existsSync(t), r = !s && this.fs.existsSync(e); if (!s && !r) return {}; { const r = s ? t : e; try { return JSON.parse(this.fs.readFileSync(r)) } catch (t) { return {} } } } } writedata() { if (this.isNode()) { this.fs = this.fs ? this.fs : require("fs"), this.path = this.path ? this.path : require("path"); const t = this.path.resolve(this.dataFile), e = this.path.resolve(process.cwd(), this.dataFile), s = this.fs.existsSync(t), r = !s && this.fs.existsSync(e), a = JSON.stringify(this.data); s ? this.fs.writeFileSync(t, a) : r ? this.fs.writeFileSync(e, a) : this.fs.writeFileSync(t, a) } } lodash_get(t, e, s = void 0) { const r = e.replace(/\[(\d+)\]/g, ".$1").split("."); let a = t; for (const t of r) if (a = Object(a)[t], void 0 === a) return s; return a } lodash_set(t, e, s) { return Object(t) !== t || (Array.isArray(e) || (e = e.toString().match(/[^.[\]]+/g) || []), e.slice(0, -1).reduce(((t, s, r) => Object(t[s]) === t[s] ? t[s] : t[s] = Math.abs(e[r + 1]) >> 0 == +e[r + 1] ? [] : {}), t)[e[e.length - 1]] = s), t } getdata(t) { let e = this.getval(t); if (/^@/.test(t)) { const [, s, r] = /^@(.*?)\.(.*?)$/.exec(t), a = s ? this.getval(s) : ""; if (a) try { const t = JSON.parse(a); e = t ? this.lodash_get(t, r, "") : e } catch (t) { e = "" } } return e } setdata(t, e) { let s = !1; if (/^@/.test(e)) { const [, r, a] = /^@(.*?)\.(.*?)$/.exec(e), i = this.getval(r), o = r ? "null" === i ? null : i || "{}" : "{}"; try { const e = JSON.parse(o); this.lodash_set(e, a, t), s = this.setval(JSON.stringify(e), r) } catch (e) { const i = {}; this.lodash_set(i, a, t), s = this.setval(JSON.stringify(i), r) } } else s = this.setval(t, e); return s } getval(t) { switch (this.getEnv()) { case "Surge": case "Loon": case "Stash": case "Shadowrocket": return $persistentStore.read(t); case "Quantumult X": return $prefs.valueForKey(t); case "Node.js": return this.data = this.loaddata(), this.data[t]; default: return this.data && this.data[t] || null } } setval(t, e) { switch (this.getEnv()) { case "Surge": case "Loon": case "Stash": case "Shadowrocket": return $persistentStore.write(t, e); case "Quantumult X": return $prefs.setValueForKey(t, e); case "Node.js": return this.data = this.loaddata(), this.data[e] = t, this.writedata(), !0; default: return this.data && this.data[e] || null } } initGotEnv(t) { this.got = this.got ? this.got : require("got"), this.cktough = this.cktough ? this.cktough : require("tough-cookie"), this.ckjar = this.ckjar ? this.ckjar : new this.cktough.CookieJar, t && (t.headers = t.headers ? t.headers : {}, void 0 === t.headers.Cookie && void 0 === t.cookieJar && (t.cookieJar = this.ckjar)) } get(t, e = (() => { })) { switch (t.headers && (delete t.headers["Content-Type"], delete t.headers["Content-Length"], delete t.headers["content-type"], delete t.headers["content-length"]), t.params && (t.url += "?" + this.queryStr(t.params)), void 0 === t.followRedirect || t.followRedirect || ((this.isSurge() || this.isLoon()) && (t["auto-redirect"] = !1), this.isQuanX() && (t.opts ? t.opts.redirection = !1 : t.opts = { redirection: !1 })), this.getEnv()) { case "Surge": case "Loon": case "Stash": case "Shadowrocket": default: this.isSurge() && this.isNeedRewrite && (t.headers = t.headers || {}, Object.assign(t.headers, { "X-Surge-Skip-Scripting": !1 })), $httpClient.get(t, ((t, s, r) => { !t && s && (s.body = r, s.statusCode = s.status ? s.status : s.statusCode, s.status = s.statusCode), e(t, s, r) })); break; case "Quantumult X": this.isNeedRewrite && (t.opts = t.opts || {}, Object.assign(t.opts, { hints: !1 })), $task.fetch(t).then((t => { const { statusCode: s, statusCode: r, headers: a, body: i, bodyBytes: o } = t; e(null, { status: s, statusCode: r, headers: a, body: i, bodyBytes: o }, i, o) }), (t => e(t && t.error || "UndefinedError"))); break; case "Node.js": let s = require("iconv-lite"); this.initGotEnv(t), this.got(t).on("redirect", ((t, e) => { try { if (t.headers["set-cookie"]) { const s = t.headers["set-cookie"].map(this.cktough.Cookie.parse).toString(); s && this.ckjar.setCookieSync(s, null), e.cookieJar = this.ckjar } } catch (t) { this.logErr(t) } })).then((t => { const { statusCode: r, statusCode: a, headers: i, rawBody: o } = t, n = s.decode(o, this.encoding); e(null, { status: r, statusCode: a, headers: i, rawBody: o, body: n }, n) }), (t => { const { message: r, response: a } = t; e(r, a, a && s.decode(a.rawBody, this.encoding)) })) } } post(t, e = (() => { })) { const s = t.method ? t.method.toLocaleLowerCase() : "post"; switch (t.body && t.headers && !t.headers["Content-Type"] && !t.headers["content-type"] && (t.headers["content-type"] = "application/x-www-form-urlencoded"), t.headers && (delete t.headers["Content-Length"], delete t.headers["content-length"]), void 0 === t.followRedirect || t.followRedirect || ((this.isSurge() || this.isLoon()) && (t["auto-redirect"] = !1), this.isQuanX() && (t.opts ? t.opts.redirection = !1 : t.opts = { redirection: !1 })), this.getEnv()) { case "Surge": case "Loon": case "Stash": case "Shadowrocket": default: this.isSurge() && this.isNeedRewrite && (t.headers = t.headers || {}, Object.assign(t.headers, { "X-Surge-Skip-Scripting": !1 })), $httpClient[s](t, ((t, s, r) => { !t && s && (s.body = r, s.statusCode = s.status ? s.status : s.statusCode, s.status = s.statusCode), e(t, s, r) })); break; case "Quantumult X": t.method = s, this.isNeedRewrite && (t.opts = t.opts || {}, Object.assign(t.opts, { hints: !1 })), $task.fetch(t).then((t => { const { statusCode: s, statusCode: r, headers: a, body: i, bodyBytes: o } = t; e(null, { status: s, statusCode: r, headers: a, body: i, bodyBytes: o }, i, o) }), (t => e(t && t.error || "UndefinedError"))); break; case "Node.js": let r = require("iconv-lite"); this.initGotEnv(t); const { url: a, ...i } = t; this.got[s](a, i).then((t => { const { statusCode: s, statusCode: a, headers: i, rawBody: o } = t, n = r.decode(o, this.encoding); e(null, { status: s, statusCode: a, headers: i, rawBody: o, body: n }, n) }), (t => { const { message: s, response: a } = t; e(s, a, a && r.decode(a.rawBody, this.encoding)) })) } } time(t, e = null) { const s = e ? new Date(e) : new Date; let r = { "M+": s.getMonth() + 1, "d+": s.getDate(), "H+": s.getHours(), "m+": s.getMinutes(), "s+": s.getSeconds(), "q+": Math.floor((s.getMonth() + 3) / 3), S: s.getMilliseconds() }; /(y+)/.test(t) && (t = t.replace(RegExp.$1, (s.getFullYear() + "").substr(4 - RegExp.$1.length))); for (let e in r) new RegExp("(" + e + ")").test(t) && (t = t.replace(RegExp.$1, 1 == RegExp.$1.length ? r[e] : ("00" + r[e]).substr(("" + r[e]).length))); return t } queryStr(t) { let e = ""; for (const s in t) { let r = t[s]; null != r && "" !== r && ("object" == typeof r && (r = JSON.stringify(r)), e += `${s}=${r}&`) } return e = e.substring(0, e.length - 1), e } msg(e = t, s = "", r = "", a) { const i = t => { switch (typeof t) { case void 0: return t; case "string": switch (this.getEnv()) { case "Surge": case "Stash": default: return { url: t }; case "Loon": case "Shadowrocket": return t; case "Quantumult X": return { "open-url": t }; case "Node.js": return }case "object": switch (this.getEnv()) { case "Surge": case "Stash": case "Shadowrocket": default: return { url: t.url || t.openUrl || t["open-url"] }; case "Loon": return { openUrl: t.openUrl || t.url || t["open-url"], mediaUrl: t.mediaUrl || t["media-url"] }; case "Quantumult X": return { "open-url": t["open-url"] || t.url || t.openUrl, "media-url": t["media-url"] || t.mediaUrl, "update-pasteboard": t["update-pasteboard"] || t.updatePasteboard }; case "Node.js": return }default: return } }; if (!this.isMute) switch (this.getEnv()) { case "Surge": case "Loon": case "Stash": case "Shadowrocket": default: $notification.post(e, s, r, i(a)); break; case "Quantumult X": $notify(e, s, r, i(a)); case "Node.js": }if (!this.isMuteLog) { let t = ["", "==============📣系统通知📣=============="]; t.push(e), s && t.push(s), r && t.push(r), console.log(t.join("\n")), this.logs = this.logs.concat(t) } } log(...t) { t.length > 0 && (this.logs = [...this.logs, ...t]), console.log(t.join(this.logSeparator)) } logErr(t, e) { switch (this.getEnv()) { case "Surge": case "Loon": case "Stash": case "Shadowrocket": case "Quantumult X": default: this.log("", `❗️${this.name}, 错误!`, t); break; case "Node.js": this.log("", `❗️${this.name}, 错误!`, t.stack) } } wait(t) { return new Promise((e => setTimeout(e, t))) } done(t = {}) { const e = ((new Date).getTime() - this.startTime) / 1e3; switch (this.log("", `🔔${this.name}, 结束! 🕛 ${e} 秒`), this.log(), this.getEnv()) { case "Surge": case "Loon": case "Stash": case "Shadowrocket": case "Quantumult X": default: $done(t); break; case "Node.js": process.exit(1) } } }(t, e) }
 

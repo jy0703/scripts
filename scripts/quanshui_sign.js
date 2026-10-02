@@ -34,7 +34,7 @@ hostname = java-uapi.quanzhan888.com
 ^https?:\/\/java-uapi\.quanzhan888\.com\/u\/user-center\/index url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/quanshui_sign.js
 
 [task_local]
-0 8 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/quanshui_sign.js, tag=泉水签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/images/quanshui.png, enabled=true
+0 8 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/quanshui_sign.js, tag=泉水签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/quanshui.png, enabled=true
 
 ------------------ Stash 配置 ------------------
 
