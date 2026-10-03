@@ -172,6 +172,94 @@
           "desc": ""
         }
       ]
+    },
+    {
+      "id": "WxCode",
+      "name": "获取小程序code",
+      "author": "@Feng",
+      "descs_html": [
+        "调用 YYB Go 服务 POST /wxapp/getCode 获取小程序 code",
+        "请求头需携带 Authorization: Bearer <token> (对应服务端环境变量 YYB_PROTOCOL_TOKEN)",
+        "请求体: {\"ref\": \"账号ID/UIN/openid\", \"app_id\": \"小程序app_id\"}"
+      ],
+      "icons": [
+        "https://raw.githubusercontent.com/FoKit/Scripts/main/images/WeChat.png",
+        "https://raw.githubusercontent.com/FoKit/Scripts/main/images/WeChat.png"
+      ],
+      "keys": ["wxCode"],
+      "settings": [
+        {
+          "id": "@wxCode.open",
+          "name": "开启code模式",
+          "val": false,
+          "type": "boolean",
+          "desc": "默认关闭"
+        },
+        {
+          "id": "@wxCode.address",
+          "name": "服务器地址",
+          "val": "http://192.168.2.5:8000",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "desc": "填写服务器地址, 不包含/, 如 http://192.168.2.5:8000"
+        },
+        {
+          "id": "@wxCode.ref",
+          "name": "ref",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "desc": "账号 ID、UIN 或 openid, 多个以英文逗号隔开"
+        },
+        {
+          "id": "@wxCode.app_id",
+          "name": "app_id",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "desc": "小程序 app_id"
+        },
+        {
+          "id": "@wxCode.token",
+          "name": "token",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "desc": "接口鉴权 token, 请求头 Authorization: Bearer <token>, 对应服务端环境变量 YYB_PROTOCOL_TOKEN"
+        }
+      ]
+    },
+    {
+      "id": "mxbc_sign",
+      "name": "蜜雪冰城签到",
+      "author": "@Feng",
+      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/mxbc_sign.js",
+      "descs_html": [
+        "每日签到领雪王币 + 雪王铺活动 + 余额查询",
+        "依赖「Code Server」分组中「获取小程序code」配置项(@wxCode.address/ref/token)",
+        "token 自动缓存复用, 失效自动通过 code 服务刷新"
+      ],
+      "icons": [
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/mxbc.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/mxbc.png"
+      ],
+      "keys": ["MXBC_TOKEN"],
+      "settings": [
+        {
+          "id": "MXBC_TOKEN",
+          "name": "直填 Access-Token (兜底)",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 3,
+          "placeholder": "",
+          "desc": "抓包 Access-Token, 多账号换行或&分割; 填写后不走 code 服务"
+        }
+      ]
     }
   ]
 }
