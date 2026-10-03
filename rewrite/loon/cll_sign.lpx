@@ -1,5 +1,5 @@
 #!name = 车来了签到
-#!desc = 自动抓取车来了签到参数，并每日定时签到，支持多账号（打开车来了 APP：首页 - 签到领福利，进入签到页触发抓取）
+#!desc = 自动抓取车来了签到参数，并每日定时签到、领取惊喜任务（分享朋友圈等），支持多账号（打开车来了 APP：首页 - 签到领福利，进入签到页触发抓取）
 #!author = Fengzzzz
 #!homepage = https://github.com/jy0703/scripts
 #!icon = https://raw.githubusercontent.com/jy0703/scripts/main/icons/cll.png
@@ -11,7 +11,7 @@ capture = switch,false,tag=捕获签到参数,desc=打开后按说明操作自�
 cronExpression = input,"0 1 * * *",tag=定时参数,desc=这里需要输入符合 CRON 表达式的参数
 
 [Script]
-http-request ^https?:\/\/web\.chelaile\.net\.cn\/api\/op-activity-api\/daily-act\/signin script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js,requires-body=false,timeout=600,tag=车来了获取签到参数,enable={capture}
+http-request ^https?:\/\/web\.chelaile\.net\.cn\/api\/op-activity-api\/daily-act\/(signin|config|task\/complete) script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js,requires-body=false,timeout=600,tag=车来了获取签到参数,enable={capture}
 cron {cronExpression} script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js,timeout=600,tag=车来了签到,enable=true
 
 [Mitm]

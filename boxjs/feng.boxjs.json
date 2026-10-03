@@ -10,12 +10,16 @@
       "name": "艾克帮签到",
       "author": "@Feng",
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aikebang_sign.js",
-      "descs_html": ["艾克帮签到，每日签到获得积分奖励，支持多账号"],
+      "descs_html": [
+        "艾克帮签到，每日签到获得积分奖励，支持多账号"
+      ],
       "icons": [
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/aikebang.png",
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/aikebang.png"
       ],
-      "keys": ["AIKEBANG_TOKEN"],
+      "keys": [
+        "AIKEBANG_TOKEN"
+      ],
       "settings": [
         {
           "id": "AIKEBANG_TOKEN",
@@ -34,12 +38,16 @@
       "name": "泉水签到",
       "author": "@Feng",
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/quanshui_sign.js",
-      "descs_html": ["泉水签到，每日签到获得积分奖励，支持多账号"],
+      "descs_html": [
+        "泉水签到，每日签到获得积分奖励，支持多账号"
+      ],
       "icons": [
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/quanshui.png",
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/quanshui.png"
       ],
-      "keys": ["QUANSHUI_TOKEN"],
+      "keys": [
+        "QUANSHUI_TOKEN"
+      ],
       "settings": [
         {
           "id": "QUANSHUI_TOKEN",
@@ -58,12 +66,16 @@
       "name": "WPS签到",
       "author": "@Feng",
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js",
-      "descs_html": ["WPS签到，每日签到获得积分奖励，支持多账号"],
+      "descs_html": [
+        "WPS签到，每日签到获得积分奖励，支持多账号"
+      ],
       "icons": [
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/wps.png",
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/wps.png"
       ],
-      "keys": ["WPS_COOKIE"],
+      "keys": [
+        "WPS_COOKIE"
+      ],
       "settings": [
         {
           "id": "WPS_COOKIE",
@@ -82,12 +94,16 @@
       "name": "移动云盘签到",
       "author": "@Feng",
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js",
-      "descs_html": ["移动云盘签到，每日签到获得云朵奖励，支持多账号"],
+      "descs_html": [
+        "移动云盘签到，每日签到获得云朵奖励，支持多账号"
+      ],
       "icons": [
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/yidongyunpan.png",
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/yidongyunpan.png"
       ],
-      "keys": ["ydyp_data"],
+      "keys": [
+        "ydyp_data"
+      ],
       "settings": [
         {
           "id": "ydyp_data",
@@ -106,12 +122,16 @@
       "name": "中通快递签到",
       "author": "@Feng",
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js",
-      "descs_html": ["中通快递签到，每日签到获得奖励，支持多账号"],
+      "descs_html": [
+        "中通快递签到，每日签到获得奖励，支持多账号"
+      ],
       "icons": [
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/zt.png",
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/zt.png"
       ],
-      "keys": ["ZTO_TOKEN"],
+      "keys": [
+        "ZTO_TOKEN"
+      ],
       "settings": [
         {
           "id": "ZTO_TOKEN",
@@ -130,12 +150,16 @@
       "name": "龙湖天街签到",
       "author": "@Feng",
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/lhtj_new.js",
-      "descs_html": ["龙湖天街签到，每日签到获得积分、珑珠奖励，可参与抽奖，支持多账号"],
+      "descs_html": [
+        "龙湖天街签到，每日签到获得积分、珑珠奖励，可参与抽奖，支持多账号"
+      ],
       "icons": [
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/lhtj.png",
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/lhtj.png"
       ],
-      "keys": ["lhtj_data"],
+      "keys": [
+        "lhtj_data"
+      ],
       "settings": [
         {
           "id": "lhtj_data",
@@ -154,12 +178,16 @@
       "name": "车来了签到",
       "author": "@Feng",
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js",
-      "descs_html": ["车来了签到，每日签到获得金币奖励，支持多账号"],
+      "descs_html": [
+        "车来了签到，每日签到获得金币奖励，自动领取惊喜任务（分享朋友圈等），支持多账号"
+      ],
       "icons": [
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/cll.png",
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/cll.png"
       ],
-      "keys": ["cll_data"],
+      "keys": [
+        "cll_data"
+      ],
       "settings": [
         {
           "id": "cll_data",
@@ -186,7 +214,9 @@
         "https://raw.githubusercontent.com/FoKit/Scripts/main/images/WeChat.png",
         "https://raw.githubusercontent.com/FoKit/Scripts/main/images/WeChat.png"
       ],
-      "keys": ["wxCode"],
+      "keys": [
+        "wxCode"
+      ],
       "settings": [
         {
           "id": "@wxCode.open",
@@ -234,30 +264,32 @@
       ]
     },
     {
-      "id": "mxbc_sign",
-      "name": "蜜雪冰城签到",
+      "id": "yxx_sign",
+      "name": "印享星签到",
       "author": "@Feng",
-      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/mxbc_sign.js",
+      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/yxx_sign.js",
       "descs_html": [
-        "每日签到领雪王币 + 雪王铺活动 + 余额查询",
+        "印享星会员小程序每日签到领积分 (印力集团, crm.scpgroup.com.cn)",
         "依赖「Code Server」分组中「获取小程序code」配置项(@wxCode.address/ref/token)",
         "token 自动缓存复用, 失效自动通过 code 服务刷新"
       ],
       "icons": [
-        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/mxbc.png",
-        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/mxbc.png"
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/yxx.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/yxx.png"
       ],
-      "keys": ["MXBC_TOKEN"],
+      "keys": [
+        "YXX_PLAZA_CODE"
+      ],
       "settings": [
         {
-          "id": "MXBC_TOKEN",
-          "name": "直填 Access-Token (兜底)",
-          "val": "",
+          "id": "YXX_PLAZA_CODE",
+          "name": "广场编码",
+          "val": "G001Z003C0018",
           "type": "textarea",
           "autoGrow": true,
-          "rows": 3,
+          "rows": 1,
           "placeholder": "",
-          "desc": "抓包 Access-Token, 多账号换行或&分割; 填写后不走 code 服务"
+          "desc": "plazaCode, 默认 G001Z003C0018, 按抓包改"
         }
       ]
     }

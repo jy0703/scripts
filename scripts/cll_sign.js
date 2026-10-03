@@ -1,14 +1,15 @@
 /**
- * 脚本名称：车来了签到 - 签到
- * 活动规则：每日签到获得金币奖励
+ * 脚本名称：车来了签到 - 签到、惊喜任务（分享朋友圈等）
+ * 活动规则：每日签到获得金币奖励，7 天一周期；每日惊喜任务（如分享至朋友圈）完成可领额外金币
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。签到参数（URL 查询参数）由本脚本的 GetCookie 抓取后存入 cll_data
  * 环境变量：cll_data
- * 更新时间：2026-10-02
+ * 备注：secret 参数随登录变化，若签到返回"非法请求"，请重新打开签到页抓取参数
+ * 更新时间：2026-10-04 增加惊喜任务领取
 
 ------------------ Surge 配置 ------------------
 
 [Script]
-车来了获取签到参数= type=http-request ^https?:\/\/web\.chelaile\.net\.cn\/api\/op-activity-api\/daily-act\/signin, requires-body=0, max-size=0, timeout=600, script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js, script-update-interval=0
+车来了获取签到参数= type=http-request ^https?:\/\/web\.chelaile\.net\.cn\/api\/op-activity-api\/daily-act\/(signin|config|task\/complete), requires-body=0, max-size=0, timeout=600, script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js, script-update-interval=0
 
 车来了签到= type=cron cronexp="0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js, timeout=600, script-update-interval=0
 
@@ -18,7 +19,7 @@ hostname = web.chelaile.net.cn
 ------------------- Loon 配置 -------------------
 
 [Script]
-http-request ^https?:\/\/web\.chelaile\.net\.cn\/api\/op-activity-api\/daily-act\/signin script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js, timeout=600, tag=车来了获取签到参数
+http-request ^https?:\/\/web\.chelaile\.net\.cn\/api\/op-activity-api\/daily-act\/(signin|config|task\/complete) script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js, timeout=600, tag=车来了获取签到参数
 
 cron "0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js, timeout=600, tag=车来了签到
 
@@ -28,7 +29,7 @@ hostname = web.chelaile.net.cn
 --------------- Quantumult X 配置 ---------------
 
 [rewrite_local]
-^https?:\/\/web\.chelaile\.net\.cn\/api\/op-activity-api\/daily-act\/signin url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js
+^https?:\/\/web\.chelaile\.net\.cn\/api\/op-activity-api\/daily-act\/(signin|config|task\/complete) url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js
 
 [task_local]
 "0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js, tag=车来了签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/cll.png, enabled=true
@@ -45,7 +46,9 @@ $.userArr = [].concat($.toObj($.userInfo) || []);  // 用户信息
 $.Messages = [];
 
 const HOST = 'web.chelaile.net.cn';
-const API_PATH = '/api/op-activity-api/daily-act/signin';
+const API_BASE = '/api/op-activity-api/daily-act';
+// 抓取时剔除的参数：任务专属参数与动态签名三件套（已验证回放无需 signature）
+const DROP_KEYS = ['taskType', 'status', 'h5TimeStamp', 'nonce', 'signature'];
 
 
 // 主函数
@@ -62,8 +65,14 @@ async function main() {
             $.beforeMsgs = '';
             $.user = $.userArr[i];
 
+            // 查询活动信息（连签天数、惊喜任务列表）
+            await getActivityInfo($.user);
+
             // 执行签到
             await doSign($.user);
+
+            // 领取惊喜任务奖励（分享朋友圈等）
+            await doTaskClaims($.user);
 
             // 合并通知
             $.messages.splice(0, 0, $.beforeMsgs), $.Messages = $.Messages.concat($.messages);
@@ -81,7 +90,8 @@ function GetCookie() {
         if ($request && $request.method === 'OPTIONS') return;
 
         const paramsRaw = parseRawQuery($request.url);
-        if (!paramsRaw.userId || !paramsRaw.secret) throw new Error('获取签到参数错误，值为空');
+        DROP_KEYS.forEach(k => delete paramsRaw[k]);
+        if ((!paramsRaw.userId && !paramsRaw.accountId) || !paramsRaw.secret) throw new Error('获取签到参数错误，值为空');
 
         const capture = {
             'paramsRaw': paramsRaw,
@@ -102,12 +112,36 @@ function GetCookie() {
     }
 }
 
+// 查询活动信息
+async function getActivityInfo(user) {
+    try {
+        const options = {
+            url: buildUrl(user, '/config'),
+            headers: buildHeaders(user)
+        };
+
+        const result = await Request(options);
+
+        if (result?.status === '00') {
+            const data = result?.data || {};
+            user.tasks = data?.surpriseTasks || [];
+
+            const signDays = data?.userStatus?.signDays || 0;
+            $.beforeMsgs += `🚌 账号 ${getAccountId(user)} | 已连签 ${signDays} 天\n`;
+        } else {
+            $.log(`❌ 查询活动信息失败: ${result?.errmsg || $.toStr(result)}`);
+        }
+    } catch (e) {
+        $.log(`❌ 查询活动信息失败: ${e.message}`);
+    }
+}
+
 // 签到
 async function doSign(user) {
     let msg = '';
     try {
         const options = {
-            url: buildUrl(user),
+            url: buildUrl(user, '/signin'),
             headers: buildHeaders(user)
         };
 
@@ -115,11 +149,7 @@ async function doSign(user) {
         const status = result?.status;
 
         if (status === '00') {
-            const rewardType = result?.data?.rewardType || '';
-            const rewardValue = result?.data?.rewardValue || 0;
-            const rewardName = rewardType === 'coin' ? '金币' : rewardType;
-            $.user.rewardTotal = (Number($.user.rewardTotal) || 0) + (Number(rewardValue) || 0);
-            msg = `✅ 签到: 成功, 获得 ${rewardValue} ${rewardName}`;
+            msg = `✅ 签到: 成功, 获得 ${result?.data?.rewardValue || 0} ${rewardName(result?.data?.rewardType)}`;
         } else if (status === '1002') {
             msg = `📝 签到: 今日已签到`;
         } else {
@@ -129,18 +159,62 @@ async function doSign(user) {
         msg = `❌ 签到: ${e.message}`;
         $.log(`❌ 签到失败: ${e.message}`);
     }
+    $.messages.push(msg), $.log(msg);
+}
 
-    // 账号信息作为该账号通知的开头
-    if ($.beforeMsgs) $.beforeMsgs += '\n';
-    $.beforeMsgs += `🚌 账号 ${getAccountId(user)}: ${msg}`;
-    $.log(msg);
+// 领取惊喜任务奖励
+async function doTaskClaims(user) {
+    const tasks = user.tasks || [];
+    const pending = tasks.filter(t => t?.status === 'incomplete');
+
+    if (!tasks.length) {
+        const msg = `📝 惊喜任务: 今日无任务`;
+        $.messages.push(msg), $.log(msg);
+        return;
+    }
+    if (!pending.length) {
+        const msg = `📝 惊喜任务: 今日已领完 (${tasks.map(t => t.taskContent || t.taskType).join('、')})`;
+        $.messages.push(msg), $.log(msg);
+        return;
+    }
+
+    for (const task of pending) {
+        let msg = '';
+        const name = task.taskContent || task.taskType;
+        try {
+            const options = {
+                url: buildUrl(user, '/task/complete', { taskType: task.taskType, status: 'claim' }),
+                headers: buildHeaders(user)
+            };
+
+            const result = await Request(options);
+
+            if (result?.status === '00') {
+                const rewardValue = result?.data?.rewardValue || task.rewardValue || 0;
+                msg = `🎁 任务[${name}]: 成功, 获得 ${rewardValue} ${rewardName(result?.data?.rewardType || task.rewardType)}`;
+            } else if (result?.status === '1005') {
+                msg = `📝 任务[${name}]: 今日已领取`;
+            } else {
+                msg = `❌ 任务[${name}]: ${result?.errmsg || $.toStr(result)}`;
+            }
+        } catch (e) {
+            msg = `❌ 任务[${name}]: ${e.message}`;
+        }
+        $.messages.push(msg), $.log(msg);
+        await $.wait(1000);
+    }
+}
+
+// 奖励类型名称
+function rewardName(type) {
+    return type === 'coin' ? '金币' : type === 'vip' ? 'VIP' : (type || '');
 }
 
 // 组装请求地址，原始参数直接回放（服务端按天判重，已验证可复用）
-function buildUrl(user) {
-    const params = user?.paramsRaw || {};
+function buildUrl(user, path, extra = {}) {
+    const params = { ...(user?.paramsRaw || {}), ...extra };
     const query = Object.keys(params).map(k => `${k}=${params[k]}`).join('&');
-    return `https://${HOST}${API_PATH}?${query}`;
+    return `https://${HOST}${API_BASE}${path}?${query}`;
 }
 
 // 请求头沿用抓包内容
