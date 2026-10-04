@@ -1,5 +1,5 @@
 #!name = 移动云盘签到
-#!desc = 自动抓取移动云盘 Authorization/deviceId，并每日定时完成签到、云朵中心任务、算力大作战、红包派对（打开 App：首页/文件页抓 Authorization，活动-云朵中心抓 deviceId）
+#!desc = 自动抓取移动云盘 Authorization，并每日定时完成签到、云朵中心任务、算力大作战、红包派对（打开 App 首页即抓到，deviceId 可选、需自行抓包填写）
 #!author = Fengzzzz
 #!homepage = https://github.com/jy0703/scripts
 #!icon = https://raw.githubusercontent.com/jy0703/scripts/main/icons/yidongyunpan.png
@@ -7,14 +7,12 @@
 #!type = normal
 
 [Argument]
-capture = switch,false,tag=捕获 Token/deviceId,desc=打开后依次进入「云盘文件页」和「活动-云朵中心」各抓一次，抓取完成后建议关闭
+capture = switch,false,tag=捕获 Token,desc=打开后进入移动云盘 App 首页自动抓取 Authorization，抓取完成后建议关闭
 cronExpression = input,"0 8 * * *",tag=定时参数,desc=这里需要输入符合 CRON 表达式的参数
 
 [Script]
-http-request ^https?:\/\/personal-kd-njs\.yun\.139\.com\/hcy\/ script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,timeout=600,tag=移动云盘签到获取Token,enable={capture}
-http-request ^https?:\/\/mnote\.caiyun\.feixin\.10086\.cn\/noteServer\/api\/authTokenRefresh\.do script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,timeout=600,tag=移动云盘签到获取Token2,enable={capture}
-http-request ^https?:\/\/m\.mcloud\.139\.com\/market\/signin\/ script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,timeout=600,tag=移动云盘签到获取deviceId,enable={capture}
+http-request ^https?:\/\/user-njs\.yun\.139\.com\/user\/ script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,timeout=600,tag=移动云盘签到获取Token,enable={capture}
 cron {cronExpression} script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,timeout=600,tag=移动云盘签到,enable=true
 
 [Mitm]
-hostname = personal-kd-njs.yun.139.com, mnote.caiyun.feixin.10086.cn, m.mcloud.139.com
+hostname = user-njs.yun.139.com

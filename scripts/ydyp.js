@@ -1,44 +1,41 @@
 /**
  * 脚本名称：移动云盘自动签到 - 签到
  * 活动规则：每日签到、云朵中心任务、算力大作战、红包派对，领取云朵与奖品
- * 脚本说明：支持多账号，支持 NE / Node.js 环境。Authorization 与 deviceId 由本脚本 GetCookie 抓取（打开移动云盘 App → 首页 → 活动/云朵中心）
+ * 脚本说明：支持多账号，支持 NE / Node.js 环境。Authorization 由本脚本 GetCookie 抓取（打开移动云盘 App 即可命中），deviceId 可选、需自行抓包填写
  * 环境变量：ydyp_data（账号）、ydyp_device_id（可选，全局 deviceId）、ydyp_cache（脚本自维护的 deviceId/Token 缓存）
  * 对应 Python 版本：ydyp.py v5.0.8
  * 更新时间：2026-10-04
 
+抓取点（仅一条）：
+^https?:\/\/user-njs\.yun\.139\.com\/user\/    → 请求头 Authorization（Basic mobile:手机号:token），打开 App 首页即触发
+deviceId 不在抓取范围内：MCloudApp 13.0 的云朵中心请求（m.mcloud.139.com/ycloud/signin/）没有 deviceId 请求头，
+只有 startSignIn 的 query 参数与 Cookie .thumbcache_<hash>，需要时手动抓包填入 ydyp_device_id 或账号项的 deviceId。
+
 ------------------ Surge 配置 ------------------
 
 [MITM]
-hostname = personal-kd-njs.yun.139.com, mnote.caiyun.feixin.10086.cn, m.mcloud.139.com
+hostname = user-njs.yun.139.com
 
 [Script]
-移动云盘签到获取Token = type=http-request,pattern=^https?:\/\/personal-kd-njs\.yun\.139\.com\/hcy\/,requires-body=0,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,script-update-interval=0
-移动云盘签到获取Token2 = type=http-request,pattern=^https?:\/\/mnote\.caiyun\.feixin\.10086\.cn\/noteServer\/api\/authTokenRefresh\.do,requires-body=0,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,script-update-interval=0
-移动云盘签到获取deviceId = type=http-request,pattern=^https?:\/\/m\.mcloud\.139\.com\/market\/signin\/,requires-body=0,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,script-update-interval=0
+移动云盘签到获取Token = type=http-request,pattern=^https?:\/\/user-njs\.yun\.139\.com\/user\/,requires-body=0,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,script-update-interval=0
 移动云盘签到 = type=cron,cronexp="0 8 * * *",timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,script-update-interval=0
 
 ------------------- Loon 配置 -------------------
 
 [MITM]
-hostname = personal-kd-njs.yun.139.com, mnote.caiyun.feixin.10086.cn, m.mcloud.139.com
+hostname = user-njs.yun.139.com
 
-http-request ^https?:\/\/personal-kd-njs\.yun\.139\.com\/hcy\/ script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,timeout=600,tag=移动云盘签到获取Token
-
-http-request ^https?:\/\/mnote\.caiyun\.feixin\.10086\.cn\/noteServer\/api\/authTokenRefresh\.do script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,timeout=600,tag=移动云盘签到获取Token2
-
-http-request ^https?:\/\/m\.mcloud\.139\.com\/market\/signin\/ script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,timeout=600,tag=移动云盘签到获取deviceId
+http-request ^https?:\/\/user-njs\.yun\.139\.com\/user\/ script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,timeout=600,tag=移动云盘签到获取Token
 
 cron "0 8 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,timeout=600,tag=移动云盘签到
 
 --------------- Quantumult X 配置 ---------------
 
 [MITM]
-hostname = personal-kd-njs.yun.139.com, mnote.caiyun.feixin.10086.cn, m.mcloud.139.com
+hostname = user-njs.yun.139.com
 
 [rewrite_local]
-^https?:\/\/personal-kd-njs\.yun\.139\.com\/hcy\/ url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js
-^https?:\/\/mnote\.caiyun\.feixin\.10086\.cn\/noteServer\/api\/authTokenRefresh\.do url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js
-^https?:\/\/m\.mcloud\.139\.com\/market\/signin\/ url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js
+^https?:\/\/user-njs\.yun\.139\.com\/user\/ url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js
 
 [task_local]
 0 8 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js, tag=移动云盘签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/yidongyunpan.png, enabled=true
@@ -53,18 +50,10 @@ cron:
 
 http:
   mitm:
-    - "personal-kd-njs.yun.139.com"
-    - "mnote.caiyun.feixin.10086.cn"
-    - "m.mcloud.139.com"
+    - "user-njs.yun.139.com"
   script:
-    - match: ^https?:\/\/personal-kd-njs\.yun\.139\.com\/hcy\/
+    - match: ^https?:\/\/user-njs\.yun\.139\.com\/user\/
       name: 移动云盘签到获取Token
-      type: request
-    - match: ^https?:\/\/mnote\.caiyun\.feixin\.10086\.cn\/noteServer\/api\/authTokenRefresh\.do
-      name: 移动云盘签到获取Token2
-      type: request
-    - match: ^https?:\/\/m\.mcloud\.139\.com\/market\/signin\/
-      name: 移动云盘签到获取deviceId
       type: request
 
 script-providers:
@@ -698,11 +687,13 @@ class YP {
     }
 
     static buildTokenpkTaskPayload(task) {
-        const appButton = ((task || {}).button || {}).app || {};
+        const button = (task || {}).button || {};
+        // 新版任务列表按平台下发按钮(ios/android/harmony/other)，旧版是 app；key 为空时 click 会被网关 404
+        const platformButton = button.app || button.ios || button.android || button.harmony || button.other || {};
         return {
             marketName: TOKENPK_MARKET_NAME,
             taskId: task.id,
-            key: appButton.ext || '',
+            key: platformButton.ext || '',
             source: 'app',
         };
     }
@@ -830,9 +821,15 @@ class YP {
             return;
         }
 
+        const payload = YP.buildTokenpkTaskPayload(task);
+        if (!payload.key) {
+            this.log(`-暂不支持自动完成: ${taskName}`);
+            return;
+        }
+
         this.log(`-去完成: ${taskName}`);
         const clickData = await this.requestTokenpkJson('/ycloud/tokenpk/task/step/click', {
-            data: YP.buildTokenpkTaskPayload(task), method: 'POST',
+            data: payload, method: 'POST',
         });
         if (!clickData || clickData.code !== 0) {
             this.log(`-任务登记失败: ${taskName} ${clickData ? (clickData.msg || '接口无响应') : '接口无响应'}`);
@@ -2592,38 +2589,19 @@ async function sleep(minDelay = 1, maxDelay = 1.5) {
     return $.wait((Math.random() * (maxDelay - minDelay) + minDelay) * 1000);
 }
 
-// ---------- 获取Cookie数据 (rewrite 抓取入口, 与头部三条正则配套) ----------
+// ---------- 获取Cookie数据 (rewrite 抓取入口, 与头部抓取正则配套) ----------
 function GetCookie() {
     try {
         if ($request && $request.method === 'OPTIONS') return;
-        const url = $request.url || '';
         const header = ObjectKeys2LowerCase($request.headers || {});
         debug($request, '获取请求信息');
 
-        // 1) 云朵中心请求：只取 deviceId（按手机号写入 ydyp_cache，运行时优先复用）
-        if (url.indexOf('m.mcloud.139.com/market/signin/') !== -1) {
-            const deviceId = (header.deviceid || '').trim();
-            if (!deviceId) throw new Error('该请求没有 deviceId 头，换一个云朵中心接口再抓');
-            const cookiePhone = ((header.cookie || '').match(/\.thumbcache_(\d{7,})/) || [])[1] || '';
-            if (!cookiePhone) throw new Error('未从 Cookie .thumbcache_ 中解析到手机号');
-            if (getDeviceId(cookiePhone) === deviceId) return;
-            saveDeviceId(deviceId, cookiePhone);
-            const msg = `✅ 已记录 [${cookiePhone}] 的 deviceId`;
-            $.Messages.push(msg), $.log(msg);
-            return;
-        }
-
-        // 2) /hcy/ 文件接口 与 authTokenRefresh.do：取 Authorization
         const authorization = normalizeAuthorization(header.authorization);
         if (!authorization) throw new Error('请求头中没有 Authorization');
 
-        const reqBody = $.toObj($request.body || '') || {};
-        let phone = reqBody.userPhone ? String(reqBody.userPhone) : '';
-        // 请求体没有手机号时从 Basic 认证里解
-        if (!phone) {
-            const parts = Crypt('base64-decode', authorization.slice(6)).split(':');
-            phone = parts.length >= 2 ? parts[1] : '';
-        }
+        // 手机号直接从 Basic 认证里解 (mobile:手机号:token)
+        const parts = Crypt('base64-decode', authorization.slice(6)).split(':');
+        const phone = parts.length >= 2 ? parts[1] : '';
         if (!phone) throw new Error('未获取到手机号');
 
         const existIndex = $.userArr.findIndex(user => user.phone === phone);
