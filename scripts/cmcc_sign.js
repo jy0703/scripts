@@ -234,21 +234,27 @@ async function exchangeSession(user) {
         saveUsers();
     }
 
-    // ④ 访问带 token 的活动页，服务器 Set-Cookie: QWHD_SESSION_TOKEN
-    // 跳转地址来自服务端响应，限定在主站内且不跟随重定向
+    // ④ 访问带 token 的活动页，服务器以 302 + Set-Cookie 下发活动会话令牌
+    // 跳转地址来自服务端响应，限定在主站内；不跟随重定向，否则 302 上的 Set-Cookie 会被吞掉
     assertSafeUrl(data.url);
     const act = await Request({ url: data.url, headers: Object.assign(baseHeaders(jar, ua), { referer: actUrl }), _respType: 'all', followRedirect: false, _timeout: 30000 });
     takeCookies(jar, act && act.headers);
     if (act && act.statusCode >= 400) throw new Error(`活动页访问失败: HTTP ${act.statusCode}`);
     // 不同 hub 落不同令牌名（qwhdhub → QWHD_SESSION_TOKEN，hlwyxhdhub → HLWHD_SESSION_TOKEN），同一 jwt 跨 hub 通用，故按后缀匹配
-    if (!Object.keys(jar).some(k => /SESSION_TOKEN$/i.test(k))) throw new Error('未取得活动会话令牌，会话兑换失败');
+    if (!hasSessionToken(jar)) {
+        // 部分环境不遵守"不跟随重定向"，302 上的 Set-Cookie 会被吞掉；此时交给 markstatus 判活
+        const sc = (act && act.headers && (act.headers['set-cookie'] || act.headers['Set-Cookie'])) || '-';
+        $.log(`未取得会话令牌: HTTP ${act && act.statusCode} cookies=[${Object.keys(jar).join(',')}] set-cookie=${$.toStr(sc, String(sc))}`.slice(0, 300));
+    }
 
     return { jar, ua, referer: data.url };
 }
 
 async function queryMarkstatus(ctx) {
     const resp = await Request({ url: `${API_MARK}/mark31/markstatus`, method: 'post', headers: apiHeaders(ctx), body: {}, _timeout: 30000 });
-    if (!resp || resp.code !== 'SUCCESS') throw new Error(`markstatus 失败: ${resp && resp.code} ${resp && resp.msg}`);
+    if (!resp || resp.code !== 'SUCCESS') {
+        throw new Error(`markstatus 失败: ${resp && resp.code} ${resp && resp.msg}${hasSessionToken(ctx.jar) ? '' : '（环境未回传活动页 302 的 Set-Cookie，会话无法建立）'}`);
+    }
     return resp.data || {};
 }
 
@@ -317,13 +323,20 @@ function apiHeaders(ctx) {
 }
 
 function baseHeaders(jar, ua) {
-    return {
+    const h = {
         accept: '*/*',
         'content-type': 'application/json;charset=UTF-8',
         'user-agent': ua || USER_AGENT,
         'accept-language': 'zh-CN,zh-Hans;q=0.9',
-        Cookie: cookieHeader(jar),
     };
+    // jar 空时不下发空 Cookie 头，让环境自身的 cookie 管理生效
+    if (Object.keys(jar).length) h.Cookie = cookieHeader(jar);
+    return h;
+}
+
+// 会话令牌名按后缀匹配（不同 hub 前缀不同）
+function hasSessionToken(jar) {
+    return Object.keys(jar).some(k => /SESSION_TOKEN$/i.test(k));
 }
 
 // 动态 URL 出网前的边界校验：仅允许 https 且主机为签到主站
@@ -342,9 +355,11 @@ function takeCookies(jar, headers) {
     const raw = headers && (headers['set-cookie'] || headers['Set-Cookie']);
     if (!raw) return;
     for (const item of Array.isArray(raw) ? raw : [raw]) {
-        const kv = String(item).split(';')[0];
-        const eq = kv.indexOf('=');
-        if (eq > 0) jar[kv.slice(0, eq).trim()] = kv.slice(eq + 1).trim();
+        // 多条 cookie 可能被拼成逗号分隔的字符串；日期里的逗号后面不跟 name=，故按此切分安全
+        for (const part of String(item).split(/,(?=\s*[A-Za-z0-9_.-]+=)/)) {
+            const kv = /^\s*([A-Za-z0-9_.-]+)=([^;]*)/.exec(part);
+            if (kv) jar[kv[1]] = kv[2].trim();
+        }
     }
 }
 
