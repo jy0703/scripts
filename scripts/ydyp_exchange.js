@@ -90,8 +90,8 @@ async function main() {
     $.log(`移动云盘商品抢兑 v${SCRIPT_VERSION}，共 ${users.length} 个 App 端账号，商品ID: ${$.prizeIds.join(',') || '(无)'}`);
 
     for (let i = 0; i < users.length; i++) {
-        const phone = String((users[i] || {}).phone || '').trim() || phoneFromAuthorization((users[i] || {}).Authorization);
-        $.log(`\n----- 账号 [${i + 1}/${users.length}] ${phone || '(未填手机号)'} 开始执行 -----\n`);
+        const phone = maskPhone(String((users[i] || {}).phone || '').trim() || phoneFromAuthorization((users[i] || {}).Authorization));
+        $.log(`\n----- 账号 [${i + 1}/${users.length}] ${phone || '(未取到手机号)'} 开始执行 -----\n`);
         $.messages = [];
         await runAccount(users[i]);
         $.messages.splice(0, 0, `🔹 账号 ${i + 1} [${$.refLabel || phone}]`);
