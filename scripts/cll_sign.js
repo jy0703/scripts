@@ -4,7 +4,7 @@
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。签到参数（URL 查询参数）由本脚本的 GetCookie 抓取后存入 cll_data
  * 环境变量：cll_data
  * 备注：secret 参数随登录变化，若签到返回"非法请求"，请重新打开签到页抓取参数
- * 更新时间：2026-10-04 增加惊喜任务领取
+ * 更新时间：2026-10-05 修正任务领取：incomplete 先 report 再 claim
 
 ------------------ Surge 配置 ------------------
 
@@ -162,25 +162,49 @@ async function doSign(user) {
     $.messages.push(msg), $.log(msg);
 }
 
-// 领取惊喜任务奖励
+// 领取惊喜任务奖励（任务状态机: incomplete 未完成 → pending 待领取 → claimed 已领取）
 async function doTaskClaims(user) {
     const tasks = user.tasks || [];
-    const pending = tasks.filter(t => t?.status === 'incomplete');
-
     if (!tasks.length) {
         const msg = `📝 惊喜任务: 今日无任务`;
         $.messages.push(msg), $.log(msg);
         return;
     }
-    if (!pending.length) {
-        const msg = `📝 惊喜任务: 今日已领完 (${tasks.map(t => t.taskContent || t.taskType).join('、')})`;
-        $.messages.push(msg), $.log(msg);
-        return;
-    }
 
-    for (const task of pending) {
+    for (const task of tasks) {
         let msg = '';
         const name = task.taskContent || task.taskType;
+
+        if (task.status === 'claimed') {
+            msg = `📝 任务[${name}]: 今日已领取`;
+            $.messages.push(msg), $.log(msg);
+            continue;
+        }
+
+        // 未完成：分享任务直接 report 上报完成即可（服务端不校验真实分享），视频类任务需 APP 内看完广告，跳过
+        if (task.status === 'incomplete') {
+            if (task.taskType !== 'share') {
+                msg = `⏭️ 任务[${name}]: 需在APP内完成, 跳过`;
+                $.messages.push(msg), $.log(msg);
+                continue;
+            }
+            try {
+                const reportResult = await Request({ url: buildUrl(user, '/task/complete', { taskType: task.taskType, status: 'report' }), headers: buildHeaders(user) });
+                if (reportResult?.status !== '00') {
+                    msg = `❌ 任务[${name}]: 上报失败, ${reportResult?.errmsg || $.toStr(reportResult)}`;
+                    $.messages.push(msg), $.log(msg);
+                    continue;
+                }
+                $.log(`📤 任务[${name}]: 上报完成, 等待状态刷新`);
+                await $.wait(1500);
+            } catch (e) {
+                msg = `❌ 任务[${name}]: 上报失败, ${e.message}`;
+                $.messages.push(msg), $.log(msg);
+                continue;
+            }
+        }
+
+        // pending（含刚上报的）统一走领取
         try {
             const options = {
                 url: buildUrl(user, '/task/complete', { taskType: task.taskType, status: 'claim' }),
