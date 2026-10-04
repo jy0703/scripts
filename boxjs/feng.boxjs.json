@@ -367,6 +367,68 @@
           "desc": "exchangeList 返回的 prizeId，多个以英文逗号分隔；留空则只查询不兑换"
         }
       ]
+    },
+    {
+      "id": "cmcc_sign",
+      "name": "中国移动签到",
+      "author": "@Feng",
+      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js",
+      "descs_html": [
+        "中国移动 App「签到领流量/话费」活动(wx.10086.cn / qwhdhub mark31)，每日签到得流量或话费，可按累计天数领取连签奖励，支持多账号",
+        "抓取步骤：开启「中国移动获取Cookie」rewrite 后，打开中国移动 App - 登录 - 底部「我」-「签到」(或搜索\"签到领流量\")进入签到活动页，即自动写入 cmcc_data；抓取完成后建议关闭捕获开关",
+        "cmcc_data 内含 App 票据(token)与账号级长期凭证 jwt：jwt 有效时不再使用票据，票据过期不影响签到；jwt 失效会自动回落票据续期，两者都失效才需重新抓包",
+        "活动ID/渠道ID 变更时改 cmcc_activity_id、cmcc_channel_id，留空用默认 1021122301 / P00000109876",
+        "cmcc_claim 开启后每次签到会尝试领取全部连签奖励(热门奖品库存紧张，领不到属正常)"
+      ],
+      "icons": [
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/cmcc.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/cmcc.png"
+      ],
+      "keys": [
+        "cmcc_data",
+        "cmcc_claim",
+        "cmcc_activity_id",
+        "cmcc_channel_id"
+      ],
+      "settings": [
+        {
+          "id": "cmcc_data",
+          "name": "中国移动数据",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 5,
+          "placeholder": "",
+          "desc": "由 rewrite 抓取自动写入，勿手填；含 token/userCheckId/jwt"
+        },
+        {
+          "id": "cmcc_claim",
+          "name": "领取连签奖励",
+          "val": false,
+          "type": "boolean",
+          "desc": "默认关闭"
+        },
+        {
+          "id": "cmcc_activity_id",
+          "name": "活动ID",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "1021122301",
+          "desc": "留空用默认"
+        },
+        {
+          "id": "cmcc_channel_id",
+          "name": "渠道ID",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "P00000109876",
+          "desc": "留空用默认"
+        }
+      ]
     }
   ]
 }

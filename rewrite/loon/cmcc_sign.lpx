@@ -1,0 +1,18 @@
+#!name = 中国移动签到
+#!desc = 自动抓取中国移动 App 签到凭证，并每日定时签到、领取连签奖励，支持多账号（打开中国移动 App：登录 -「我」-「签到」进入签到领流量活动页）
+#!author = Fengzzzz
+#!homepage = https://github.com/jy0703/scripts
+#!icon = https://raw.githubusercontent.com/jy0703/scripts/main/icons/cmcc.png
+#!tag = 签到,自动化
+#!type = normal
+
+[Argument]
+capture = switch,false,tag=捕获 Cookie,desc=打开后按说明操作自动抓取签到凭证，抓取完成后建议关闭
+cronExpression = input,"0 1 * * *",tag=定时参数,desc=这里需要输入符合 CRON 表达式的参数
+
+[Script]
+http-request ^https?:\/\/wx\.10086\.cn\/qwhdsso\/appTokenLogin script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,requires-body=true,timeout=600,tag=中国移动获取Cookie,enable={capture}
+cron {cronExpression} script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,timeout=600,tag=中国移动签到,enable=true
+
+[Mitm]
+hostname = wx.10086.cn
