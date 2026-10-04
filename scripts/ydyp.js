@@ -2164,14 +2164,50 @@ class YP {
         }
     }
 
+    formatClickTaskStatus(task) {
+        const parts = [];
+        for (const k of ['state', 'currstep', 'process', 'stepTotal', 'count', 'finishedCount']) {
+            if (task && task[k] !== undefined && task[k] !== '') parts.push(`${k}=${task[k]}`);
+        }
+        if (!parts.length) parts.push(`state=${(task && task.state) || '未知'}`);
+        return `${parts.join('，')} 原始:${$.toStr(task).slice(0, 300)}`;
+    }
+
+    async getClickTaskStatus() {
+        for (const [group] of this.getCloudTaskGroups()) {
+            const task = await this.queryCloudTask(319, group);
+            if (task) return task;
+        }
+        const returnData = await this.requestJson({
+            url: 'https://caiyun.feixin.10086.cn/market/signin/task/taskList?marketname=sign_in_3',
+            headers: this.jwtHeaders, cookies: this.cookies,
+        });
+        const taskList = (returnData && returnData.result) || {};
+        for (const type of Object.keys(taskList)) {
+            const task = toArray(taskList[type]).find(t => t && t.id === 319);
+            if (task) return task;
+        }
+        return null;
+    }
+
     async click() {
         let successfulClick = 0;
-        const failedSummary = {};
+        let attempts = 0;
         let consecutiveFailCode = null;
         let consecutiveFailCount = 0;
-        let rawLogged = 0;
+        let noResultStreak = 0;
+        const summaryLog = [];
         try {
+            const before = await this.getClickTaskStatus();
+            if (before && before.state === 'FINISH') {
+                this.log(`✅戳一戳: 今日已完成 (${this.formatClickTaskStatus(before)})`);
+                return;
+            }
+            if (before) this.log(`-戳一戳初始状态: ${this.formatClickTaskStatus(before)}`);
+            else this.log('-戳一戳初始状态: 任务列表中未找到319');
+
             for (let i = 0; i < this.clickNum; i++) {
+                attempts += 1;
                 const returnData = (await this.clickTask(319)) || {};
                 await $.wait(200);
                 if (returnData.result) {
@@ -2179,27 +2215,45 @@ class YP {
                     successfulClick += 1;
                     consecutiveFailCode = null;
                     consecutiveFailCount = 0;
+                    noResultStreak = 0;
                     continue;
                 }
-                const code = returnData.code === undefined ? '无响应/无code' : String(returnData.code);
+                const code = returnData.code === undefined ? '无响应' : String(returnData.code);
                 const msg = returnData.msg || returnData.message || '无msg';
-                failedSummary[`${code}:${msg}`] = (failedSummary[`${code}:${msg}`] || 0) + 1;
-                this.log(`❌戳一戳 第${i + 1}次: code=${code} msg=${msg}`);
-                if (rawLogged < 2) {
-                    rawLogged += 1;
-                    this.log(`-原始响应: ${$.toStr(returnData).slice(0, 300)}`);
+                summaryLog.push(`${code}:${msg}`);
+                this.log(`❌戳一戳 第${i + 1}次: code=${code} msg=${msg} 原始:${$.toStr(returnData).slice(0, 200)}`);
+
+                if (code === '0') {
+                    // code=0 但无 result：服务端受理却不发奖，查任务状态判断是已用完还是未登记
+                    noResultStreak += 1;
+                    if (noResultStreak >= 2) {
+                        const cur = await this.getClickTaskStatus();
+                        this.log(`-点击后任务状态: ${cur ? this.formatClickTaskStatus(cur) : '未找到319'}`);
+                        if (cur && cur.state === 'FINISH') {
+                            this.log('✅戳一戳: 任务已完成，服务端不再发奖');
+                            break;
+                        }
+                        if (noResultStreak >= 3) {
+                            this.log('-连续3次成功但无奖励且任务未完成，提前结束');
+                            break;
+                        }
+                    }
+                    continue;
                 }
                 if (code === consecutiveFailCode) consecutiveFailCount += 1;
                 else { consecutiveFailCode = code; consecutiveFailCount = 1; }
-                // 同一错误连续3次说明是服务端固定拒绝(如次数用完)，不再空刷
                 if (consecutiveFailCount >= 3) {
                     this.log(`-戳一戳连续${consecutiveFailCount}次相同错误(${msg})，提前结束`);
                     break;
                 }
             }
             if (successfulClick === 0) {
-                const detail = Object.keys(failedSummary).map(k => `${k} x${failedSummary[k]}`).join('；');
-                $.log(`❌戳一戳: 未获得 x ${this.clickNum}${detail ? `，原因: ${detail}` : ''}`);
+                const counts = {};
+                for (const k of summaryLog) counts[k] = (counts[k] || 0) + 1;
+                const detail = Object.keys(counts).map(k => `${k} x${counts[k]}`).join('；');
+                $.log(`❌戳一戳: ${attempts}次点击未获得${detail ? `，原因: ${detail}` : ''}`);
+                const after = await this.getClickTaskStatus();
+                this.log(`-结束任务状态: ${after ? this.formatClickTaskStatus(after) : '未找到319'}`);
             }
         } catch (e) {
             $.log(`错误信息:${e.message || e}`);
