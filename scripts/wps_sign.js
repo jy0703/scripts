@@ -6,7 +6,7 @@
  * 小程序浏览任务：依赖 YYB code 服务，boxjs 配置 @wxCode.address / @wxCode.ref / @wxCode.token
  *          （Node 环境变量 WX_CODE_ADDRESS / WX_CODE_REF / WX_CODE_TOKEN 亦可，多个 ref 逗号分隔按账号顺序对应）
  * 获取 Cookie：在 WPS 内从会员中心横幅进入签到活动页（触发 rubik2/portal 页面请求）即可抓取，Cookie 含 uid 即可入库
- * 更新时间：2026-10-04 签到加密参数本地化(去第三方中转)；小程序动态签名+动态盐ss、新增挑战计划、浏览任务与领昨日打卡奖励
+ * 更新时间：2026-10-04 天天领福利切福利中心新期(YM2025060910400185)，打卡复用序列/抽奖动态场次，sign_date 改北京日期；签到加密本地化；小程序动态签名+动态盐+领昨日奖励
 
 ------------------ Surge 配置 ------------------
 
@@ -92,6 +92,12 @@ const APPLET_S_KEY_DEFAULT = '06196ab4da15c09a3aaee610162ca56f';
 const APPLET_SS = '7908b285f33c837d';  // 兜底活动盐，正常从 CDN 配置端点动态获取
 const CLOCK_CONF_URL = 'https://personal-act.wpscdn.cn/srcapi/act/rubik-service/honeycomb-adapter/client/module-info?pid=113&mg_id=47736&id=48312';
 const CLOCK_REWARD_URL = 'https://personal-bus.wps.cn/activity/clock_in/v1/reward';
+// 福利中心「天天领福利」当前期次常量(换期表现为打卡报操作失败/页面无组件，需重抓 page_info 更新)
+const FLZX_ACTIVITY = 'HD2025031721339450';
+const FLZX_PAGE = 'YM2025060910400185';
+const FLZX_FILTER_RAW = '%7B%22cs_from%22:%22xinchao_activity_lottery%22,%22position%22:%22ios_flzx_grzxsdjg3001%22%7D';
+const FLZX_FRAG_COMP = { number: 'ZJ2025061815352884', node: 'FN1769668388sb3w' };
+const FLZX_LOTTERY_COMP = { number: 'ZJ2025092916519174', node: 'FN1779447163CApn', session: 3002 };
 const APPLET_LOTTERY_ACTIVITY = 'HD2024082815116866';
 const APPLET_LOTTERY_PAGE = 'YM2024082815122017';
 const APPLET_LOTTERY_COMPONENT_DEFAULT = 'ZJ2025092916516585';
@@ -1540,196 +1546,161 @@ async function doFragmentCollectLottery(times) {
     }
 }
 
-// 天天领福利任务
+// ---------- 天天领福利(福利中心，期次: HD2025031721339450 / YM2025060910400185) ----------
+
+// 北京时间日期 YYYY-MM-DD(与服务端 sign_date 口径一致，UTC 日期会跨天)
+function beijingDate() {
+    const d = new Date(Date.now() + 8 * 3600 * 1000);
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+}
+
+function flzxHeaders() {
+    return {
+        'accept': 'application/json, text/plain, */*',
+        'accept-language': 'zh-CN,zh;q=0.9',
+        'cache-control': 'no-cache',
+        'pragma': 'no-cache',
+        'content-type': 'application/json',
+        'origin': 'https://personal-act.wps.cn',
+        'referer': `https://personal-act.wps.cn/rubik2/portal/${FLZX_ACTIVITY}/${FLZX_PAGE}?cs_from=xinchao_activity_lottery&position=ios_flzx_grzxsdjg3001`,
+        'sec-ch-ua': '"Google Chrome";v="129", "Not=A?Brand";v="8", "Chromium";v="129"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"Windows"',
+        'sec-fetch-dest': 'empty',
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-site': 'same-origin',
+        'user-agent': WIN_UA,
+        'cookie': $.cookie
+    };
+}
+
+// 福利中心 page_info(返回 data 组件列表)
+async function getFlzxPageInfo() {
+    try {
+        const response = await Request({
+            url: `https://personal-act.wps.cn/activity-rubik/activity/page_info?activity_number=${FLZX_ACTIVITY}&page_number=${FLZX_PAGE}&filter_params=${FLZX_FILTER_RAW}`,
+            headers: flzxHeaders()
+        });
+        if (response && response.result === 'ok') return response.data || [];
+        $.log(`❌ 获取福利中心信息失败: ${response ? JSON.stringify(response) : '网络错误'}\n`);
+        return null;
+    } catch (e) {
+        $.log(`❌ 获取福利中心信息异常: ${e.message}\n`);
+        return null;
+    }
+}
+
+// 天天领福利任务: 打卡(复用已有序列) → 抽奖(动态取场次与次数)
 async function doLottery3Tasks() {
     try {
-        // 签到
-        await doLottery3SignIn();
-        
-        // 获取抽奖次数并抽奖
-        const pageInfo = await getLottery3PageInfo();
-        if (pageInfo && pageInfo.lottery_times > 0) {
-            await doLottery3(pageInfo.lottery_times);
+        const list = await getFlzxPageInfo();
+        if (!list) return;
+
+        // 1) 每日打卡: 已有序列必须复用，盲发新序列会清零连续天数；取不到组件宁可不签
+        const fragItem = list.find(it => it && it.fragment_collect) ||
+            list.find(it => it && it.component_uniq_number && it.component_uniq_number.component_number === FLZX_FRAG_COMP.number);
+        if (!fragItem) {
+            $.log(`⚠️ 未取到打卡组件，跳过(避免误新建序列)\n`);
+        } else {
+            const fc = fragItem.fragment_collect || {};
+            const uniq = fragItem.component_uniq_number || {};
+            const records = fc.sign_records || [];
+            const today = beijingDate();
+            const todayRec = records.find(r => r && r.sign_date === today);
+            const seriesId = fc.sign_series_id || '';
+            if (todayRec && todayRec.sign_status === 'signed') {
+                $.log(`✅ 天天领福利今日已打卡\n`);
+                $.messages.push('天天领福利: 今日已打卡');
+            } else {
+                const response = await Request({
+                    url: 'https://personal-act.wps.cn/activity-rubik/activity/component_action',
+                    headers: flzxHeaders(),
+                    body: {
+                        component_uniq_number: {
+                            activity_number: FLZX_ACTIVITY,
+                            page_number: FLZX_PAGE,
+                            component_number: uniq.component_number || FLZX_FRAG_COMP.number,
+                            component_node_id: uniq.component_node_id || FLZX_FRAG_COMP.node,
+                        },
+                        component_type: 42,
+                        component_action: 'fragment_collect.sign_in',
+                        fragment_collect: {
+                            sign_date: today,
+                            series_id: seriesId,
+                            is_new_sign_series: !seriesId,
+                        },
+                    }
+                });
+                const inner = (response && response.data && response.data.fragment_collect) || {};
+                const reason = inner.reason || (response && (response.msg || response.ext_msg)) || '未知错误';
+                if (response && response.result === 'ok' && inner.success === true) {
+                    $.log(`✅ 天天领福利打卡成功${seriesId ? '' : '(新序列)'}\n`);
+                    $.messages.push(`天天领福利打卡成功${seriesId ? '' : '(新序列)'}`);
+                } else if (String(reason).includes('Duplicate') || String(reason).includes('已')) {
+                    $.log(`✅ 天天领福利今日已打卡\n`);
+                    $.messages.push('天天领福利: 今日已打卡');
+                } else {
+                    $.log(`❌ 天天领福利打卡失败: ${reason}\n`);
+                }
+            }
+        }
+
+        // 2) 天天抽奖: 免费次数每日 10 点后刷新，先看 page_info 次数再抽，场次动态取进行中的
+        const lotItem = list.find(it => it && it.type === 45 && it.lottery_v2) ||
+            list.find(it => it && it.component_uniq_number && it.component_uniq_number.component_number === FLZX_LOTTERY_COMP.number);
+        const lv = (lotItem && lotItem.lottery_v2) || {};
+        const sessions = lv.lottery_list || [];
+        const sess = sessions.find(s => s && s.session_status === 'IN_PROGRESS') || sessions[0];
+        const times = (sess && sess.times) || 0;
+        if (times < 1) {
+            $.log(`ℹ️ 天天领福利: 今日暂无免费次数(10点后刷新或已用完)\n`);
+        } else {
+            const uniq = (lotItem && lotItem.component_uniq_number) || {};
+            $.log(`ℹ️ 天天领福利: 抽奖次数 ${times}\n`);
+            await doLottery3(times, {
+                sessionId: (sess && sess.session_id) || FLZX_LOTTERY_COMP.session,
+                componentNumber: uniq.component_number || FLZX_LOTTERY_COMP.number,
+                componentNodeId: uniq.component_node_id || FLZX_LOTTERY_COMP.node,
+            });
         }
     } catch (e) {
         $.log(`❌ 天天领福利任务异常: ${e.message}\n`);
     }
 }
 
-// 天天领福利签到
-async function doLottery3SignIn() {
-    try {
-        const signDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD 格式
-        
-        const options = {
-            url: `https://personal-act.wps.cn/activity-rubik/activity/component_action`,
-            headers: {
-                'accept': 'application/json, text/plain, */*',
-                'accept-language': 'zh-CN,zh;q=0.9',
-                'content-type': 'application/json',
-                'origin': 'https://personal-act.wps.cn',
-                'referer': 'https://personal-act.wps.cn/rubik2/portal/HD2025031721339450/YM2025031721331326?cs_from=ad_ucsty_rwzx&position=ad_ucsty_rwzx',
-                'sec-ch-ua': '"Google Chrome";v="129", "Not=A?Brand";v="8", "Chromium";v="129"',
-                'sec-ch-ua-mobile': '?0',
-                'sec-ch-ua-platform': '"Windows"',
-                'sec-fetch-dest': 'empty',
-                'sec-fetch-mode': 'cors',
-                'sec-fetch-site': 'same-origin',
-                'cookie': $.cookie
-            },
-            body: {
-                'component_uniq_number': {
-                    'activity_number': 'HD2025031721339450',
-                    'page_number': 'YM2025031721331326',
-                    'component_number': 'ZJ2025061815363325',
-                    'component_node_id': 'FN1750234948dBVL',
-                    'filter_params': {
-                        'cs_from': 'ad_ucsty_rwzx',
-                        'position': 'ad_ucsty_rwzx',
-                    },
-                },
-                'component_type': 42,
-                'component_action': 'fragment_collect.sign_in',
-                'fragment_collect': {
-                    'sign_date': signDate,
-                    'series_id': '',
-                    'is_new_sign_series': true,
-                },
-            }
-        };
-
-        const response = await Request(options);
-
-        if (response && response.result === 'ok') {
-            const success = response.data?.fragment_collect?.success;
-            const rewards = response.data?.fragment_collect?.reason;
-            if (success) {
-                $.log(`✅ 天天领福利签到成功\n`);
-                $.messages.push(`天天领福利签到成功`);
-            } else {
-                $.log(`❌ 天天领福利签到失败: ${rewards}\n`);
-            }
-        } else if (response && response.msg && response.msg.includes('Duplicate entry')) {
-            $.log(`✅ 天天领福利今日已签到\n`);
-            $.messages.push(`天天领福利今日已签到`);
-        } else {
-            $.log(`❌ 天天领福利签到失败: ${response ? JSON.stringify(response) : '网络错误'}\n`);
-        }
-    } catch (e) {
-        $.log(`❌ 天天领福利签到异常: ${e.message}\n`);
-    }
-}
-
-// 获取天天领福利页面信息
-async function getLottery3PageInfo() {
-    try {
-        const options = {
-            url: `https://personal-act.wps.cn/activity-rubik/activity/page_info?activity_number=HD2025031721339450&page_number=YM2025031721331326&filter_params=%7B%22cs_from%22:%22ad_ucsty_rwzx%22,%22position%22:%22ad_ucsty_rwzx%22%7D`,
-            headers: {
-                'accept': 'application/json, text/plain, */*',
-                'accept-language': 'zh-CN,zh;q=0.9',
-                'cache-control': 'no-cache',
-                'pragma': 'no-cache',
-                'priority': 'u=1, i',
-                'referer': 'https://personal-act.wps.cn/rubik2/portal/HD2025031721339450/YM2025031721331326?cs_from=ad_ucsty_rwzx&position=ad_ucsty_rwzx',
-                'sec-ch-ua': '"Google Chrome";v="129", "Not=A?Brand";v="8", "Chromium";v="129"',
-                'sec-ch-ua-mobile': '?0',
-                'sec-ch-ua-platform': '"Windows"',
-                'sec-fetch-dest': 'empty',
-                'sec-fetch-mode': 'cors',
-                'sec-fetch-site': 'same-origin',
-                'cookie': $.cookie
-            }
-        };
-
-        const response = await Request(options);
-
-        if (response && response.result === 'ok') {
-            let lotteryTimes = null;
-
-            for (const item of response.data) {
-                if (lotteryTimes === null) {
-                    if (item.lottery_v2) {
-                        for (const session of item.lottery_v2.lottery_list || []) {
-                            if (session.times) {
-                                lotteryTimes = session.times;
-                                break;
-                            }
-                        }
-                    }
-                }
-                if (lotteryTimes !== null) {
-                    break;
-                }
-            }
-
-            $.log(`✅ 获取天天领福利信息成功 - 抽奖次数: ${lotteryTimes}\n`);
-            return {
-                lottery_times: lotteryTimes
-            };
-        } else {
-            $.log(`❌ 获取天天领福利信息失败: ${response ? JSON.stringify(response) : '网络错误'}\n`);
-            return null;
-        }
-    } catch (e) {
-        $.log(`❌ 获取天天领福利信息异常: ${e.message}\n`);
-        return null;
-    }
-}
-
-// 天天领福利抽奖
-async function doLottery3(times) {
-    try {
-        for (let i = 0; i < times; i++) {
-            const options = {
-                url: `https://personal-act.wps.cn/activity-rubik/activity/component_action`,
-                headers: {
-                    'accept': 'application/json, text/plain, */*',
-                    'accept-language': 'zh-CN,zh;q=0.9',
-                    'cache-control': 'no-cache',
-                    'content-type': 'application/json',
-                    'origin': 'https://personal-act.wps.cn',
-                    'pragma': 'no-cache',
-                    'priority': 'u=1, i',
-                    'referer': 'https://personal-act.wps.cn/rubik2/portal/HD2025031721339450/YM2025031721331326?cs_from=ad_ucsty_rwzx&position=ad_ucsty_rwzx',
-                    'sec-ch-ua': '"Google Chrome";v="129", "Not=A?Brand";v="8", "Chromium";v="129"',
-                    'sec-ch-ua-mobile': '?0',
-                    'sec-ch-ua-platform': '"Windows"',
-                    'sec-fetch-dest': 'empty',
-                    'sec-fetch-mode': 'cors',
-                    'sec-fetch-site': 'same-origin',
-                    'cookie': $.cookie
-                },
+// 抽奖: session/组件动态传入，失败(次数用完/上限)即停
+async function doLottery3(times, ctx) {
+    for (let i = 0; i < times; i++) {
+        try {
+            const response = await Request({
+                url: 'https://personal-act.wps.cn/activity-rubik/activity/component_action',
+                headers: flzxHeaders(),
                 body: {
-                    'component_uniq_number': {
-                        'activity_number': 'HD2025031721339450',
-                        'page_number': 'YM2025031721331326',
-                        'component_number': 'ZJ2025092916515917',
-                        'component_node_id': 'FN1761875116m2x8',
+                    component_uniq_number: {
+                        activity_number: FLZX_ACTIVITY,
+                        page_number: FLZX_PAGE,
+                        component_number: ctx.componentNumber,
+                        component_node_id: ctx.componentNodeId,
                     },
-                    'component_type': 45,
-                    'component_action': 'lottery_v2.exec',
-                    'lottery_v2': {
-                        'session_id': 3001,
-                    },
+                    component_type: 45,
+                    component_action: 'lottery_v2.exec',
+                    lottery_v2: { session_id: ctx.sessionId },
                 }
-            };
-
-            const response = await Request(options);
-
-            if (response && response.result === 'ok') {
-                const rewardName = response.data.lottery_v2.reward_name;
-                $.log(`✅ 天天领福利第${i+1}次抽奖成功: ${rewardName}\n`);
-                $.messages.push(`天天领福利第${i+1}次抽奖: ${rewardName}`);
+            });
+            const inner = (response && response.data && response.data.lottery_v2) || {};
+            if (response && response.result === 'ok' && inner.success === true) {
+                $.log(`✅ 天天领福利第${i + 1}次抽奖成功: ${inner.reward_name || '未知奖品'}\n`);
+                $.messages.push(`天天领福利抽奖: ${inner.reward_name || '未知奖品'}`);
             } else {
-                $.log(`❌ 天天领福利第${i+1}次抽奖失败: ${response ? JSON.stringify(response) : '网络错误'}\n`);
+                const reason = inner.send_msg || (inner.error_code === 10005 ? '次数用完' : ((response && response.msg) || '未知错误'));
+                $.log(`ℹ️ 天天领福利第${i + 1}次抽奖终止: ${reason}\n`);
+                break;
             }
-
-            // 抽奖间隔
-            await $.wait(2000);
+            await $.wait(1000 + Math.floor(Math.random() * 1000));
+        } catch (e) {
+            $.log(`❌ 天天领福利抽奖异常: ${e.message}\n`);
+            break;
         }
-    } catch (e) {
-        $.log(`❌ 天天领福利抽奖异常: ${e.message}\n`);
     }
 }
 
