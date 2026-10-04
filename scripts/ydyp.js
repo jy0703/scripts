@@ -2164,15 +2164,6 @@ class YP {
         }
     }
 
-    formatClickTaskStatus(task) {
-        const parts = [];
-        for (const k of ['state', 'currstep', 'process', 'stepTotal', 'count', 'finishedCount']) {
-            if (task && task[k] !== undefined && task[k] !== '') parts.push(`${k}=${task[k]}`);
-        }
-        if (!parts.length) parts.push(`state=${(task && task.state) || '未知'}`);
-        return `${parts.join('，')} 原始:${$.toStr(task).slice(0, 300)}`;
-    }
-
     async getClickTaskStatus() {
         for (const [group] of this.getCloudTaskGroups()) {
             const task = await this.queryCloudTask(319, group);
@@ -2192,22 +2183,17 @@ class YP {
 
     async click() {
         let successfulClick = 0;
-        let attempts = 0;
         let consecutiveFailCode = null;
         let consecutiveFailCount = 0;
         let noResultStreak = 0;
-        const summaryLog = [];
+        let lastMsg = '';
         try {
             const before = await this.getClickTaskStatus();
             if (before && before.state === 'FINISH') {
-                this.log(`✅戳一戳: 今日已完成 (${this.formatClickTaskStatus(before)})`);
+                this.log('✅戳一戳: 今日已完成');
                 return;
             }
-            if (before) this.log(`-戳一戳初始状态: ${this.formatClickTaskStatus(before)}`);
-            else this.log('-戳一戳初始状态: 任务列表中未找到319');
-
             for (let i = 0; i < this.clickNum; i++) {
-                attempts += 1;
                 const returnData = (await this.clickTask(319)) || {};
                 await $.wait(200);
                 if (returnData.result) {
@@ -2219,42 +2205,25 @@ class YP {
                     continue;
                 }
                 const code = returnData.code === undefined ? '无响应' : String(returnData.code);
-                const msg = returnData.msg || returnData.message || '无msg';
-                summaryLog.push(`${code}:${msg}`);
-                this.log(`❌戳一戳 第${i + 1}次: code=${code} msg=${msg} 原始:${$.toStr(returnData).slice(0, 200)}`);
-
+                lastMsg = returnData.msg || '未知错误';
                 if (code === '0') {
-                    // code=0 但无 result：服务端受理却不发奖，查任务状态判断是已用完还是未登记
+                    // code=0 但无 result：服务端受理不再发奖，查任务状态确认是否已戳完
                     noResultStreak += 1;
                     if (noResultStreak >= 2) {
                         const cur = await this.getClickTaskStatus();
-                        this.log(`-点击后任务状态: ${cur ? this.formatClickTaskStatus(cur) : '未找到319'}`);
                         if (cur && cur.state === 'FINISH') {
-                            this.log('✅戳一戳: 任务已完成，服务端不再发奖');
+                            this.log('✅戳一戳: 今日已完成');
                             break;
                         }
-                        if (noResultStreak >= 3) {
-                            this.log('-连续3次成功但无奖励且任务未完成，提前结束');
-                            break;
-                        }
+                        if (noResultStreak >= 3) break;
                     }
                     continue;
                 }
                 if (code === consecutiveFailCode) consecutiveFailCount += 1;
                 else { consecutiveFailCode = code; consecutiveFailCount = 1; }
-                if (consecutiveFailCount >= 3) {
-                    this.log(`-戳一戳连续${consecutiveFailCount}次相同错误(${msg})，提前结束`);
-                    break;
-                }
+                if (consecutiveFailCount >= 3) break;
             }
-            if (successfulClick === 0) {
-                const counts = {};
-                for (const k of summaryLog) counts[k] = (counts[k] || 0) + 1;
-                const detail = Object.keys(counts).map(k => `${k} x${counts[k]}`).join('；');
-                $.log(`❌戳一戳: ${attempts}次点击未获得${detail ? `，原因: ${detail}` : ''}`);
-                const after = await this.getClickTaskStatus();
-                this.log(`-结束任务状态: ${after ? this.formatClickTaskStatus(after) : '未找到319'}`);
-            }
+            if (successfulClick === 0) $.log(`❌戳一戳: 未获得 x ${this.clickNum}${lastMsg && lastMsg !== 'success' ? ` (${lastMsg})` : ''}`);
         } catch (e) {
             $.log(`错误信息:${e.message || e}`);
         }
