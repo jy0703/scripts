@@ -95,14 +95,20 @@
       "author": "@Feng",
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js",
       "descs_html": [
-        "移动云盘签到，每日签到获得云朵奖励，支持多账号"
+        "移动云盘自动签到 v5.0.8：每日签到/戳一戳、云朵中心新版任务(上传/分享/AI相机/云笔记/开启通知)、算力大作战、红包派对、139邮箱任务，支持多账号",
+        "抓取：开启插件的捕获开关后打开移动云盘 App 的活动页(h.139.com/ccopapi/share/share5gMessage)，Authorization 与手机号自动写入 ydyp_data",
+        "ydyp_data 为 JSON 数组：[{\"Authorization\":\"Basic xxx\",\"phone\":\"138xxxxxxxx\",\"deviceId\":\"\"}]，deviceId 留空时脚本自动生成，也可抓包 startSignIn / receiveV2 / infoV3 请求头的 deviceId 手动填写",
+        "Authorization 由脚本按有效期自动刷新(AES-ECB 调 refreshToken)，刷新结果与 deviceId 缓存在 ydyp_cache，无需手动维护；CK 彻底失效时通知会列出失效账号",
+        "算力大作战好友助力默认邀请码已在脚本内，按需在 TOKENPK_INVITE_CODE 修改"
       ],
       "icons": [
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/yidongyunpan.png",
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/yidongyunpan.png"
       ],
       "keys": [
-        "ydyp_data"
+        "ydyp_data",
+        "ydyp_device_id",
+        "ydyp_cache"
       ],
       "settings": [
         {
@@ -113,7 +119,27 @@
           "autoGrow": true,
           "rows": 5,
           "placeholder": "",
-          "desc": ""
+          "desc": "抓包生成的账号数组，可按需补充 deviceId"
+        },
+        {
+          "id": "ydyp_device_id",
+          "name": "全局 deviceId",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "",
+          "desc": "可选，填写后所有账号优先使用；抓包 startSignIn / receiveV2 / infoV3 请求头 deviceId"
+        },
+        {
+          "id": "ydyp_cache",
+          "name": "deviceId/Token 缓存",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 4,
+          "placeholder": "",
+          "desc": "脚本自维护(对应 py 的 ydyp_device_ids.json)，清空即可让账号重新生成 deviceId 与刷新 Token"
         }
       ]
     },
@@ -292,6 +318,23 @@
           "desc": "plazaCode, 默认 G001Z003C0018, 按抓包改"
         }
       ]
+    },
+    {
+      "id": "thyc_sign",
+      "name": "途虎养车签到",
+      "author": "@Feng",
+      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/thyc_sign.js",
+      "descs_html": [
+        "途虎养车小程序每日签到领积分 (cl-gateway.tuhu.cn)",
+        "依赖「Code Server」分组中「获取小程序code」配置项(@wxCode.address/ref/token)",
+        "userSession 自动缓存复用, 失效自动通过 code 服务刷新"
+      ],
+      "icons": [
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/thyc.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/thyc.png"
+      ],
+      "keys": [],
+      "settings": []
     }
   ]
 }
