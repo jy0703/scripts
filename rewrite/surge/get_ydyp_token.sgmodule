@@ -1,9 +1,11 @@
 #!name=移动云盘获取Token
-#!desc=自动抓取移动云盘 Authorization/手机号
-#!打开移动云盘 App，进入 活动 - 云朵中心（或任意活动页）触发抓取；deviceId 可在 BoxJS 的 ydyp_device_id 里补填（抓包 startSignIn / receiveV2 / infoV3 请求头 deviceId）。
+#!desc=自动抓取移动云盘 Authorization 与云朵中心 deviceId
+#!打开移动云盘 App：先进「云盘/文件」页抓 Authorization，再进「活动 - 云朵中心」抓 deviceId（签到定时任务在脚本内，本模块只做抓取）。
 
 [Script]
-移动云盘获取Token= type=http-request ^https?:\/\/h\.139\.com\/ccopapi\/share\/share5gMessage, requires-body=1, max-size=0, timeout=600, binary-body-mode=0, script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js, script-update-interval=0
+移动云盘获取Token= type=http-request ^https?:\/\/personal-kd-njs\.yun\.139\.com\/hcy\/, requires-body=0, max-size=0, timeout=600, script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js, script-update-interval=0
+移动云盘获取Token2= type=http-request ^https?:\/\/mnote\.caiyun\.feixin\.10086\.cn\/noteServer\/api\/authTokenRefresh\.do, requires-body=0, max-size=0, timeout=600, script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js, script-update-interval=0
+移动云盘获取deviceId= type=http-request ^https?:\/\/m\.mcloud\.139\.com\/market\/signin\/, requires-body=0, max-size=0, timeout=600, script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js, script-update-interval=0
 
 [MITM]
-hostname = %APPEND% h.139.com
+hostname = %APPEND% personal-kd-njs.yun.139.com, mnote.caiyun.feixin.10086.cn, m.mcloud.139.com

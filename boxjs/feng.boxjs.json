@@ -96,8 +96,8 @@
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js",
       "descs_html": [
         "移动云盘自动签到 v5.0.8：每日签到/戳一戳、云朵中心新版任务(上传/分享/AI相机/云笔记/开启通知)、算力大作战、红包派对、139邮箱任务，支持多账号",
-        "抓取：开启插件的捕获开关后打开移动云盘 App 的活动页(h.139.com/ccopapi/share/share5gMessage)，Authorization 与手机号自动写入 ydyp_data",
-        "ydyp_data 为 JSON 数组：[{\"Authorization\":\"Basic xxx\",\"phone\":\"138xxxxxxxx\",\"deviceId\":\"\"}]，deviceId 留空时脚本自动生成，也可抓包 startSignIn / receiveV2 / infoV3 请求头的 deviceId 手动填写",
+        "抓取：打开移动云盘 App，① 进「云盘/文件」页抓 Authorization（personal-kd-njs.yun.139.com/hcy/ 或 mnote authTokenRefresh.do），② 进「活动 - 云朵中心」抓 deviceId（m.mcloud.139.com/market/signin/），抓取开关用完记得关闭",
+        "ydyp_data 为 JSON 数组：[{\"Authorization\":\"Basic xxx\",\"phone\":\"138xxxxxxxx\",\"deviceId\":\"\"}]；deviceId 由抓取写入 ydyp_cache，也可抓包 startSignIn / receiveV2 / infoV3 请求头手动填写",
         "Authorization 由脚本按有效期自动刷新(AES-ECB 调 refreshToken)，刷新结果与 deviceId 缓存在 ydyp_cache，无需手动维护；CK 彻底失效时通知会列出失效账号",
         "算力大作战好友助力默认邀请码已在脚本内，按需在 TOKENPK_INVITE_CODE 修改"
       ],

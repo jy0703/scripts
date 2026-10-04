@@ -1,7 +1,7 @@
 /**
  * 脚本名称：移动云盘自动签到 - 签到
  * 活动规则：每日签到、云朵中心任务、算力大作战、红包派对，领取云朵与奖品
- * 脚本说明：支持多账号，支持 NE / Node.js 环境。账号参数（Authorization / 手机号 / deviceId）由本脚本 GetCookie 抓取后存入 ydyp_data
+ * 脚本说明：支持多账号，支持 NE / Node.js 环境。Authorization 与 deviceId 由本脚本 GetCookie 抓取（打开移动云盘 App → 首页 → 活动/云朵中心）
  * 环境变量：ydyp_data（账号）、ydyp_device_id（可选，全局 deviceId）、ydyp_cache（脚本自维护的 deviceId/Token 缓存）
  * 对应 Python 版本：ydyp.py v5.0.8
  * 更新时间：2026-10-04
@@ -9,28 +9,36 @@
 ------------------ Surge 配置 ------------------
 
 [MITM]
-hostname = h.139.com
+hostname = personal-kd-njs.yun.139.com, mnote.caiyun.feixin.10086.cn, m.mcloud.139.com
 
 [Script]
-移动云盘签到获取Token = type=http-request,pattern=^https?:\/\/h\.139\.com\/ccopapi\/share\/share5gMessage,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,script-update-interval=0
+移动云盘签到获取Token = type=http-request,pattern=^https?:\/\/personal-kd-njs\.yun\.139\.com\/hcy\/,requires-body=0,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,script-update-interval=0
+移动云盘签到获取Token2 = type=http-request,pattern=^https?:\/\/mnote\.caiyun\.feixin\.10086\.cn\/noteServer\/api\/authTokenRefresh\.do,requires-body=0,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,script-update-interval=0
+移动云盘签到获取deviceId = type=http-request,pattern=^https?:\/\/m\.mcloud\.139\.com\/market\/signin\/,requires-body=0,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,script-update-interval=0
 移动云盘签到 = type=cron,cronexp="0 8 * * *",timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,script-update-interval=0
 
 ------------------- Loon 配置 -------------------
 
 [MITM]
-hostname = h.139.com
+hostname = personal-kd-njs.yun.139.com, mnote.caiyun.feixin.10086.cn, m.mcloud.139.com
 
-http-request ^https?:\/\/h\.139\.com\/ccopapi\/share\/share5gMessage script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,requires-body=true,timeout=30,tag=移动云盘签到获取Token
+http-request ^https?:\/\/personal-kd-njs\.yun\.139\.com\/hcy\/ script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,timeout=600,tag=移动云盘签到获取Token
+
+http-request ^https?:\/\/mnote\.caiyun\.feixin\.10086\.cn\/noteServer\/api\/authTokenRefresh\.do script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,timeout=600,tag=移动云盘签到获取Token2
+
+http-request ^https?:\/\/m\.mcloud\.139\.com\/market\/signin\/ script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,timeout=600,tag=移动云盘签到获取deviceId
 
 cron "0 8 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,timeout=600,tag=移动云盘签到
 
 --------------- Quantumult X 配置 ---------------
 
 [MITM]
-hostname = h.139.com
+hostname = personal-kd-njs.yun.139.com, mnote.caiyun.feixin.10086.cn, m.mcloud.139.com
 
 [rewrite_local]
-^https?:\/\/h\.139\.com\/ccopapi\/share\/share5gMessage url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js
+^https?:\/\/personal-kd-njs\.yun\.139\.com\/hcy\/ url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js
+^https?:\/\/mnote\.caiyun\.feixin\.10086\.cn\/noteServer\/api\/authTokenRefresh\.do url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js
+^https?:\/\/m\.mcloud\.139\.com\/market\/signin\/ url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js
 
 [task_local]
 0 8 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js, tag=移动云盘签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/yidongyunpan.png, enabled=true
@@ -45,12 +53,19 @@ cron:
 
 http:
   mitm:
-    - "h.139.com"
+    - "personal-kd-njs.yun.139.com"
+    - "mnote.caiyun.feixin.10086.cn"
+    - "m.mcloud.139.com"
   script:
-    - match: ^https?:\/\/h\.139\.com\/ccopapi\/share\/share5gMessage
+    - match: ^https?:\/\/personal-kd-njs\.yun\.139\.com\/hcy\/
       name: 移动云盘签到获取Token
       type: request
-      require-body: true
+    - match: ^https?:\/\/mnote\.caiyun\.feixin\.10086\.cn\/noteServer\/api\/authTokenRefresh\.do
+      name: 移动云盘签到获取Token2
+      type: request
+    - match: ^https?:\/\/m\.mcloud\.139\.com\/market\/signin\/
+      name: 移动云盘签到获取deviceId
+      type: request
 
 script-providers:
   移动云盘签到:
@@ -279,6 +294,11 @@ function stripTags(text) {
     return (text || '').replace(/<[^>]+>/g, '');
 }
 
+// 对齐 py `x or []`：接口异常返回空对象/空串时按空数组处理，避免 for..of 抛错
+function toArray(value) {
+    return Array.isArray(value) ? value : [];
+}
+
 
 // ---------- 移动云盘任务类 ----------
 class YP {
@@ -293,7 +313,6 @@ class YP {
             this.userDomainId = '';
             this.marketDeviceId = '';
             this.marketXDeviceInfo = '';
-            this.marketDeviceFromEnv = false;
             this.marketHeaders = {};
             this.marketCookies = {};
             this.redPacketToken = '';
@@ -363,7 +382,6 @@ class YP {
         if (envDeviceId) {
             this.marketDeviceId = envDeviceId;
             this.marketXDeviceInfo = buildXDeviceInfo(envDeviceId);
-            this.marketDeviceFromEnv = true;
             return;
         }
         // 账号变量里直接填的 deviceId 优先于缓存
@@ -537,7 +555,7 @@ class YP {
     static getTodaySignState(result) {
         const todaySignIn = (result || {}).todaySignIn;
         if (typeof todaySignIn === 'boolean') return todaySignIn;
-        for (const day of (result && result.cal) || []) {
+        for (const day of toArray(result && result.cal)) {
             if (day.t) return !!day.s;
         }
         return null;
@@ -591,7 +609,8 @@ class YP {
     seedMarketDeviceCookie() {
         let deviceId = this.marketDeviceId;
         if (!deviceId) return;
-        if (this.marketDeviceFromEnv && deviceId.startsWith('B')) deviceId = deviceId.slice(1);
+        // 抓包请求头的 deviceId 带 "B" 前缀，Cookie .thumbcache_ 内存的是去前缀的原值
+        if (deviceId.startsWith('B')) deviceId = deviceId.slice(1);
         for (const name of Object.keys(this.marketCookies)) {
             if (name.startsWith('.thumbcache_') && this.marketCookies[name] === deviceId) return;
         }
@@ -700,7 +719,7 @@ class YP {
             if (logError) this.log(`-获取算力大作战任务失败: ${data.msg || '未知错误'}`);
             return null;
         }
-        return data.result || [];
+        return toArray(data.result);
     }
 
     async getTokenpkTask(taskId) {
@@ -714,7 +733,7 @@ class YP {
     }
 
     logTokenpkPrizes(prizes, defaultMessage) {
-        const list = prizes || [];
+        const list = toArray(prizes);
         const successful = list.filter(prize => prize.success).map(prize => prize.prizeName || '');
         if (successful.length) {
             this.log(`-${defaultMessage}: ${successful.filter(Boolean).join(' + ')}`);
@@ -784,7 +803,7 @@ class YP {
             this.log(`-预约失败: ${taskName} ${data ? (data.msg || '接口无响应') : '接口无响应'}`);
             return false;
         }
-        const prizes = (data.result || {}).prizes || [];
+        const prizes = toArray((data.result || {}).prizes);
         if (prizes.length) this.logTokenpkPrizes(prizes, `已领取预约奖励: ${taskName}`);
         else this.log(`-预约成功: ${taskName}`);
         return true;
@@ -830,7 +849,7 @@ class YP {
     }
 
     async receivePendingTokenpkTaskPrizes() {
-        const tasks = (await this.getTokenpkTaskList(false)) || [];
+        const tasks = toArray(await this.getTokenpkTaskList(false));
         for (const task of tasks) {
             if (task.state === 'SUCCESS' && task.taskType !== 'RESERVE') {
                 await this.receiveTokenpkTaskPrize(task);
@@ -849,7 +868,7 @@ class YP {
             return;
         }
 
-        const records = ((data.result || {}).result) || [];
+        const records = toArray((data.result || {}).result);
         const pending = records.filter(record => record.flag === 1);
         if (pending.length) {
             this.log('\n🎁 算力大作战奖品');
@@ -919,7 +938,7 @@ class YP {
         }
         const result = homeData.result || {};
         this.log(`-本月已消耗Token: ${result.usedToken || 0}`);
-        for (const stage of result.rewardStages || []) {
+        for (const stage of toArray(result.rewardStages)) {
             if (stage.status !== 1) continue;
             const rewardData = await this.requestTokenpkJson('/ycloud/tokenpk/toplist/progress/receiveReward', {
                 data: { phaseNo: stage.phaseNo }, method: 'POST',
@@ -1122,7 +1141,7 @@ class YP {
             if (!this.isRedPacketOk(data)) return null;
             taskList = YP.redPacketData(data);
         }
-        for (const item of (taskList || {}).configTaskSignList || []) {
+        for (const item of toArray((taskList || {}).configTaskSignList)) {
             if (item.isToday === 1) return item;
         }
         return null;
@@ -1137,7 +1156,7 @@ class YP {
             const body = YP.redPacketData(data);
             const nested = (body && typeof body === 'object' && body.data) ? body.data : body;
             const detail = (nested && typeof nested === 'object') ? nested : body;
-            phones.push(...((detail || {}).subscribeDetails || []));
+            phones.push(...toArray((detail || {}).subscribeDetails));
         }
         return phones;
     }
@@ -1156,7 +1175,7 @@ class YP {
     async getRedPacketAppList() {
         const data = await this.requestRedPacketJson('/redpacket/configAppList', { data: { platformType: 1 } });
         if (!this.isRedPacketOk(data)) return [];
-        return YP.redPacketData(data).list || [];
+        return toArray(YP.redPacketData(data).list);
     }
 
     async getRedPacketInstallStatus(hwToken, instanceId, packageName) {
@@ -1165,9 +1184,9 @@ class YP {
         });
         let items = YP.redPacketData(data);
         if (items && typeof items === 'object' && !Array.isArray(items)) items = items.data;
-        if (items && typeof items === 'object' && !Array.isArray(items)) items = items.list || [];
+        if (items && typeof items === 'object' && !Array.isArray(items)) items = toArray(items.list);
         if (!items || !items.length) return null;
-        const instanceList = (items[0] || {}).instanceList || [];
+        const instanceList = toArray((items[0] || {}).instanceList);
         if (!instanceList.length) return null;
         return instanceList[0].installStatus;
     }
@@ -1265,7 +1284,7 @@ class YP {
 
     async getRedPacketTopic() {
         const data = await this.requestRedPacketJson('/redpacket/configTopicList', { data: {} });
-        const topics = YP.redPacketData(data).list || [];
+        const topics = toArray(YP.redPacketData(data).list);
         return topics.length ? topics[0] : null;
     }
 
@@ -1284,7 +1303,7 @@ class YP {
             question = topic.topicContent || '';
             const answerText = RED_PACKET_KNOWN_ANSWERS[question];
             try {
-                options = $.toObj(topic.topicOption || '[]') || [];
+                options = toArray($.toObj(topic.topicOption || '[]'));
             } catch (e) {
                 options = [];
             }
@@ -1329,7 +1348,7 @@ class YP {
         if (!data || String((data.header || {}).status) !== '200') return null;
         const taskList = data.data || {};
         for (const group of ['configTaskNoviceList', 'configTaskDailyList', 'configTaskMonthlyList']) {
-            for (const task of taskList[group] || []) {
+            for (const task of toArray(taskList[group])) {
                 if (task.taskCode === taskCode) return task;
             }
         }
@@ -1468,7 +1487,7 @@ class YP {
         await this.logRedPacketBalance();
         await this.handleRedPacketSign(taskList);
         for (const [group, title] of this.redPacketTaskGroups()) {
-            const tasks = taskList[group] || [];
+            const tasks = toArray(taskList[group]);
             if (!tasks.length) continue;
             this.log(title);
             for (const task of tasks) {
@@ -1570,7 +1589,7 @@ class YP {
                 return items;
             }
             const data = response.data || {};
-            items.push(...(data.items || []));
+            items.push(...toArray(data.items));
             pageCursor = data.nextPageCursor || '';
             if (!pageCursor) return items;
         }
@@ -1652,7 +1671,7 @@ class YP {
         }
         const data = (response || {}).data || {};
         const result = data.result || data.getOutLinkRes || {};
-        const outlinks = result.getOutLinkResSet || [];
+        const outlinks = toArray(result.getOutLinkResSet);
         let success = false;
         if (response) {
             success = (response.success && result.resultCode === '0') || (String(response.code) === '0' && !!outlinks.length);
@@ -1823,7 +1842,7 @@ class YP {
     }
 
     static getTaskStepTypes(task) {
-        return (task || {}).stepTypeSet || [];
+        return toArray((task || {}).stepTypeSet);
     }
 
     getTaskClickKeys(task) {
@@ -1853,7 +1872,7 @@ class YP {
             method: 'POST',
         });
         if (!returnData || returnData.code !== 0) return null;
-        for (const task of ((returnData.result || {})[group]) || []) {
+        for (const task of toArray((returnData.result || {})[group])) {
             if (task.id === taskId) return task;
         }
         return null;
@@ -1899,7 +1918,7 @@ class YP {
                 this.log(`获取任务列表失败: ${group} ${returnData.msg || '未知错误'}`);
                 continue;
             }
-            const tasks = (returnData.result || {})[group] || [];
+            const tasks = toArray((returnData.result || {})[group]);
             if (!tasks.length) continue;
             this.log(title);
             for (const task of tasks) {
@@ -2219,7 +2238,7 @@ class YP {
             return false;
         }
         const resJson = $.toObj(response.text);
-        const notebooks = (resJson || {}).notebooks || [];
+        const notebooks = toArray(resJson && resJson.notebooks);
         if (!notebooks.length || !notebooks[0].notebookId) {
             this.log('-创建云笔记失败: 缺少默认笔记本');
             return false;
@@ -2449,7 +2468,7 @@ class YP {
         }
         await this.sleep();
         const prizeData = (await this.requestJson({ url: prizeUrl, headers: this.jwtHeaders, cookies: this.cookies })) || {};
-        const result = ((prizeData.result || {}).result) || [];
+        const result = toArray((prizeData.result || {}).result);
         let rewards = '';
         for (const value of result) {
             const marketId = value.marketid || value.marketId;
@@ -2573,36 +2592,55 @@ async function sleep(minDelay = 1, maxDelay = 1.5) {
     return $.wait((Math.random() * (maxDelay - minDelay) + minDelay) * 1000);
 }
 
-// ---------- 获取Cookie数据 (rewrite 抓取入口) ----------
+// ---------- 获取Cookie数据 (rewrite 抓取入口, 与头部三条正则配套) ----------
 function GetCookie() {
     try {
         if ($request && $request.method === 'OPTIONS') return;
-        let msg = '';
+        const url = $request.url || '';
+        const header = ObjectKeys2LowerCase($request.headers || {});
         debug($request, '获取请求信息');
 
-        const header = ObjectKeys2LowerCase($request.headers);
-        const authorization = normalizeAuthorization(header.authorization);
-        if (!authorization) throw new Error('获取Cookie错误，Authorization 为空');
+        // 1) 云朵中心请求：只取 deviceId（按手机号写入 ydyp_cache，运行时优先复用）
+        if (url.indexOf('m.mcloud.139.com/market/signin/') !== -1) {
+            const deviceId = (header.deviceid || '').trim();
+            if (!deviceId) throw new Error('该请求没有 deviceId 头，换一个云朵中心接口再抓');
+            const cookiePhone = ((header.cookie || '').match(/\.thumbcache_(\d{7,})/) || [])[1] || '';
+            if (!cookiePhone) throw new Error('未从 Cookie .thumbcache_ 中解析到手机号');
+            if (getDeviceId(cookiePhone) === deviceId) return;
+            saveDeviceId(deviceId, cookiePhone);
+            const msg = `✅ 已记录 [${cookiePhone}] 的 deviceId`;
+            $.Messages.push(msg), $.log(msg);
+            return;
+        }
 
-        const response = $.toObj(($response || {}).body) || {};
-        const result = response.result || {};
-        // 优先取响应体手机号，取不到时从 Basic 认证里解
-        let phone = result.phone || result.mobile || response.phone || response.mobile || '';
+        // 2) /hcy/ 文件接口 与 authTokenRefresh.do：取 Authorization
+        const authorization = normalizeAuthorization(header.authorization);
+        if (!authorization) throw new Error('请求头中没有 Authorization');
+
+        const reqBody = $.toObj($request.body || '') || {};
+        let phone = reqBody.userPhone ? String(reqBody.userPhone) : '';
+        // 请求体没有手机号时从 Basic 认证里解
         if (!phone) {
             const parts = Crypt('base64-decode', authorization.slice(6)).split(':');
             phone = parts.length >= 2 ? parts[1] : '';
         }
         if (!phone) throw new Error('未获取到手机号');
 
-        const newData = { 'Authorization': authorization, 'phone': phone, 'deviceId': header.deviceid || '' };
-        const index = $.userArr.findIndex(user => user.phone === phone);
-        if (index !== -1) {
-            newData.deviceId = newData.deviceId || $.userArr[index].deviceId || '';
-            $.userArr[index] = newData;
-            msg += `♻️ 更新用户 [${phone}] 信息`;
+        const existIndex = $.userArr.findIndex(user => user.phone === phone);
+        if (existIndex !== -1 && $.userArr[existIndex].Authorization === authorization) {
+            $.log(`♻️ [${phone}] Authorization 未变化`);
+            return;
+        }
+
+        const newData = { 'Authorization': authorization, 'phone': phone, 'deviceId': '' };
+        let msg = '';
+        if (existIndex !== -1) {
+            newData.deviceId = $.userArr[existIndex].deviceId || '';
+            $.userArr[existIndex] = newData;
+            msg = `♻️ 更新用户 [${phone}] 信息`;
         } else {
             $.userArr.push(newData);
-            msg += `🆕 新增用户 [${phone}] 信息`;
+            msg = `🆕 新增用户 [${phone}] 信息`;
         }
 
         $.setdata($.toStr($.userArr), 'ydyp_data');
