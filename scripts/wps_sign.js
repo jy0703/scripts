@@ -1149,7 +1149,7 @@ function GetCookie() {
 // 脚本执行入口
 !(async () => {
     if (typeof $request !== `undefined`) {
-        // 仅处理 rubik2/portal 活动页请求来获取 Cookie（该页面会带上 act_csrf_token）
+        // 仅处理活动页请求来获取 Cookie（Cookie 中带 uid 即可）
         if ($request.url.includes('personal-act.wps.cn/rubik2/portal/')) {
             GetCookie();
         }

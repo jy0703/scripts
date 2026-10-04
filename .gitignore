@@ -1,2 +1,6 @@
 # SpectrAI worktree isolation
 .spectrai-worktrees/
+
+# 本地技能说明文档，不入库
+/py2js.md
+/.qoder/
