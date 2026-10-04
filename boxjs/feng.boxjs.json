@@ -95,7 +95,7 @@
       "author": "@Feng",
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js",
       "descs_html": [
-        "移动云盘自动签到 v5.0.8：每日签到/戳一戳、云朵中心新版任务(上传/分享/AI相机/云笔记/开启通知)、算力大作战、红包派对、139邮箱任务，支持多账号",
+        "移动云盘自动签到 v5.0.9：每日签到/戳一戳、云朵中心新版任务(上传/分享/AI相机/云笔记/开启通知)、算力大作战、红包派对、139邮箱任务，支持多账号",
         "抓取：开启插件的捕获开关后打开移动云盘 App 首页即可（命中 user-njs.yun.139.com/user/ 的 Authorization，手机号从 Basic 认证里自动解析），抓完记得关闭开关",
         "ydyp_data 为 JSON 数组：[{\"Authorization\":\"Basic xxx\",\"phone\":\"138xxxxxxxx\",\"deviceId\":\"\"}]；deviceId 不参与抓取，可选，需抓 m.mcloud.139.com/ycloud/signin/page/startSignIn 的 deviceId 参数填入 ydyp_device_id 或账号项，留空时脚本自动生成",
         "Authorization 由脚本按有效期自动刷新(AES-ECB 调 refreshToken)，刷新结果与 deviceId 缓存在 ydyp_cache，无需手动维护；CK 彻底失效时通知会列出失效账号",
@@ -345,7 +345,7 @@
         "移动云盘云朵中心(sign_in_3)商品抢兑，自动识别滑块偏移量后调用 exchangeV2 兑换 (m.mcloud.139.com)",
         "依赖「Code Server」分组中「获取小程序code」配置项(@wxCode.address/ref/token)，ref 对应的微信需进过「移动云盘」小程序(appid wx4e4ed37286c816c2)",
         "Authorization 自动缓存复用(ydyp_exchange_cache)，失效自动重新取号登录",
-        "deviceId 复用「移动云盘签到」(ydyp.js) 写在 ydyp_cache 里的 deviceId：先用该脚本跑一次签到抓号，本脚本即可取到；缺失时仅靠服务端 Cookie 回填",
+        "deviceId 由本脚本每次动态向数美 deviceprofile/v4 取号(RSA 公钥加密设备指纹, 与真机同形态 89 字符)；取号失败时回退「移动云盘签到」(ydyp.js) 写在 ydyp_cache 里的 deviceId，再缺失则靠服务端 Set-Cookie 回填",
         "商品ID 需在补货时刻(每日 10:00/16:00/00:00)前配置，留空则只查询商品列表与待领取奖品、不兑换"
       ],
       "icons": [

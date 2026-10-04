@@ -72,7 +72,7 @@ $.err_accounts = '';
 $.user_amount = '';
 
 // ---------- 业务常量 (照 ydyp.py v5.0.8 搬运) ----------
-const SCRIPT_VERSION = '5.0.8';
+const SCRIPT_VERSION = '5.0.9';
 const CLIENT_VERSION = '12.5.4';
 const UA = '';            // py ua：APP 接口不发送自定义 UA
 const MARKET_UA = '';     // py market_ua：云朵中心 H5 接口
@@ -2166,6 +2166,10 @@ class YP {
 
     async click() {
         let successfulClick = 0;
+        const failedSummary = {};
+        let consecutiveFailCode = null;
+        let consecutiveFailCount = 0;
+        let rawLogged = 0;
         try {
             for (let i = 0; i < this.clickNum; i++) {
                 const returnData = (await this.clickTask(319)) || {};
@@ -2173,9 +2177,30 @@ class YP {
                 if (returnData.result) {
                     this.log(`✅戳一戳: ${returnData.result}`);
                     successfulClick += 1;
+                    consecutiveFailCode = null;
+                    consecutiveFailCount = 0;
+                    continue;
+                }
+                const code = returnData.code === undefined ? '无响应/无code' : String(returnData.code);
+                const msg = returnData.msg || returnData.message || '无msg';
+                failedSummary[`${code}:${msg}`] = (failedSummary[`${code}:${msg}`] || 0) + 1;
+                this.log(`❌戳一戳 第${i + 1}次: code=${code} msg=${msg}`);
+                if (rawLogged < 2) {
+                    rawLogged += 1;
+                    this.log(`-原始响应: ${$.toStr(returnData).slice(0, 300)}`);
+                }
+                if (code === consecutiveFailCode) consecutiveFailCount += 1;
+                else { consecutiveFailCode = code; consecutiveFailCount = 1; }
+                // 同一错误连续3次说明是服务端固定拒绝(如次数用完)，不再空刷
+                if (consecutiveFailCount >= 3) {
+                    this.log(`-戳一戳连续${consecutiveFailCount}次相同错误(${msg})，提前结束`);
+                    break;
                 }
             }
-            if (successfulClick === 0) $.log(`❌戳一戳: 未获得 x ${this.clickNum}`);
+            if (successfulClick === 0) {
+                const detail = Object.keys(failedSummary).map(k => `${k} x${failedSummary[k]}`).join('；');
+                $.log(`❌戳一戳: 未获得 x ${this.clickNum}${detail ? `，原因: ${detail}` : ''}`);
+            }
         } catch (e) {
             $.log(`错误信息:${e.message || e}`);
         }
