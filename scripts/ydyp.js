@@ -38,7 +38,7 @@ hostname = user-njs.yun.139.com
 ^https?:\/\/user-njs\.yun\.139\.com\/user\/ url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js
 
 [task_local]
-0 8 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js, tag=移动云盘签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/yidongyunpan.png, enabled=true
+0 8 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js, tag=移动云盘签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/ydyp.png, enabled=true
 
 ------------------ Stash 配置 ------------------
 

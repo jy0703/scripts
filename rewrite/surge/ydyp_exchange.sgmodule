@@ -1,0 +1,5 @@
+#!name=移动云盘商品抢兑
+#!desc=云朵中心按商品ID抢兑奖品（每日 10:00/16:00/00:00），账号通过 Code Server 服务获取，支持多账号
+
+[Script]
+移动云盘商品抢兑= type=cron,cronexp="0 10,16,0 * * *",script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp_exchange.js,wake-system=1,timeout=600,script-update-interval=0

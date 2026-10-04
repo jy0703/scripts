@@ -102,8 +102,8 @@
         "算力大作战好友助力默认邀请码已在脚本内，按需在 TOKENPK_INVITE_CODE 修改"
       ],
       "icons": [
-        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/yidongyunpan.png",
-        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/yidongyunpan.png"
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/ydyp.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/ydyp.png"
       ],
       "keys": [
         "ydyp_data",
@@ -335,6 +335,38 @@
       ],
       "keys": [],
       "settings": []
+    },
+    {
+      "id": "ydyp_exchange",
+      "name": "移动云盘商品抢兑",
+      "author": "@Feng",
+      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp_exchange.js",
+      "descs_html": [
+        "移动云盘云朵中心(sign_in_3)商品抢兑，自动识别滑块偏移量后调用 exchangeV2 兑换 (m.mcloud.139.com)",
+        "依赖「Code Server」分组中「获取小程序code」配置项(@wxCode.address/ref/token)，ref 对应的微信需进过「移动云盘」小程序(appid wx4e4ed37286c816c2)",
+        "Authorization 自动缓存复用(ydyp_exchange_cache)，失效自动重新取号登录",
+        "deviceId 复用「移动云盘签到」(ydyp.js) 写在 ydyp_cache 里的 deviceId：先用该脚本跑一次签到抓号，本脚本即可取到；缺失时仅靠服务端 Cookie 回填",
+        "商品ID 需在补货时刻(每日 10:00/16:00/00:00)前配置，留空则只查询商品列表与待领取奖品、不兑换"
+      ],
+      "icons": [
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/ydyp.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/ydyp.png"
+      ],
+      "keys": [
+        "ydyp_exchange_prizes"
+      ],
+      "settings": [
+        {
+          "id": "ydyp_exchange_prizes",
+          "name": "抢兑商品ID",
+          "val": "251230069,260508003",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "",
+          "desc": "exchangeList 返回的 prizeId，多个以英文逗号分隔；留空则只查询不兑换"
+        }
+      ]
     }
   ]
 }

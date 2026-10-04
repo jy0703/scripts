@@ -2,7 +2,7 @@
 #!desc = 自动抓取移动云盘 Authorization，并每日定时完成签到、云朵中心任务、算力大作战、红包派对（打开 App 首页即抓到，deviceId 可选、需自行抓包填写）
 #!author = Fengzzzz
 #!homepage = https://github.com/jy0703/scripts
-#!icon = https://raw.githubusercontent.com/jy0703/scripts/main/icons/yidongyunpan.png
+#!icon = https://raw.githubusercontent.com/jy0703/scripts/main/icons/ydyp.png
 #!tag = 签到,自动化
 #!type = normal
 
