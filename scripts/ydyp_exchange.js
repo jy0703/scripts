@@ -1,18 +1,13 @@
 /**
  * 脚本名称：移动云盘商品抢兑
  * 活动规则：云朵中心（sign_in_3）用云朵抢兑商品，每日 10:00 / 16:00 / 00:00 补货
- * 脚本说明：通过 code 服务(YYB Go)取微信小程序 code(移动云盘 appid)，
- *          thirdlogin 换 account+authToken → Basic Authorization → sso querySpecToken → tyrzLogin 取 jwtToken，
- *          再读商品列表、识别滑块偏移量(纯 JS PNG + 掩码 NCC)、按 prizeId 调用 exchangeV2 抢兑。
- *          deviceId 走数美 deviceprofile/v4（RSA 公钥加密设备指纹，每账号动态取号），失败回退「移动云盘签到」(ydyp.js) 写在 ydyp_cache 里的 deviceId，再缺失靠服务端 Set-Cookie 回填。
- * 配置说明：boxjs 订阅「Code Server」分组中填写「获取小程序code」配置项(@wxCode.*):
- *          - @wxCode.open    开启code模式(true)
- *          - @wxCode.address 服务器地址, 如 http://192.168.2.5:8000
- *          - @wxCode.ref     账号ID/UIN/openid, 多个以英文逗号隔开（需该微信已进过「移动云盘」小程序）
- *          - @wxCode.token   接口鉴权 token (请求头 Authorization: Bearer <token>)
- *          Node 环境变量同名可用: WX_CODE_ADDRESS / WX_CODE_REF / WX_CODE_TOKEN
+ * 脚本说明：复用「移动云盘签到」(ydyp.js) 抓包得到的 App 端 Authorization，
+ *          sso querySpecToken → tyrzLogin 取 jwtToken（与 App 同为 loginType=2 登录态），
+ *          再读商品列表、识别滑块偏移量(纯 JS PNG + 掩码 NCC)、按 prizeId 调用 exchangeV3(App 端接口) 抢兑。
+ *          deviceId 走数美 deviceprofile/v4（RSA 公钥加密设备指纹，每次运行动态取号），失败回退「移动云盘签到」(ydyp.js) 写在 ydyp_cache 里的 deviceId，再缺失靠服务端 Set-Cookie 回填。
+ * 配置说明：账号来自 boxjs「移动云盘签到」分组的 ydyp_data（由签到插件抓取 user-njs.yun.139.com/user/ 的 Authorization），
+ *          Authorization 的到期刷新同样由签到脚本维护，本脚本只读不写；Node 环境变量 YDYP_DATA 同名可用。
  *          抢兑商品ID: boxjs「移动云盘商品抢兑」里的 ydyp_exchange_prizes（多个英文逗号分隔，留空则只查询不兑换）
- * 对应 Python 版本：移动云盘商品抢兑_y.py v1.1.0
  * 更新时间：2026-10-04
 
 ------------------ Surge 配置 ------------------
@@ -36,25 +31,15 @@ const $ = new Env('移动云盘商品抢兑');
 $.is_debug = getEnv('is_debug') || 'false';  // 调试模式
 $.Messages = [];
 
-// ---- 业务常量 (照 py 源码逐一搬运) ----
-const APPID = 'wx4e4ed37286c816c2';
-const SCRIPT_VERSION = '1.1.0';
+// ---- 业务常量 ----
+const SCRIPT_VERSION = '2.0.0';
 const CLIENT_VERSION = '13.0.0';
 const MARKET_NAME = 'sign_in_3';
 const BASE_M = 'https://m.mcloud.139.com';
 const SOURCE_ID = '1097';
 const TARGET_SOURCE_ID = '001005';
-const CACHE_KEY = 'ydyp_exchange_cache';       // ref → {account, Authorization, label, expireTime}
-const YDYP_CACHE_KEY = 'ydyp_cache';           // 由 ydyp.js(移动云盘签到) 维护, 本脚本只读 deviceId
-
-// 小程序登录(thirdlogin) 加密常量, 密钥作顶层常量传入 Crypt()
-const MP_VERSION = '5.14.2';
-const MP_WX_OA_CLIENT_TYPE = '821';
-const MP_WX_OA_CPID = '443';
-const MP_COOL_FLAG_KEY = 'taNk805XxEM4uDWvVTMo+BVe';   // AES-192-CBC 请求体密钥
-const MP_USER_ZONE_KEY = 'qPqDw263XgFgL3u8';           // AES-128-ECB(hex) 响应 data 密钥
-const THIRDLOGIN_URL = 'https://user-njs.yun.139.com/user/thirdlogin';
-const MINI_PROGRAM_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.47(0x18002f2c) NetType/WIFI Language/zh_CN miniProgram/wx4e4ed37286c816c2';
+const YDYP_DATA_KEY = 'ydyp_data';             // 由 ydyp.js(移动云盘签到) 维护的账号数组 [{Authorization, phone, deviceId}]
+const YDYP_CACHE_KEY = 'ydyp_cache';           // 由 ydyp.js 维护, 本脚本只读刷新后的 Authorization 与 deviceId
 
 const UA = 'Mozilla/5.0 (Linux; Android 11; M2012K10C Build/RP1A.200720.011; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/90.0.4430.210 Mobile Safari/537.36 MCloudApp/10.0.1';
 const MARKET_UA_POOL = [
@@ -97,205 +82,79 @@ const SM_DE_FLAGS = '|1001101111100011110000110010110111110011010100111000000000
 
 // 主函数
 async function main() {
-    $.codeServer = (getEnv('WX_CODE_ADDRESS', '@wxCode.address') || '').replace(/\/+$/, '');
-    $.refStr = getEnv('WX_CODE_REF', '@wxCode.ref') || '';
-    $.yybToken = getEnv('WX_CODE_TOKEN', '@wxCode.token') || '';
     $.prizeIds = (getEnv('ydyp_exchange_prizes') || '').split(/[,，\s]+/).filter(Boolean);
+    const users = $.toObj(getEnv(YDYP_DATA_KEY)) || [];
 
-    const openRaw = getEnv('WX_CODE_OPEN', '@wxCode.open');
-    const refs = $.refStr.split(/[,，\s\n]+/).filter(Boolean);
-
-    if (openRaw && String(openRaw).toLowerCase() === 'false') throw new Error('boxjs 中「开启code模式」未开启 ❌');
-    if (!refs.length) throw new Error('未配置账号：请在 boxjs「获取小程序code」填写 ref ❌');
-    if (!$.codeServer) throw new Error('未配置 code 服务地址 @wxCode.address ❌');
+    if (!Array.isArray(users) || !users.length) throw new Error(`未找到 ${YDYP_DATA_KEY} 变量：请先在「移动云盘签到」插件打开捕获开关、进 App 首页抓一次 Authorization ❌`);
     if (!$.prizeIds.length) $.log('⚠️ 未配置 ydyp_exchange_prizes，将仅查询商品列表/已有商品，不执行抢兑');
-    $.log(`移动云盘商品抢兑 v${SCRIPT_VERSION}，共 ${refs.length} 个 YYB 账号，商品ID: ${$.prizeIds.join(',') || '(无)'}`);
+    $.log(`移动云盘商品抢兑 v${SCRIPT_VERSION}，共 ${users.length} 个 App 端账号，商品ID: ${$.prizeIds.join(',') || '(无)'}`);
 
-    for (let i = 0; i < refs.length; i++) {
-        $.log(`\n----- 账号 [${i + 1}/${refs.length}] ref=${refs[i]} 开始执行 -----\n`);
+    for (let i = 0; i < users.length; i++) {
+        const phone = String((users[i] || {}).phone || '').trim() || phoneFromAuthorization((users[i] || {}).Authorization);
+        $.log(`\n----- 账号 [${i + 1}/${users.length}] ${phone || '(未填手机号)'} 开始执行 -----\n`);
         $.messages = [];
-        await runAccount(refs[i]);
-        $.messages.splice(0, 0, `🔹 账号 ${i + 1} [${$.refLabel || refs[i]}]`);
+        await runAccount(users[i]);
+        $.messages.splice(0, 0, `🔹 账号 ${i + 1} [${$.refLabel || phone}]`);
         $.Messages = $.Messages.concat($.messages);
-        if (i < refs.length - 1) await $.wait(1000 + Math.floor(Math.random() * 2000));
+        if (i < users.length - 1) await $.wait(1000 + Math.floor(Math.random() * 2000));
     }
 }
 
-// 单账号: 取号(code 服务/缓存) → sso+jwt → 抢兑, token 失效自动重登一次
-async function runAccount(ref) {
+// 单账号: App 端 Authorization → sso+jwt → 抢兑
+async function runAccount(user) {
     await $.wait(1000 * (2 + Math.floor(Math.random() * 5)));
-    const cached = loadCache(ref);
-    let account = cached;
-    if (!account) account = await loginFlow(ref);
-    if (!account) return;
-    const deviceId = await fetchDeviceId() || '';
+    const account = String((user || {}).phone || '').trim() || phoneFromAuthorization((user || {}).Authorization);
+    // 优先用「移动云盘签到」按有效期自动刷新后的 Authorization
+    const Authorization = normalizeAuthorization(ydypCacheRecord(account).token || (user || {}).Authorization);
+    if (!account || !Authorization) {
+        $.messages.push(`❌ 账号无效: ydyp_data 缺少 phone/Authorization，跳过执行`);
+        return;
+    }
+    $.refLabel = maskPhone(account);
+    const deviceId = await fetchDeviceId() || deviceIdFromYdypCache(account);
 
-    let ex = new Exchange({ ...account, deviceId });
+    const ex = new Exchange({ account, Authorization, deviceId });
     if (!ex.Authorization) {
         $.messages.push(`❌ 组装账号无效，跳过执行`);
         return;
     }
-    let passed = await ex.jwt();
-    if (!passed && cached) {
-        $.log('⚠️ 缓存 Authorization 已失效，重新取号登录');
-        account = await loginFlow(ref);
-        if (!account) return;
-        ex = new Exchange({ ...account, deviceId });
-        passed = await ex.jwt();
-    }
-    if (!passed) {
-        $.err_accounts = ($.err_accounts || '') + `${ex.encryptAccount || account.account || ref}\n`;
-        $.messages.push(`❌ 登录: sso/jwt 未通过`);
+    if (!await ex.jwt()) {
+        $.err_accounts = ($.err_accounts || '') + `${ex.encryptAccount}\n`;
+        $.messages.push(`❌ 登录: sso/jwt 未通过，需重新抓取 App 端 Authorization`);
         return;
     }
-    saveCache(ref, account);
     await ex.run();
 }
 
-// 优先缓存(有效性由 jwt() 校验), 失效则 code 登录
-async function loginFlow(ref) {
-    const code = await getWxCode(ref);
-    if (!code) return null;
-    const login = await thirdLogin(code);
-    return login;
+// ---------- 账号缓存 (ydyp.js 维护, 本脚本只读) ----------
+function normalizeAuthorization(token) {
+    token = String(token || '').trim();
+    if (token && !token.startsWith('Basic ')) return `Basic ${token}`;
+    return token;
 }
 
-// 调用 code 服务(YYB Go)获取微信 code; data.account 备注存入 $.refLabel
-async function getWxCode(ref) {
-    const options = {
-        url: `${$.codeServer}/wxapp/getCode`,
-        headers: { 'Content-Type': 'application/json' },
-        body: { ref, app_id: APPID },
-        _timeout: 30000
-    };
-    if ($.yybToken) options.headers['Authorization'] = `Bearer ${$.yybToken}`;
-    const resp = await Request(options);
-    if (!resp || resp.code !== 0 || !resp?.data?.result?.code) {
-        $.messages.push(`❌ 授权: code 获取失败 ${$.toStr(resp)}`);
-        return null;
-    }
-    $.refLabel = resp.data.account?.remark || resp.data.account?.nickname || resp.data.account?.alias || $.refLabel || '';
-    $.log(`✅ [授权] code 获取成功: ${resp.data.result.code}`);
-    return String(resp.data.result.code);
-}
-
-// 微信 code 换移动云盘 account + Basic Authorization(请求体 AES-192-CBC, 响应 data AES-128-ECB hex)
-async function thirdLogin(code) {
-    const iv = randomString(16);
-    const payload = {
-        clienttype: MP_WX_OA_CLIENT_TYPE,
-        version: MP_VERSION,
-        cpid: MP_WX_OA_CPID,
-        dycpwd: code,
-        pintype: '4',
-        loginMode: '0',
-        extInfo: {
-            ifOpenAccount: '0',
-            wcOfficeAccountSec: Crypt('base64-encode', `code=${code}`)
-        }
-    };
-    const body = Crypt('aes-cbc-ivp', JSON.stringify(payload), MP_COOL_FLAG_KEY, iv);
-    const response = await Request({
-        url: THIRDLOGIN_URL,
-        headers: thirdLoginHeaders(),
-        body,
-        _respType: 'all',
-        _timeout: 30000
-    });
-    const status = Number(response && (response.status || response.statusCode)) || 0;
-    if (!response || (status !== 0 && status >= 400)) {
-        $.messages.push(`❌ 登录: thirdlogin 请求失败 (status=${status})`);
-        return null;
-    }
-    const text = response.body === undefined ? '' : String(response.body);
-    let data = $.toObj(text);
-    if (!data || typeof data !== 'object') {
-        try { data = $.toObj(Crypt('aes-cbc-dec', text, MP_COOL_FLAG_KEY)); } catch (e) { data = null; }
-    }
-    if (!data || typeof data !== 'object') {
-        $.messages.push(`❌ 登录: thirdlogin 响应无法解析 ${text.slice(0, 120)}`);
-        return null;
-    }
-    const codeStr = String(data.code || '');
-    const success = !!data.success || ['0', '00', '000', '0000'].includes(codeStr);
-    if (!success || !data.data) {
-        $.messages.push(`❌ 登录: code 换 token 失败 ${String($.toStr(data) || '').slice(0, 200)}`);
-        return null;
-    }
-    let loginInfo;
+// ydyp_data 漏填 phone 时从 Basic 认证里解 (mobile:手机号:token)
+function phoneFromAuthorization(authorization) {
     try {
-        loginInfo = $.toObj(Crypt('aes-ecb-dec-hex', String(data.data), MP_USER_ZONE_KEY));
+        const parts = Crypt('base64-decode', normalizeAuthorization(authorization).slice(6)).split(':');
+        return parts.length >= 2 ? String(parts[1]).trim() : '';
     } catch (e) {
-        loginInfo = null;
+        return '';
     }
-    if (!loginInfo) {
-        $.messages.push(`❌ 登录: data 解密失败`);
-        return null;
-    }
-    let account = String(loginInfo.account || '').trim();
-    if (!account && loginInfo.encryptAccount) {
-        try { account = Crypt('base64-decode', String(loginInfo.encryptAccount)).trim(); } catch (e) { account = ''; }
-    }
-    const authToken = String(loginInfo.authToken || '').trim();
-    if (!account || !authToken) {
-        $.messages.push(`❌ 登录: 响应缺少账号或 authToken ${String($.toStr(loginInfo) || '').slice(0, 160)}`);
-        return null;
-    }
-    const authorization = `Basic ${Crypt('base64-encode', `mobile:${account}:${authToken}`)}`;
-    $.log(`✅ [登录] 成功: ${account.slice(0, 3)}****${account.slice(-4)} authorization 已生成`);
-    return { account, Authorization: authorization };
 }
 
-function thirdLoginHeaders() {
-    return {
-        'Content-Type': 'application/json; charset=UTF-8',
-        'User-Agent': MINI_PROGRAM_UA,
-        'Referer': `https://servicewechat.com/${APPID}/page-frame.html`,
-        'Accept': '*/*',
-        'Accept-Language': 'zh-CN,zh;q=0.9',
-        'x-huawei-channelSrc': '10236800',
-        'x-inner-ntwk': '2',
-        'x-NetType': '',
-        'x-DeviceInfo': `||8|${MP_VERSION}|iPhone|iPhone|${randomString(32)}||ios|||||`,
-        'mcloud-channel': '1000101',
-        'mcloud-client': '10801',
-        'mcloud-version': MP_VERSION,
-        'mcloud-network': '',
-        'mcloud-skey': '',
-        'x-yun-client-info': '||8||||||||||||',
-        'INNER-HCY-ROUTER-HTTPS': '1',
-        'x-yun-tid': randomString(32),
-        'hcy-cool-flag': '1'
-    };
+function maskPhone(phone) {
+    return phone.length >= 11 ? `${phone.slice(0, 3)}****${phone.slice(-4)}` : phone;
 }
 
-// ---------- 缓存 ----------
-function loadCache(ref) {
-    const cache = $.getjson(CACHE_KEY, {}) || {};
-    const item = cache[ref];
-    if (!item || !item.account || !item.Authorization) return null;
-    if (item.expireTime && Date.now() > item.expireTime) return null;
-    $.refLabel = item.label || $.refLabel || '';
-    $.log(`✅ [缓存] 命中 Authorization: ${item.account.slice(0, 3)}****${item.account.slice(-4)}`);
-    return { account: item.account, Authorization: item.Authorization };
-}
-
-function saveCache(ref, account) {
-    const cache = $.getjson(CACHE_KEY, {}) || {};
-    cache[ref] = {
-        account: account.account,
-        Authorization: account.Authorization,
-        label: $.refLabel || '',
-        expireTime: Date.now() + 24 * 3600 * 1000,
-        updateTime: new Date().toISOString()
-    };
-    $.setdata($.toStr(cache), CACHE_KEY);
+function ydypCacheRecord(phone) {
+    const data = $.toObj($.getdata(YDYP_CACHE_KEY));
+    return (data && typeof data === 'object' && data[phone]) || {};
 }
 
 // 复用「移动云盘签到」(ydyp.js) 缓存里的 deviceId
 function deviceIdFromYdypCache(phone) {
-    const data = $.toObj($.getdata(YDYP_CACHE_KEY));
-    const record = (data && typeof data === 'object' && data[phone]) || {};
+    const record = ydypCacheRecord(phone);
     return String(record.marketDeviceId || record.deviceId || '').trim();
 }
 
@@ -435,13 +294,11 @@ class Exchange {
             this.marketHeaders = {};
             this.marketCookies = {};
             this.userLogLines = [];
-            this.timestamp = String(Date.now());
-            this.cookies = { 'sensors_stay_time': this.timestamp };
             this.cloudTotal = 0;
             this.cloudToReceive = 0;
             this.exchangeSuccess = 0;
             this.exchangeSkipped = [];
-            this.encryptAccount = this.account.length >= 11 ? this.account.slice(0, 3) + '****' + this.account.slice(-4) : this.account;
+            this.encryptAccount = maskPhone(this.account);
             this.jwtHeaders = { 'User-Agent': UA, 'Accept': '*/*', 'Host': 'caiyun.feixin.10086.cn:7071' };
         } catch (e) {
             $.log(`${e.message || e}`);
@@ -565,7 +422,6 @@ class Exchange {
             }
             const jwtToken = jwtData.result.token;
             this.jwtHeaders['jwtToken'] = jwtToken;
-            this.cookies['jwtToken'] = jwtToken;
             this.buildMarketContext(jwtToken);
             this.log('JWT获取成功');
             return true;
@@ -744,14 +600,17 @@ class Exchange {
             }
             const finalOffset = offset + randInt(-3, 3);
             this.log(`最终偏移量: ${finalOffset}`);
-            const data = await this.requestMarketJson(`${this.marketBaseUrl}/ycloud/signin/page/exchangeV2`, {
-                params: {
-                    prizeId: prizeId,
+            const data = await this.requestMarketJson(`${this.marketBaseUrl}/ycloud/signin/page/exchangeV3`, {
+                method: 'POST',
+                data: {
+                    prizeId: Number(prizeId),
                     client: 'app',
                     clientVersion: this.clientVersion,
                     puzzleOffset: finalOffset,
-                    smsCode: ''
-                }
+                    smsCode: '',
+                    deviceId: this.getMarketDeviceId()
+                },
+                headers: this.buildSigninHeaders({ 'isdeviceId': 'true' })
             });
             if (!data) {
                 this.log('兑换失败: 接口无响应');
@@ -777,17 +636,20 @@ class Exchange {
         for (let attempt = 0; attempt < maxRetries; attempt++) {
             await this.sleep(1, 2);
             let offset = await this.getSlide();
-            if (offset === null || offset === undefined) offset = randInt(150, 350);
+            if (offset === null || offset === undefined) offset = randInt(150, 500);
             const finalOffset = offset + randInt(-3, 3);
             this.log(`重试第${attempt + 1}次，偏移量: ${finalOffset}`);
-            const data = await this.requestMarketJson(`${this.marketBaseUrl}/ycloud/signin/page/exchangeV2`, {
-                params: {
-                    prizeId: prizeId,
+            const data = await this.requestMarketJson(`${this.marketBaseUrl}/ycloud/signin/page/exchangeV3`, {
+                method: 'POST',
+                data: {
+                    prizeId: Number(prizeId),
                     client: 'app',
                     clientVersion: this.clientVersion,
                     puzzleOffset: finalOffset,
-                    smsCode: ''
-                }
+                    smsCode: '',
+                    deviceId: this.getMarketDeviceId()
+                },
+                headers: this.buildSigninHeaders({ 'isdeviceId': 'true' })
             });
             if (!data) continue;
             if (data.code === 0) {
@@ -806,14 +668,15 @@ class Exchange {
     // ---------- 查询已有商品 ----------
     async queryReceivedPrizes() {
         return await this.guard(async () => {
-            const data = await this.requestJson({
-                url: 'https://caiyun.feixin.10086.cn/market/prizeApi/checkPrize/getUserPrizeLogPage',
-                headers: this.jwtHeaders,
-                cookies: this.cookies,
-                params: { currPage: '1', pageSize: '15', _: this.timestamp }
+            const data = await this.requestMarketJson(`${this.marketBaseUrl}/ycloud/prizeApi/checkPrize/getUserPrizeLogPageV2`, {
+                params: { currPage: '1', pageSize: '15' }
             });
             if (!data) {
                 this.log('查询已有商品失败: 接口无响应');
+                return [];
+            }
+            if (data.code !== 0) {
+                this.log(`查询已有商品失败: ${data.msg || '未知错误'}`);
                 return [];
             }
             const result = (data.result && data.result.result) || [];
@@ -890,18 +753,11 @@ class Exchange {
 }
 
 // ---------- 工具函数 ----------
-function randomString(length = 16) {
-    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let out = '';
-    for (let i = 0; i < length; i++) out += chars.charAt(Math.floor(Math.random() * chars.length));
-    return out;
-}
-
 function randInt(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-// 与 requests 的 params 一致: 空值也保留 (exchangeV2 的 smsCode=)
+// 与 requests 的 params 一致: 空值也保留
 function appendQuery(url, params) {
     const keys = Object.keys(params || {});
     if (!keys.length) return url;

@@ -1,5 +1,5 @@
 #!name = 移动云盘商品抢兑
-#!desc = 云朵中心按商品ID抢兑奖品（每日 10:00/16:00/00:00），账号通过 Code Server 服务获取，支持多账号
+#!desc = 云朵中心按商品ID抢兑奖品（每日 10:00/16:00/00:00，App 端 exchangeV3），账号复用「移动云盘签到」插件抓到的 App Authorization，支持多账号
 #!author = Fengzzzz
 #!homepage = https://github.com/jy0703/scripts
 #!icon = https://raw.githubusercontent.com/jy0703/scripts/main/icons/ydyp.png
