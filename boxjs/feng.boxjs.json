@@ -67,7 +67,9 @@
       "author": "@Feng",
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js",
       "descs_html": [
-        "WPS签到，每日签到获得积分奖励，支持多账号"
+        "WPS任务中心(签到+任务+抽奖)、天天领福利、WPS挑战计划、WPS超级会员小程序(签到+浏览任务+抽奖)，支持多账号",
+        "Cookie抓取：开启插件捕获开关后从 WPS 会员中心横幅进入签到活动页即可抓取，Cookie 含 uid 即可入库",
+        "小程序浏览任务依赖「获取小程序code」配置项(@wxCode.address/ref/token)，多个 ref 按账号顺序对应；也可在 WPS_COOKIE 条目中加 ref 字段单独指定"
       ],
       "icons": [
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/wps.png",

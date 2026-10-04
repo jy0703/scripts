@@ -1,5 +1,5 @@
 #!name = WPS签到
-#!desc = 自动抓取 WPS 签到 Cookie，并每日定时签到（在 WPS 会员中心横幅进入签到活动页自动获取）
+#!desc = 自动抓取 WPS 签到 Cookie，每日任务中心/天天领福利/挑战计划/超级会员小程序签到（在 WPS 会员中心横幅进入签到活动页自动获取，浏览任务需配置 @wxCode.*）
 #!author = Fengzzzz
 #!homepage = https://github.com/jy0703/scripts
 #!tag = 签到,自动化
