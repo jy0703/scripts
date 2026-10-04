@@ -431,6 +431,38 @@
           "desc": "留空用默认"
         }
       ]
+    },
+    {
+      "id": "mixc_sign",
+      "name": "一点万象签到",
+      "author": "@Feng",
+      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/mixc_sign.js",
+      "descs_html": [
+        "华润万象生活「一点万象」APP 每日签到领积分，连签达阶段可领阶段奖，覆盖万象汇/万象城/万象天地等华润商场，支持多账号",
+        "抓取步骤：开启「一点万象获取Cookie」rewrite 后，打开一点万象 APP 任意页面停留 1 秒（自动触发 getPersonalData）即写入 mixc_data；抓取完成后建议关闭捕获开关",
+        "mixc_data 内含 token 与设备参数（imei/deviceParams/appVersion/osVersion），签名盐与 appId 属 H5 常量已内置，无需配置",
+        "一条数据只对应一家商场：在 APP 内切到别的商场后重抓一次，脚本会把该商场作为独立账号追加，各家商场分别签到",
+        "通知出现「未经授权」或签到失败提示未登录时，说明 token 已失效，重抓 Cookie 即可"
+      ],
+      "icons": [
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/mixc.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/mixc.png"
+      ],
+      "keys": [
+        "mixc_data"
+      ],
+      "settings": [
+        {
+          "id": "mixc_data",
+          "name": "一点万象数据",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 5,
+          "placeholder": "",
+          "desc": "由 rewrite 抓取自动写入，勿手填；含 token/mallNo/imei/deviceParams/appVersion/osVersion"
+        }
+      ]
     }
   ]
 }

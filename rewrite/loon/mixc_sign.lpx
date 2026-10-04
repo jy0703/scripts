@@ -1,0 +1,18 @@
+#!name = 一点万象签到
+#!desc = 自动抓取一点万象（华润万象生活）APP 登录凭证，并每日定时签到、领阶段奖，支持多账号多家商场（打开一点万象 APP：任意页面停留 1 秒即触发 getPersonalData；换商场后重抓一次可追加账号）
+#!author = Fengzzzz
+#!homepage = https://github.com/jy0703/scripts
+#!icon = https://raw.githubusercontent.com/jy0703/scripts/main/icons/mixc.png
+#!tag = 签到,自动化
+#!type = normal
+
+[Argument]
+capture = switch,false,tag=捕获 Cookie,desc=打开后按说明操作自动抓取签到凭证，抓取完成后建议关闭
+cronExpression = input,"0 1 * * *",tag=定时参数,desc=这里需要输入符合 CRON 表达式的参数
+
+[Script]
+http-request ^https?:\/\/app\.mixcapp\.com\/mixc\/api\/v4\/member\/getPersonalData script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/mixc_sign.js,requires-body=false,timeout=600,tag=一点万象获取Cookie,enable={capture}
+cron {cronExpression} script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/mixc_sign.js,timeout=600,tag=一点万象签到,enable=true
+
+[Mitm]
+hostname = app.mixcapp.com
