@@ -388,25 +388,30 @@ async function finishOneTask(ctx, task) {
 }
 
 // 小程序端签到（mark/do/mark）：与 App 端 mark31 是两套独立计数，各自一天一次
-// prizeInfo 的 markedTimes/appMarkedTimes 不会被 mark31 签到喂，todayMarked 才是本端状态
+// 状态一律以 do/mark 的返回为准(TODAY_MARKED=今日已签)；prizeInfo 只用于展示本期天数，
+// 它对 App 渠道会话可能不返回数据，取不到就省略，不参与判定。
 async function doMiniMark(ctx) {
-    const pre = await Request({ url: `${API_MARK}/info/prizeInfo`, method: 'post', headers: apiHeaders(ctx), body: {}, _timeout: 30000 });
-    const info = (pre && pre.data) || {};
-    const period = `${info.markedTimes || 0}/${info.totalMarkTimes || '?'}`;
-    if (info.todayMarked) return `小程序端今日已签（本期 ${period} 天）`;
-    if (!pre || pre.code !== 'SUCCESS') throw new Error(`prizeInfo 失败: ${pre && pre.code} ${pre && pre.msg}`);
-
     const result = await Request({ url: `${API_MARK}/do/mark`, method: 'post', headers: apiHeaders(ctx), body: {}, _timeout: 30000 });
-    const code = result && result.code, status = (result && result.status) || '', respMsg = (result && result.msg) || '';
-    $.log(`mark/do/mark 响应: code=${code} status=${status} msg=${respMsg}`);
-    if (!result || (code !== 'SUCCESS' && !/已签/.test(respMsg) && status !== 'HAVE_MARKED')) {
-        throw new Error(`小程序端签到失败: ${code} / ${status} / ${respMsg}`);
+    if (!result) throw new Error('小程序端签到无响应');
+    const code = result.code, status = result.status || '', msg = result.msg || '';
+    $.log(`mark/do/mark 响应: code=${code} status=${status} msg=${msg}`);
+    if (code !== 'SUCCESS' && status !== 'TODAY_MARKED' && status !== 'HAVE_MARKED' && !/已签/.test(msg)) {
+        throw new Error(`小程序端签到失败: ${code} / ${status} / ${msg}`);
     }
     const d = result.data || {};
-    const prize = [d.prizeName, d.prizeValue ? `${d.prizeValue}${d.prizeCategory === 'FLOW' ? 'MB' : '元'}` : ''].filter(v => v).join(' ');
-    const after = await Request({ url: `${API_MARK}/info/prizeInfo`, method: 'post', headers: apiHeaders(ctx), body: {}, _timeout: 30000 });
-    const now = `${((after || {}).data || {}).markedTimes || info.markedTimes || '?'}/${(info.totalMarkTimes) || '?'}`;
-    return `小程序端签到成功！本期 ${now} 天${prize ? `，获得: ${prize}` : ''}`;
+    const prize = d.prizeName || (d.prizeValue ? `${d.prizeValue}${d.prizeCategory === 'FLOW' ? 'MB' : '元'}` : '');
+    const period = await miniPeriod(ctx);
+    return `${code === 'SUCCESS' ? '小程序端签到成功' : '小程序端今日已签'}${period ? `（本期 ${period}）` : ''}${prize ? `，获得: ${prize}` : ''}`;
+}
+
+async function miniPeriod(ctx) {
+    const resp = await Request({ url: `${API_MARK}/info/prizeInfo`, method: 'post', headers: apiHeaders(ctx), body: {}, _timeout: 30000 });
+    const d = (resp && resp.data) || {};
+    if (d.markedTimes === undefined || d.totalMarkTimes === undefined) {
+        $.log(`prizeInfo 未返回本期数据(code=${resp && resp.code} msg=${resp && resp.msg} keys=[${Object.keys(d).join(',')}])`);
+        return '';
+    }
+    return `${d.markedTimes}/${d.totalMarkTimes} 天`;
 }
 
 // 秒杀抢券: 校时 → 场次 → 资格(未签补签) → 等到开抢 → 循环 redeem
