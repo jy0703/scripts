@@ -401,17 +401,24 @@ async function doMiniMark(ctx) {
     const d = result.data || {};
     const prize = d.prizeName || (d.prizeValue ? `${d.prizeValue}${d.prizeCategory === 'FLOW' ? 'MB' : '元'}` : '');
     const period = await miniPeriod(ctx);
-    return `${code === 'SUCCESS' ? '小程序端签到成功' : '小程序端今日已签'}${period ? `（本期 ${period}）` : ''}${prize ? `，获得: ${prize}` : ''}`;
+    return `${code === 'SUCCESS' ? '小程序端签到成功' : '小程序端今日已签'}${period ? `（${period}）` : ''}${prize ? `，获得: ${prize}` : ''}`;
 }
 
+// 小程序端本期/本月已签天数：prizeInfo 的计数字段优先；
+// App 渠道会话下它回 null，回落到 markInfo 的本月签到记录条数
 async function miniPeriod(ctx) {
     const resp = await Request({ url: `${API_MARK}/info/prizeInfo`, method: 'post', headers: apiHeaders(ctx), body: {}, _timeout: 30000 });
     const d = (resp && resp.data) || {};
-    if (d.markedTimes === undefined || d.totalMarkTimes === undefined) {
-        $.log(`prizeInfo 未返回本期数据(code=${resp && resp.code} msg=${resp && resp.msg} keys=[${Object.keys(d).join(',')}])`);
+    if (d.markedTimes != null && d.totalMarkTimes != null) return `本期 ${d.markedTimes}/${d.totalMarkTimes} 天`;
+
+    const rec = await Request({ url: `${API_MARK}/info/markInfo`, method: 'post', headers: apiHeaders(ctx), body: {}, _timeout: 30000 });
+    const list = rec && rec.data;
+    if (!Array.isArray(list)) {
+        $.log(`prizeInfo(markedTimes=${d.markedTimes}) 与 markInfo(code=${rec && rec.code}) 均未给出本期天数`);
         return '';
     }
-    return `${d.markedTimes}/${d.totalMarkTimes} 天`;
+    const month = $.time('yyyyMM');
+    return `本月已签 ${list.filter(x => String(x.month) === month).length} 天`;
 }
 
 // 秒杀抢券: 校时 → 场次 → 资格(未签补签) → 等到开抢 → 循环 redeem
