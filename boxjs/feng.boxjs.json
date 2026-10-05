@@ -380,6 +380,7 @@
         "抓取：开启「中国移动获取Cookie」→ 打开中国移动 App -「我」-「签到」进入活动页即自动写入，抓完请关闭捕获。",
         "凭证：cmcc_data 含 App 票据与长期 jwt，jwt 有效时不消耗票据；两者都失效才需重新抓包。",
         "开关：cmcc_claim 连签奖励 / cmcc_task AI豆任务 / cmcc_seckill 秒杀抢券(定时设在开抢前 1~2 分钟)。当天签到完成后再次执行只抢券。",
+        "AI豆任务逐条实时输出到日志；通知里只留成功项加一行汇总。连续 2 次领奖被拒(未达到奖品领取条件)的任务自动进黑名单(cmcc_task_fail)，不再发请求，满 cmcc_task_skip_days 天(默认 7)自动重试；一旦领到奖立即移出。",
         "cmcc_activity_id / cmcc_channel_id 留空用默认 1021122301 / P00000109876。"
       ],
       "icons": [
@@ -391,6 +392,8 @@
         "cmcc_claim",
         "cmcc_task",
         "cmcc_seckill",
+        "cmcc_task_fail",
+        "cmcc_task_skip_days",
         "cmcc_activity_id",
         "cmcc_channel_id"
       ],
@@ -417,7 +420,7 @@
           "name": "AI豆任务",
           "val": false,
           "type": "boolean",
-          "desc": "完成签到页待办任务并领 AI豆"
+          "desc": "完成签到页待办任务并领 AI豆，日志逐条输出，连续失败的任务自动跳过"
         },
         {
           "id": "cmcc_seckill",
@@ -425,6 +428,25 @@
           "val": false,
           "type": "boolean",
           "desc": "签到后参与同活动秒杀抢券"
+        },
+        {
+          "id": "cmcc_task_skip_days",
+          "name": "任务黑名单保留天数",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "7",
+          "desc": "被过滤的任务满该天数后重新尝试，留空用 7"
+        },
+        {
+          "id": "cmcc_task_fail",
+          "name": "AI豆任务黑名单",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 3,
+          "desc": "脚本自动维护(按账号记 taskId)，清空即全部重试"
         },
         {
           "id": "cmcc_activity_id",

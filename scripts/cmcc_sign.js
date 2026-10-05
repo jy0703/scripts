@@ -2,8 +2,8 @@
  * 脚本名称：中国移动签到
  * 活动规则：中国移动「签到领流量/话费」活动(1021122301) 有两套互相独立的签到：App 端 mark31 与小程序端 mark/do/mark，各自一天一次；另有 AI豆任务(mark/task) 与秒杀抢券(markSeckill)
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。账号参数（App 票据/省市编码等）由本脚本 GetCookie 抓取后存入 cmcc_data
- * 环境变量：cmcc_data
- * 更新时间：2026-10-05 合并秒杀抢券(cmcc_seckill 开关)
+ * 环境变量：cmcc_data / cmcc_claim / cmcc_task / cmcc_seckill / cmcc_task_skip_days；cmcc_task_fail 为脚本自动维护的任务黑名单
+ * 更新时间：2026-10-05 合并秒杀抢券(cmcc_seckill 开关)；AI豆任务逐条实时输出、连续失败任务自动拉黑(cmcc_task_fail)
 
 ------------------ Surge 配置 ------------------
 
@@ -138,13 +138,15 @@ function GetCookie() {
 
 // 任务: 建会话 → App 端 + 小程序端双签到 → (可选)连签奖励/AI豆任务 → (可选)抢券
 // 当天两端签到都完成后(user.signDay)，再次执行本脚本只做抢券，不再跑签到/领奖/任务
+// 结果边产生边 $.log（say），通知内容仍攒在 lines 里最后一起推送
 async function doSign(user) {
     const lines = [];
+    const say = t => { lines.push(t); $.log(t); };
     const today = $.time('yyyyMMdd');
     try {
         if (user.signDay === today) {
             if (!SECKILL) {
-                lines.push(`今日签到已完成，本次无抢券任务`);
+                say(`今日签到已完成，本次无抢券任务`);
             } else {
                 lines.push(...await doSeckill(await exchangeSession(user)));
             }
@@ -155,7 +157,7 @@ async function doSign(user) {
             $.log(`当前累计签到 ${acc} 天，App 端今日${signedToday ? '已签' : '未签'}`);
 
             if (signedToday) {
-                lines.push(markLine('App 端', false, `累计 ${acc} 天`));
+                say(markLine('App 端', false, `累计 ${acc} 天`));
             } else {
                 const result = await doMark(ctx, today);
                 const code = result && result.code, respMsg = (result && result.msg) || '', status = (result && result.status) || '';
@@ -166,7 +168,7 @@ async function doSign(user) {
                     try {
                         acc = ((await queryMarkstatus(ctx)).userinfo || {}).accumulateTimes || acc;
                     } catch (e) { }
-                    lines.push(status === 'HAVE_MARKED'
+                    say(status === 'HAVE_MARKED'
                         ? markLine('App 端', false, `累计 ${acc} 天`, '', '服务端幂等')
                         : markLine('App 端', true, `累计 ${acc} 天`, prize,
                             !prize && status === 'PRIZE_NO_CONFIG' ? '今日无单日奖品(按累计门槛发放)' : ''));
@@ -178,10 +180,10 @@ async function doSign(user) {
             // 小程序端签到成功/已签才算当天签到闭环，失败则下次执行重试
             let miniOk = false;
             try {
-                lines.push(await doMiniMark(ctx));
+                say(await doMiniMark(ctx));
                 miniOk = true;
             } catch (e) {
-                lines.push(`小程序端 签到失败: ${e.message || e}`);
+                say(`小程序端 签到失败: ${e.message || e}`);
             }
             if (miniOk) {
                 user.signDay = today;
@@ -194,15 +196,15 @@ async function doSign(user) {
                     if (!(latest.taskAwardChance || []).length) $.log('[领奖] 当前无可领取的连签任务');
                     lines.push(...await claimTaskAwards(ctx, latest));
                 } catch (e) {
-                    lines.push(`[领奖] 尝试失败: ${e.message || e}`);
+                    say(`[领奖] 尝试失败: ${e.message || e}`);
                 }
             }
 
             if (RUN_TASKS) {
                 try {
-                    lines.push(...await doMarkTasks(ctx));
+                    lines.push(...await doMarkTasks(ctx, user));
                 } catch (e) {
-                    lines.push(`[任务] 失败: ${e.message || e}`);
+                    say(`[任务] 失败: ${e.message || e}`);
                 }
             }
 
@@ -210,14 +212,13 @@ async function doSign(user) {
                 try {
                     lines.push(...await doSeckill(ctx));
                 } catch (e) {
-                    lines.push(`[秒杀] 失败: ${e.message || e}`);
+                    say(`[秒杀] 失败: ${e.message || e}`);
                 }
             }
         }
     } catch (e) {
-        lines.push(`❌ ${e.message || e}`);
+        say(`❌ ${e.message || e}`);
     }
-    lines.forEach(l => $.log(l));
     $.messages = $.messages.concat(lines);
 }
 
@@ -331,6 +332,7 @@ async function claimTaskAwards(ctx, statusData) {
     }
 
     const results = [];
+    const say = t => { results.push(t); $.log(t); };
     for (const task of statusData.taskAwardChance || []) {
         const tid = task.id;
         if (!tid) continue;
@@ -342,36 +344,87 @@ async function claimTaskAwards(ctx, statusData) {
         const d = (resp && resp.data) || {};
         const awardName = d.prizeName || (d.prize || {}).name || d.name || '';
         const award = [awardName, d.awardNum ? `×${d.awardNum}` : ''].filter(v => v).join(' ');
-        results.push(`[领奖] ${label}: ${statusText} ${(resp && resp.msg) || ''}${award ? ` → 实发 ${award}` : ''}`);
+        say(`[领奖] ${label}: ${statusText} ${(resp && resp.msg) || ''}${award ? ` → 实发 ${award}` : ''}`);
         await $.wait(randomInt(1000, 2000));
     }
     return results;
 }
 
+// AI豆任务失败黑名单：按账号记 taskId，连续 TASK_FAIL_MAX 次领不到奖就不再发请求，
+// 记录满 TASK_FAIL_DAYS 天自动遗忘（任务条件可能已变）后重新尝试；一旦领奖成功立即清除。
+const TASK_FAIL_KEY = 'cmcc_task_fail';
+const TASK_FAIL_MAX = 2;
+const TASK_FAIL_DAYS = Number(getEnv('cmcc_task_skip_days')) || 7;
+
+function readTaskFails(user) {
+    const store = $.toObj(getEnv(TASK_FAIL_KEY), {}) || {};
+    const mine = store[user.userCheckId] || {};
+    const expire = Number($.time('yyyyMMdd', Date.now() - TASK_FAIL_DAYS * 86400000));
+    for (const tid of Object.keys(mine)) if (Number((mine[tid] || {}).d) < expire) delete mine[tid];
+    return mine;
+}
+
+function writeTaskFails(user, fails) {
+    const store = $.toObj(getEnv(TASK_FAIL_KEY), {}) || {};
+    store[user.userCheckId] = fails;
+    $.setdata($.toStr(store), TASK_FAIL_KEY);
+}
+
 // 签到页 AI豆任务（小程序端同一套 mark/task 接口，会话通用）
-async function doMarkTasks(ctx) {
+// 通知里只留成功项与一行汇总，逐条结果实时 $.log
+async function doMarkTasks(ctx, user) {
     const lines = [];
+    const say = t => { lines.push(t); $.log(t); };
     const tl = await Request({ url: `${TASK_API}/taskList`, method: 'post', headers: apiHeaders(ctx), body: {}, _timeout: 30000 });
     if (!tl || tl.code !== 'SUCCESS') throw new Error(`taskList 失败: ${tl && tl.code} ${tl && tl.msg}`);
     const tasks = (tl.data || {}).tasks || [];
     const todo = tasks.filter(t => t.status === 0 && t.taskId);
-    $.log(`AI豆任务共 ${tasks.length} 个，待办 ${todo.length} 个`);
-    if (!todo.length) return lines;
+    const fails = readTaskFails(user);
 
+    const runnable = [], blocked = [];
     for (const t of todo) {
+        (fails[t.taskId] && fails[t.taskId].c >= TASK_FAIL_MAX ? blocked : runnable).push(t);
+    }
+    $.log(`AI豆任务共 ${tasks.length} 个，待办 ${todo.length} 个，黑名单跳过 ${blocked.length} 个，本次执行 ${runnable.length} 个`);
+    if (!runnable.length) {
+        if (blocked.length) $.log(`[任务] 待办全部在黑名单中，${TASK_FAIL_DAYS} 天内不再尝试`);
+        return lines;
+    }
+
+    let done = 0, beans = 0, rejected = 0, errored = 0;
+    for (const t of runnable) {
         const label = `${t.taskName || t.taskId}${t.awardNum ? `(+${t.awardNum}AI豆)` : ''}`;
         try {
-            lines.push(`[任务] ${label}: ${await finishOneTask(ctx, t)}`);
+            const r = await finishOneTask(ctx, t);
+            if (r.ok) {
+                done++; beans += r.num;
+                delete fails[t.taskId];
+                say(`[任务] ${label}: ✅ 已领 ${r.num} AI豆`);
+            } else {
+                rejected++;
+                const f = fails[t.taskId] || { c: 0 };
+                f.c += 1;
+                f.d = $.time('yyyyMMdd');
+                fails[t.taskId] = f;
+                $.log(`[任务] ${label}: ⚠️ 未完成: ${r.code} ${r.msg}`);
+            }
         } catch (e) {
-            lines.push(`[任务] ${label}: ❌ ${e.message || e}`);
+            errored++;
+            $.log(`[任务] ${label}: ❌ ${e.message || e}`);
         }
         await $.wait(randomInt(800, 1800));
     }
+    writeTaskFails(user, fails);
+
+    const quiet = rejected ? `条件不足 ${rejected} 个` : '';
+    if (quiet) $.log(`[任务] ${quiet}（逐条见上方日志，连续 ${TASK_FAIL_MAX} 次后不再尝试）`);
+    say(`[任务] 完成 ${done} 个 +${beans} AI豆${quiet ? `；条件不足 ${rejected} 个已折叠` : ''}${errored ? `；异常 ${errored} 个` : ''}${blocked.length ? `；黑名单已过滤 ${blocked.length} 个(${TASK_FAIL_DAYS} 天后重试)` : ''}`);
     return lines;
 }
 
 // 单个任务：taskInfo → 到访目标页并停留 scanTime → (cToken?openFinish : 非浏览类 finishTask) → getTaskAward
 // 三种完成形态按抓包还原：浏览类(taskType=2)到访即完成；跳转类(taskType=5)回 cToken 走 openFinish；其余走 finishTask
+// 返回 { ok, num } 或 { ok:false, code, msg }，由调用方决定展示与黑名单计数
 async function finishOneTask(ctx, task) {
     const tid = String(task.taskId);
     const info = await Request({ url: `${TASK_API}/taskInfo`, method: 'post', headers: apiHeaders(ctx), body: { taskId: tid }, _timeout: 30000 });
@@ -397,8 +450,8 @@ async function finishOneTask(ctx, task) {
     }
 
     const aw = await Request({ url: `${TASK_API}/getTaskAward`, method: 'post', headers: apiHeaders(ctx), body: { taskId: tid }, _timeout: 30000 });
-    if (aw && aw.code === 'SUCCESS') return `✅ 已领 ${((aw.data || {}).awardNum) || '?'} AI豆`;
-    return `⚠️ 未完成: ${aw && aw.code} ${aw && aw.msg}`;
+    if (aw && aw.code === 'SUCCESS') return { ok: true, num: Number((aw.data || {}).awardNum) || 0 };
+    return { ok: false, code: (aw && aw.code) || 'NO_RESP', msg: (aw && aw.msg) || '' };
 }
 
 // 小程序端签到（mark/do/mark）：与 App 端 mark31 是两套独立计数，各自一天一次
@@ -441,6 +494,7 @@ async function miniPeriod(ctx) {
 // 秒杀抢券: 校时 → 场次 → 资格(未签补签) → 等到开抢 → 循环 redeem
 async function doSeckill(ctx) {
     const lines = [];
+    const say = t => { lines.push(t); $.log(t); };
     const srvMs = await serverNowMs(ctx);
     const offsetMs = srvMs - Date.now();
     $.log(`服务器时间 ${fmtCn(srvMs)}，本机时钟偏移 ${offsetMs >= 0 ? '+' : ''}${offsetMs.toFixed(0)} ms`);
@@ -461,22 +515,24 @@ async function doSeckill(ctx) {
     $.log(`选定场次${zone.id}：${fmtCn(startSrv)} 开抢（${picked.active ? '进行中' : `距开始 ${((startSrv - srvMs) / 1000).toFixed(0)} 秒`}）`);
 
     if (!eligible) {
-        return lines.concat('[秒杀] 当日未签到且补签失败，无法参与秒杀');
+        say('[秒杀] 当日未签到且补签失败，无法参与秒杀');
+        return lines;
     }
     if (!picked.active) {
         const waitMs = startSrv - srvMs - SK_LEAD;
         if (waitMs > SK_MAX_WAIT) {
-            return lines.concat(`[秒杀] 距开抢还有 ${(waitMs / 60000).toFixed(1)} 分钟，超过等待上限 ${SK_MAX_WAIT / 60000} 分钟，本次跳过（定时请设在开抢前 1~2 分钟）`);
+            say(`[秒杀] 距开抢还有 ${(waitMs / 60000).toFixed(1)} 分钟，超过等待上限 ${SK_MAX_WAIT / 60000} 分钟，本次跳过（定时请设在开抢前 1~2 分钟）`);
+            return lines;
         }
         await waitUntil(Date.now() + waitMs, ctx);
     }
 
     const fired = await fireRedeem(ctx, zone, endSrv, offsetMs);
     if (fired.reason === 'SUCCESS') {
-        lines.push(`🎉 [秒杀] 抢到 ${prizeName}（场次 ${fmtCn(startSrv)}），请去 App「我的奖品」核销`);
+        say(`🎉 [秒杀] 抢到 ${prizeName}（场次 ${fmtCn(startSrv)}），请去 App「我的奖品」核销`);
     } else {
         const reason = SK_STOP[fired.reason] || fired.reason;
-        lines.push(`[秒杀] 未抢到: ${reason}｜${prizeName} 场次 ${fmtCn(startSrv)}`);
+        say(`[秒杀] 未抢到: ${reason}｜${prizeName} 场次 ${fmtCn(startSrv)}`);
     }
     return lines;
 }
