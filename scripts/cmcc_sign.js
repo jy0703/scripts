@@ -344,9 +344,23 @@ async function openMiniCtx(user) {
     if (!wmh) throw new Error(`wmhsso 未回 wmhToken: ${sso && sso.returnCode} ${sso && sso.returnMessage}`);
 
     const page = `${BASE}/qwhdhub/qwhdmark/${ACTIVITY_ID}?yx=${MINI_YX}&touch_id=${MINI_TOUCH_ID}&wmhToken=${encodeURIComponent(wmh)}`;
-    const act = await Request({ url: page, headers: baseHeaders(jar, MINI_UA), _respType: 'all', followRedirect: false, _timeout: 30000 });
+    let act = await Request({ url: page, headers: baseHeaders(jar, MINI_UA), _respType: 'all', followRedirect: false, _timeout: 30000 });
     takeCookies(jar, act && act.headers);
-    if (!hasSessionToken(jar)) throw new Error(`活动页未落会话令牌: HTTP ${act && act.statusCode} cookies=[${Object.keys(jar).join(',')}]`);
+    // wmhToken 可能经多跳 302 消化后才落会话令牌(首跳只回 qwhd_center_router 等普通 cookie)，手动逐跳跟随
+    for (let hop = 1; hop <= 3 && !hasSessionToken(jar); hop++) {
+        const hd = (act && act.headers) || {};
+        const loc = hd.location || hd.Location || '';
+        if (!loc || !/^3\d\d$/.test(String((act && act.statusCode) || ''))) break;
+        const next = /^https?:\/\//i.test(loc) ? loc : BASE + (loc.startsWith('/') ? loc : '/' + loc);
+        assertSafeUrl(next);
+        $.log(`活动页 ${act.statusCode} 未落令牌，跟随跳转(${hop}): ${next.slice(0, 140)}`);
+        act = await Request({ url: next, headers: Object.assign(baseHeaders(jar, MINI_UA), { referer: page }), _respType: 'all', followRedirect: false, _timeout: 30000 });
+        takeCookies(jar, act && act.headers);
+    }
+    if (!hasSessionToken(jar)) {
+        const hd = (act && act.headers) || {};
+        throw new Error(`活动页未落会话令牌: HTTP ${act && act.statusCode} cookies=[${Object.keys(jar).join(',')}] location=${String(hd.location || hd.Location || '-').slice(0, 140)}`);
+    }
 
     const ctx = { jar, ua: MINI_UA, referer: page };
     const info = await Request({ url: `${API_MARK}/user/info`, method: 'post', headers: apiHeaders(ctx), body: { appVersion: '', miniVersion: '' }, _timeout: 20000 });
