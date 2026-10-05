@@ -12,9 +12,9 @@
 ------------------ Surge 配置 ------------------
 
 [Script]
-龙湖天街获取Cookie= type=http-request ^https?:\/\/gw2c\-hw\-open\.longfor\.com\/lmarketing\-task\-api\-mvc\-prod\/openapi\/task\/v1\/signature\/clock, requires-body=0, max-size=0, timeout=600, script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/lhtj.js, script-update-interval=0
+龙湖天街获取Cookie = type=http-request,pattern=^https?:\/\/gw2c\-hw\-open\.longfor\.com\/lmarketing\-task\-api\-mvc\-prod\/openapi\/task\/v1\/signature\/clock,requires-body=0,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/lhtj.js,script-update-interval=0
 
-龙湖天街= type=cron cronexp="0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/refs/heads/main/scripts/lhtj.js, timeout=600, script-update-interval=0
+龙湖天街 = type=cron,cronexp="0 1 * * *",wake-system=1,script-path=https://raw.githubusercontent.com/jy0703/scripts/refs/heads/main/scripts/lhtj.js,timeout=600,script-update-interval=0
 
 [MITM]
 hostname = gw2c-hw-open.longfor.com

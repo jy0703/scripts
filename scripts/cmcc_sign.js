@@ -6,11 +6,12 @@
  * 更新时间：2026-10-05 合并秒杀抢券(cmcc_seckill 开关)；AI豆任务逐条实时输出、连续失败任务自动拉黑(cmcc_task_fail)
 
 ------------------ Surge 配置 ------------------
+Surge 没有捕获开关参数，需要更新凭证时临时启用「获取Cookie」那条（或整个模块），抓完再关掉。
 
 [Script]
-中国移动获取Cookie= type=http-request ^https?:\/\/wx\.10086\.cn\/qwhdsso\/appTokenLogin, requires-body=1, max-size=0, timeout=600, script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js, script-update-interval=0
+中国移动获取Cookie = type=http-request,pattern=^https?:\/\/wx\.10086\.cn\/qwhdsso\/appTokenLogin,requires-body=1,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,script-update-interval=0
 
-中国移动签到= type=cron cronexp="0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js, timeout=600, script-update-interval=0
+中国移动签到 = type=cron,cronexp="0 1 * * *",wake-system=1,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,script-update-interval=0
 
 [MITM]
 hostname = wx.10086.cn

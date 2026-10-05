@@ -9,9 +9,9 @@
 ------------------ Surge 配置 ------------------
 
 [Script]
-车来了获取签到参数= type=http-request ^https?:\/\/web\.chelaile\.net\.cn\/api\/op-activity-api\/daily-act\/(signin|config|task\/complete), requires-body=0, max-size=0, timeout=600, script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js, script-update-interval=0
+车来了获取签到参数 = type=http-request,pattern=^https?:\/\/web\.chelaile\.net\.cn\/api\/op-activity-api\/daily-act\/(signin|config|task\/complete),requires-body=0,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js,script-update-interval=0
 
-车来了签到= type=cron cronexp="0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js, timeout=600, script-update-interval=0
+车来了签到 = type=cron,cronexp="0 1 * * *",wake-system=1,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js,script-update-interval=0
 
 [MITM]
 hostname = web.chelaile.net.cn

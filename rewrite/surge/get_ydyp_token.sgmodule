@@ -1,9 +1,9 @@
 #!name=移动云盘获取Token
-#!desc=自动抓取移动云盘 Authorization（Basic 手机号+Token）
+#!desc=自动抓取移动云盘 Authorization（Basic 手机号+Token）（Surge 无捕获开关，抓完请停用本模块）
 #!打开移动云盘 App 首页即可触发抓取；deviceId 不在抓取范围内，需要时抓 m.mcloud.139.com/ycloud/signin/page/startSignIn 的 deviceId 参数填入 BoxJS 的 ydyp_device_id。
 
 [Script]
-移动云盘获取Token= type=http-request ^https?:\/\/user-njs\.yun\.139\.com\/user\/, requires-body=0, max-size=0, timeout=600, script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js, script-update-interval=0
+移动云盘获取Token = type=http-request,pattern=^https?:\/\/user-njs\.yun\.139\.com\/user\/,requires-body=0,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,script-update-interval=0
 
 [MITM]
 hostname = %APPEND% user-njs.yun.139.com

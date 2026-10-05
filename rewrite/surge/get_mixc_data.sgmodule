@@ -1,9 +1,9 @@
 #!name=一点万象获取Cookie
-#!desc=自动抓取一点万象（华润万象生活）APP 登录凭证
+#!desc=自动抓取一点万象（华润万象生活）APP 登录凭证（Surge 无捕获开关，抓完请停用本模块）
 #!打开一点万象 APP，任意页面停留 1 秒即触发抓取；切换商场后重抓一次可追加账号。
 
 [Script]
-一点万象获取Cookie= type=http-request ^https?:\/\/app\.mixcapp\.com\/mixc\/api\/v4\/member\/getPersonalData, requires-body=0, max-size=0, timeout=600, script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/mixc_sign.js, script-update-interval=0
+一点万象获取Cookie = type=http-request,pattern=^https?:\/\/app\.mixcapp\.com\/mixc\/api\/v4\/member\/getPersonalData,requires-body=0,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/mixc_sign.js,script-update-interval=0
 
 [MITM]
 hostname = %APPEND% app.mixcapp.com

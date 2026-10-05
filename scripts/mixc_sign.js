@@ -8,9 +8,9 @@
 ------------------ Surge 配置 ------------------
 
 [Script]
-一点万象获取Cookie= type=http-request ^https?:\/\/app\.mixcapp\.com\/mixc\/api\/v4\/member\/getPersonalData, requires-body=0, max-size=0, timeout=600, script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/mixc_sign.js, script-update-interval=0
+一点万象获取Cookie = type=http-request,pattern=^https?:\/\/app\.mixcapp\.com\/mixc\/api\/v4\/member\/getPersonalData,requires-body=0,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/mixc_sign.js,script-update-interval=0
 
-一点万象签到= type=cron cronexp="0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/mixc_sign.js, timeout=600, script-update-interval=0
+一点万象签到 = type=cron,cronexp="0 1 * * *",wake-system=1,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/mixc_sign.js,script-update-interval=0
 
 [MITM]
 hostname = app.mixcapp.com

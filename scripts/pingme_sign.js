@@ -8,9 +8,9 @@
 ------------------ Surge 配置 ------------------
 
 [Script]
-PingMe获取签到参数= type=http-request ^https?:\/\/api\.pingmeapp\.net\/app\/queryBalanceAndBonus, requires-body=0, max-size=0, timeout=600, script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/pingme_sign.js, script-update-interval=0
+PingMe获取签到参数 = type=http-request,pattern=^https?:\/\/api\.pingmeapp\.net\/app\/queryBalanceAndBonus,requires-body=0,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/pingme_sign.js,script-update-interval=0
 
-PingMe签到= type=cron cronexp="30 8,20 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/pingme_sign.js, timeout=600, script-update-interval=0
+PingMe签到 = type=cron,cronexp="30 8,20 * * *",wake-system=1,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/pingme_sign.js,script-update-interval=0
 
 [MITM]
 hostname = api.pingmeapp.net

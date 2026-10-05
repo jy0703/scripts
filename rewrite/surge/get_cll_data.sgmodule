@@ -1,11 +1,11 @@
 #!name=车来了获取签到参数
-#!desc=自动抓取车来了签到参数，每日定时签到、领取惊喜任务
+#!desc=自动抓取车来了签到参数，每日定时签到、领取惊喜任务（Surge 无捕获开关，抓参数时手动启停本条）
 #!打开车来了 APP，进入 首页 - 签到领福利 页面。
 
 [Script]
-车来了获取签到参数= type=http-request ^https?:\/\/web\.chelaile\.net\.cn\/api\/op-activity-api\/daily-act\/(signin|config|task\/complete), requires-body=0, max-size=0, timeout=600, script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js, script-update-interval=0
+车来了获取签到参数 = type=http-request,pattern=^https?:\/\/web\.chelaile\.net\.cn\/api\/op-activity-api\/daily-act\/(signin|config|task\/complete),requires-body=0,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js,script-update-interval=0
 
-车来了签到= type=cron cronexp="0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js, timeout=600, script-update-interval=0
+车来了签到 = type=cron,cronexp="0 1 * * *",wake-system=1,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js,script-update-interval=0
 
 [MITM]
 hostname = %APPEND% web.chelaile.net.cn
