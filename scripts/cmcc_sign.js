@@ -1,9 +1,9 @@
 /**
  * 脚本名称：中国移动签到
- * 活动规则：中国移动 App「签到领流量/话费」活动(mark31)，每日签到得奖品，可按累计天数领取连签奖励
+ * 活动规则：中国移动「签到领流量/话费」活动(1021122301) 有两套互相独立的签到：App 端 mark31 与小程序端 mark/do/mark，各自一天一次；另有 AI豆任务(mark/task) 与秒杀抢券(markSeckill)
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。账号参数（App 票据/省市编码等）由本脚本 GetCookie 抓取后存入 cmcc_data
  * 环境变量：cmcc_data
- * 更新时间：2026-10-04
+ * 更新时间：2026-10-05 合并秒杀抢券(cmcc_seckill 开关)
 
 ------------------ Surge 配置 ------------------
 
@@ -51,6 +51,23 @@ const API_MARK = BASE + '/qwhdhub/api/mark';
 const ACTIVITY_ID = getEnv('cmcc_activity_id') || '1021122301';
 const CHANNEL_ID = getEnv('cmcc_channel_id') || 'P00000109876';
 const CLAIM_AWARD = getEnv('cmcc_claim') === 'true';
+const RUN_TASKS = getEnv('cmcc_task') === 'true';   // 签到页 AI豆任务(小程序端 mark/task 体系)
+const SECKILL = getEnv('cmcc_seckill') === 'true';  // 签到有礼秒杀抢券(同活动 1021122301)
+const TASK_API = API_MARK + '/task';
+// 秒杀抢券参数 (照 py 默认值)
+const SK_API = API_MARK + '/markSeckill';
+const SK_INTERVAL = 350;      // 重试间隔(ms)
+const SK_LEAD = 400;          // 提前开火(ms)，抵消网络延迟
+const SK_MAX_ATTEMPTS = 120;  // 单场最大尝试次数
+const SK_MAX_WAIT = 300000;   // 距开抢超过该时长就不再干等(ms)，本次跳过
+// 触达即终态的 redeem status：不再浪费请求
+const SK_STOP = {
+    PRIZE_NO_STOCK: '券已抢完',
+    PRIZE_LIMIT_DAY: '当日中奖次数已用完',
+    PRIZE_LIMIT_MONTH: '当月中奖次数已用完',
+    PRIZE_RESTRIC_LIMIT: '活动期间中奖次数已达上限',
+    WORK_ORDER_RESTRIC_LIMIT: '工单限流（黑名单/风控）',
+};
 // 与抓包完全一致的 App WebView UA（服务端校验 leadeon 标识）
 const USER_AGENT = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148/wkwebview leadeon/12.5.2/CMCCIT';
 
@@ -142,7 +159,8 @@ async function doSign(user) {
         $.log(`当前累计签到 ${acc} 天，今日${signedToday ? '已签' : '未签'}`);
 
         if (signedToday) {
-            lines.push(`今日已签到（累计 ${acc} 天），无需操作`);
+            // App 端已签则跳过 App 签到与连签领奖；小程序端/任务/抢兑各自判状态照常执行
+            lines.push(`App 端今日已签（累计 ${acc} 天）`);
         } else {
             const result = await doMark(ctx, today);
             const code = result && result.code, respMsg = (result && result.msg) || '', status = (result && result.status) || '';
@@ -165,13 +183,35 @@ async function doSign(user) {
             }
         }
 
-        if (CLAIM_AWARD) {
+        try {
+            lines.push(await doMiniMark(ctx));
+        } catch (e) {
+            lines.push(`[小程序] 失败: ${e.message || e}`);
+        }
+
+        if (CLAIM_AWARD && !signedToday) {
             try {
                 const latest = await queryMarkstatus(ctx);
                 if (!(latest.taskAwardChance || []).length) $.log('[领奖] 当前无可领取的连签任务');
                 lines.push(...await claimTaskAwards(ctx, latest));
             } catch (e) {
                 lines.push(`[领奖] 尝试失败: ${e.message || e}`);
+            }
+        }
+
+        if (RUN_TASKS) {
+            try {
+                lines.push(...await doMarkTasks(ctx));
+            } catch (e) {
+                lines.push(`[任务] 失败: ${e.message || e}`);
+            }
+        }
+
+        if (SECKILL) {
+            try {
+                lines.push(...await doSeckill(ctx));
+            } catch (e) {
+                lines.push(`[秒杀] 失败: ${e.message || e}`);
             }
         }
     } catch (e) {
@@ -284,10 +324,222 @@ async function claimTaskAwards(ctx, statusData) {
         // status 为 None 时回落到 code（实测领奖成功响应 status 可能为空）
         const statusText = (resp && (resp.status || resp.code)) || '?';
         const label = `任务${tid}` + (names[tid] ? `（${names[tid]}）` : '');
-        results.push(`[领奖] ${label}: ${statusText} ${(resp && resp.msg) || ''}`);
+        // 实际到账内容以响应为准（活动配置里的奖品名只是预告，可能已换档）
+        const d = (resp && resp.data) || {};
+        const awardName = d.prizeName || (d.prize || {}).name || d.name || '';
+        const award = [awardName, d.awardNum ? `×${d.awardNum}` : ''].filter(v => v).join(' ');
+        results.push(`[领奖] ${label}: ${statusText} ${(resp && resp.msg) || ''}${award ? ` → 实发 ${award}` : ''}`);
         await $.wait(randomInt(1000, 2000));
     }
     return results;
+}
+
+// 签到页 AI豆任务（小程序端同一套 mark/task 接口，会话通用）
+async function doMarkTasks(ctx) {
+    const lines = [];
+    const tl = await Request({ url: `${TASK_API}/taskList`, method: 'post', headers: apiHeaders(ctx), body: {}, _timeout: 30000 });
+    if (!tl || tl.code !== 'SUCCESS') throw new Error(`taskList 失败: ${tl && tl.code} ${tl && tl.msg}`);
+    const tasks = (tl.data || {}).tasks || [];
+    const todo = tasks.filter(t => t.status === 0 && t.taskId);
+    $.log(`AI豆任务共 ${tasks.length} 个，待办 ${todo.length} 个`);
+    if (!todo.length) return lines;
+
+    for (const t of todo) {
+        const label = `${t.taskName || t.taskId}${t.awardNum ? `(+${t.awardNum}AI豆)` : ''}`;
+        try {
+            lines.push(`[任务] ${label}: ${await finishOneTask(ctx, t)}`);
+        } catch (e) {
+            lines.push(`[任务] ${label}: ❌ ${e.message || e}`);
+        }
+        await $.wait(randomInt(800, 1800));
+    }
+    return lines;
+}
+
+// 单个任务：taskInfo → 到访目标页并停留 scanTime → (cToken?openFinish : 非浏览类 finishTask) → getTaskAward
+// 三种完成形态按抓包还原：浏览类(taskType=2)到访即完成；跳转类(taskType=5)回 cToken 走 openFinish；其余走 finishTask
+async function finishOneTask(ctx, task) {
+    const tid = String(task.taskId);
+    const info = await Request({ url: `${TASK_API}/taskInfo`, method: 'post', headers: apiHeaders(ctx), body: { taskId: tid }, _timeout: 30000 });
+    const d = (info && info.data) || {};
+    const taskType = String(d.taskType || task.taskType || '');
+    const scan = Number(d.scanTime || 0);
+    const ju = String(task.jumpUrl || '');
+
+    if (/^https:\/\//i.test(ju)) {
+        await Request({ url: ju, headers: baseHeaders(ctx.jar, ctx.ua), _respType: 'all', _timeout: 20000 });
+        if (scan) await $.wait((scan + 1) * 1000);
+    }
+
+    if (d.cToken) {
+        await Request({ url: `${API_MARK}/_pub/task/openFinish`, method: 'post', headers: apiHeaders(ctx), body: { cToken: d.cToken }, _timeout: 30000 });
+    } else if (taskType !== '2') {
+        // 前端拼的 sign/random 服务端不校验，只发 taskId/taskType 即可
+        let fin = await Request({ url: `${TASK_API}/finishTask`, method: 'post', headers: apiHeaders(ctx), body: { taskId: tid, taskType }, _timeout: 30000 });
+        // 服务端按 Referer 校验到访页：默认 referer 被拒时带目标页 referer 重试一次
+        if (fin && fin.code !== 'SUCCESS' && /未达到/.test(fin.msg || '') && ju.startsWith('https://')) {
+            fin = await Request({ url: `${TASK_API}/finishTask`, method: 'post', headers: Object.assign(apiHeaders(ctx), { referer: ju }), body: { taskId: tid, taskType }, _timeout: 30000 });
+        }
+    }
+
+    const aw = await Request({ url: `${TASK_API}/getTaskAward`, method: 'post', headers: apiHeaders(ctx), body: { taskId: tid }, _timeout: 30000 });
+    if (aw && aw.code === 'SUCCESS') return `✅ 已领 ${((aw.data || {}).awardNum) || '?'} AI豆`;
+    return `⚠️ 未完成: ${aw && aw.code} ${aw && aw.msg}`;
+}
+
+// 小程序端签到（mark/do/mark）：与 App 端 mark31 是两套独立计数，各自一天一次
+// prizeInfo 的 markedTimes/appMarkedTimes 不会被 mark31 签到喂，todayMarked 才是本端状态
+async function doMiniMark(ctx) {
+    const pre = await Request({ url: `${API_MARK}/info/prizeInfo`, method: 'post', headers: apiHeaders(ctx), body: {}, _timeout: 30000 });
+    const info = (pre && pre.data) || {};
+    const period = `${info.markedTimes || 0}/${info.totalMarkTimes || '?'}`;
+    if (info.todayMarked) return `小程序端今日已签（本期 ${period} 天）`;
+    if (!pre || pre.code !== 'SUCCESS') throw new Error(`prizeInfo 失败: ${pre && pre.code} ${pre && pre.msg}`);
+
+    const result = await Request({ url: `${API_MARK}/do/mark`, method: 'post', headers: apiHeaders(ctx), body: {}, _timeout: 30000 });
+    const code = result && result.code, status = (result && result.status) || '', respMsg = (result && result.msg) || '';
+    $.log(`mark/do/mark 响应: code=${code} status=${status} msg=${respMsg}`);
+    if (!result || (code !== 'SUCCESS' && !/已签/.test(respMsg) && status !== 'HAVE_MARKED')) {
+        throw new Error(`小程序端签到失败: ${code} / ${status} / ${respMsg}`);
+    }
+    const d = result.data || {};
+    const prize = [d.prizeName, d.prizeValue ? `${d.prizeValue}${d.prizeCategory === 'FLOW' ? 'MB' : '元'}` : ''].filter(v => v).join(' ');
+    const after = await Request({ url: `${API_MARK}/info/prizeInfo`, method: 'post', headers: apiHeaders(ctx), body: {}, _timeout: 30000 });
+    const now = `${((after || {}).data || {}).markedTimes || info.markedTimes || '?'}/${(info.totalMarkTimes) || '?'}`;
+    return `小程序端签到成功！本期 ${now} 天${prize ? `，获得: ${prize}` : ''}`;
+}
+
+// 秒杀抢券: 校时 → 场次 → 资格(未签补签) → 等到开抢 → 循环 redeem
+async function doSeckill(ctx) {
+    const lines = [];
+    const srvMs = await serverNowMs(ctx);
+    const offsetMs = srvMs - Date.now();
+    $.log(`服务器时间 ${fmtCn(srvMs)}，本机时钟偏移 ${offsetMs >= 0 ? '+' : ''}${offsetMs.toFixed(0)} ms`);
+
+    const cfgResp = await skPost(ctx, `${SK_API}/secConfig`);
+    const zones = (((cfgResp || {}).data || {}).secKillData || {}).secKillZones || [];
+    if (!zones.length) throw new Error('secConfig 未返回任何场次（活动未配置或已结束）');
+    $.log(`共 ${zones.length} 个场次:`);
+    zones.forEach(z => $.log(`  场次${z.id} ${fmtCn(z.startTime)} ~ ${fmtCn(z.endTime)}  ${(z.prize || {}).name} (prizeId=${(z.prize || {}).id})`));
+
+    const eligible = await ensureEligible(ctx);
+    $.log(`秒杀资格（当日签到）: ${eligible ? '已具备' : '未获取！'}`);
+
+    const picked = pickZone(zones, srvMs);
+    if (!picked.zone) throw new Error('没有可参与的场次（全部已结束）');
+    const zone = picked.zone, prizeName = (zone.prize || {}).name || `场次${zone.id}`;
+    const startSrv = Number(zone.startTime), endSrv = Number(zone.endTime);
+    $.log(`选定场次${zone.id}：${fmtCn(startSrv)} 开抢（${picked.active ? '进行中' : `距开始 ${((startSrv - srvMs) / 1000).toFixed(0)} 秒`}）`);
+
+    if (!eligible) {
+        return lines.concat('[秒杀] 当日未签到且补签失败，无法参与秒杀');
+    }
+    if (!picked.active) {
+        const waitMs = startSrv - srvMs - SK_LEAD;
+        if (waitMs > SK_MAX_WAIT) {
+            return lines.concat(`[秒杀] 距开抢还有 ${(waitMs / 60000).toFixed(1)} 分钟，超过等待上限 ${SK_MAX_WAIT / 60000} 分钟，本次跳过（定时请设在开抢前 1~2 分钟）`);
+        }
+        await waitUntil(Date.now() + waitMs, ctx);
+    }
+
+    const fired = await fireRedeem(ctx, zone, endSrv, offsetMs);
+    if (fired.reason === 'SUCCESS') {
+        lines.push(`🎉 [秒杀] 抢到 ${prizeName}（场次 ${fmtCn(startSrv)}），请去 App「我的奖品」核销`);
+    } else {
+        const reason = SK_STOP[fired.reason] || fired.reason;
+        lines.push(`[秒杀] 未抢到: ${reason}｜${prizeName} 场次 ${fmtCn(startSrv)}`);
+    }
+    return lines;
+}
+
+// 服务器当前毫秒时间；sysTime 格式变化时回落到响应的 Date 头（秒级精度）
+async function serverNowMs(ctx) {
+    const resp = await Request({ url: `${SK_API}/sysTime`, method: 'post', headers: apiHeaders(ctx), body: {}, _respType: 'all', _timeout: 10000 });
+    const body = $.toObj(resp && resp.body, {}) || {};
+    const ms = Number((body.data || {}).sysTime);
+    if (ms) return ms;
+    $.log(`sysTime 响应格式变化: ${$.toStr(body, '{}').slice(0, 200)}`);
+    const date = resp && resp.headers && (resp.headers.date || resp.headers.Date);
+    const parsed = date ? Date.parse(date) : NaN;
+    return isNaN(parsed) ? Date.now() : parsed;
+}
+
+// 选出当前进行中或下一场即将开始的场次
+function pickZone(zones, nowMs) {
+    for (const z of zones) {
+        if (Number(z.startTime) <= nowMs && nowMs <= Number(z.endTime)) return { zone: z, active: true };
+    }
+    const upcoming = zones.filter(z => Number(z.startTime) > nowMs).sort((a, b) => Number(a.startTime) - Number(b.startTime));
+    return { zone: upcoming[0] || null, active: false };
+}
+
+// 秒杀资格 = 完成当日签到；未签则先走同活动的 domark 补签
+async function ensureEligible(ctx) {
+    if (await todayMarkStatus(ctx) === 'marked') return true;
+    $.log('今日未签到，先补签获取秒杀资格...');
+    try {
+        const r = await doMark(ctx, $.time('yyyyMMdd'));
+        $.log(`补签响应: code=${r && r.code} status=${r && r.status} msg=${(r && r.msg) || ''}`);
+    } catch (e) {
+        $.log(`补签请求失败: ${e.message || e}`);
+    }
+    return (await todayMarkStatus(ctx)) === 'marked';
+}
+
+async function todayMarkStatus(ctx) {
+    const resp = await skPost(ctx, `${SK_API}/todayMarkStatus`);
+    return ((resp || {}).data || {}).markStatus || '';
+}
+
+// 睡到 target(本地毫秒)；长等时定期发请求保活会话（会话 cookie 滑动 30 分钟）
+async function waitUntil(targetMs, ctx) {
+    while (true) {
+        const remain = targetMs - Date.now();
+        if (remain <= 0) return;
+        await $.wait(Math.min(remain, 480000));
+        if (targetMs - Date.now() > 60000) {
+            try {
+                await todayMarkStatus(ctx);
+                $.log(`会话心跳 ok，距开抢还有 ${((targetMs - Date.now()) / 60000).toFixed(1)} 分钟`);
+            } catch (e) {
+                $.log(`会话心跳失败: ${e.message || e}`);
+            }
+        }
+    }
+}
+
+// 开抢主循环，返回 { resp, reason }
+async function fireRedeem(ctx, zone, deadlineSrvMs, offsetMs) {
+    const payload = { secId: String(zone.id), prizeId: String((zone.prize || {}).id) };
+    $.log(`开始抢购: ${(zone.prize || {}).name} (secId=${payload.secId} prizeId=${payload.prizeId})`);
+
+    for (let attempt = 1; attempt <= SK_MAX_ATTEMPTS; attempt++) {
+        if (Date.now() + offsetMs > deadlineSrvMs) return { resp: null, reason: '场次窗口已结束' };
+        const resp = await skPost(ctx, `${SK_API}/redeem`, payload);
+        if (!resp) {
+            await $.wait(SK_INTERVAL);
+            continue;
+        }
+        const code = resp.code, status = resp.status;
+        $.log(`第${attempt}发: code=${code} status=${status} msg=${resp.msg || ''}`);
+        if (code === 'SUCCESS') return { resp, reason: 'SUCCESS' };
+        if (SK_STOP[status]) return { resp, reason: status };
+        // NOT_TIME_IN（提前量打早了）与其他未知错误：密集重试直到开抢/窗口结束
+        await $.wait(status === 'NOT_TIME_IN' ? 50 : SK_INTERVAL);
+    }
+    return { resp: null, reason: `连续 ${SK_MAX_ATTEMPTS} 发未中` };
+}
+
+// 秒杀接口统一走签到会话的头，超时收紧到 10s 以便快速重试
+function skPost(ctx, url, payload) {
+    return Request({ url, method: 'post', headers: apiHeaders(ctx), body: payload || {}, _timeout: 10000 });
+}
+
+// 毫秒时间戳 → 北京时间 MM-DD HH:mm:ss（不依赖设备时区）
+function fmtCn(ms) {
+    const d = new Date(Number(ms) + 8 * 3600000);
+    const p = n => String(n).padStart(2, '0');
+    return `${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
 }
 
 // 从 domark 响应里提取奖品描述

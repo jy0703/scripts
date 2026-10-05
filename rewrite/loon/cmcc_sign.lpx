@@ -1,5 +1,5 @@
 #!name = 中国移动签到
-#!desc = 自动抓取中国移动 App 签到凭证，并每日定时签到、领取连签奖励，支持多账号（打开中国移动 App：登录 -「我」-「签到」进入签到领流量活动页）
+#!desc = 自动抓取中国移动 App 签到凭证，并每日定时签到、领取连签奖励（boxjs 可选开启 AI豆任务、秒杀抢券），支持多账号（打开中国移动 App：登录 -「我」-「签到」进入签到领流量活动页）
 #!author = Fengzzzz
 #!homepage = https://github.com/jy0703/scripts
 #!icon = https://raw.githubusercontent.com/jy0703/scripts/main/icons/cmcc.png
