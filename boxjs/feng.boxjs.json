@@ -376,14 +376,11 @@
       "author": "@Feng",
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js",
       "descs_html": [
-        "中国移动「签到领流量/话费」活动(1021122301)，支持多账号。本脚本每天各签一次：App 端 mark31(累计天数/连签奖励) 与小程序端 mark/do/mark(本期天数/话费券)，两套计数互相独立、互不影响",
-        "小程序端签到走 api/mark/do/mark，状态取 api/mark/info/prizeInfo 的 todayMarked/markedTimes；实测它与 mark31 不是同一条记录(prizeInfo 的 markedTimes 不会被 App 签到喂)，所以两边都要签",
-        "抓取步骤：开启「中国移动获取Cookie」rewrite 后，打开中国移动 App - 登录 - 底部「我」-「签到」(或搜索\"签到领流量\")进入签到活动页，即自动写入 cmcc_data；抓取完成后建议关闭捕获开关",
-        "cmcc_data 内含 App 票据(token)与账号级长期凭证 jwt：jwt 有效时不再使用票据，票据过期不影响签到；jwt 失效会自动回落票据续期，两者都失效才需重新抓包",
-        "活动ID/渠道ID 变更时改 cmcc_activity_id、cmcc_channel_id，留空用默认 1021122301 / P00000109876",
-        "AI豆任务(cmcc_task 开关)：走小程序端同一套 mark/task 接口(taskList→taskInfo→到访停留→openFinish/finishTask→getTaskAward)，与签到共用会话，不需要额外凭证；权益订购类任务(随心看会员等)需真实办理，脚本不碰",
-        "秒杀抢券(cmcc_seckill 开关)：复用签到会话跑 markSeckill 链路，自动校时算时钟偏移、选当前/下一场、无资格时补签，然后密集重试 redeem；距开抢超过 5 分钟则本次跳过，故定时(cron)建议设在开抢前 1~2 分钟；当日已签到时本次运行只做抢兑(不再重复签到/领奖)，所以每场开抢前各设一条定时即可；多账号会串行参与(每账号各自等待与抢购)",
-        "cmcc_claim 开启后每次签到会尝试领取全部连签奖励(热门奖品库存紧张，领不到属正常)"
+        "中国移动「签到领流量/话费」(活动 1021122301)，支持多账号。App 端与小程序端是两套独立签到，每天各签一次。",
+        "抓取：开启「中国移动获取Cookie」→ 打开中国移动 App -「我」-「签到」进入活动页即自动写入，抓完请关闭捕获。",
+        "凭证：cmcc_data 含 App 票据与长期 jwt，jwt 有效时不消耗票据；两者都失效才需重新抓包。",
+        "开关：cmcc_claim 连签奖励 / cmcc_task AI豆任务 / cmcc_seckill 秒杀抢券(定时设在开抢前 1~2 分钟)。当天签到完成后再次执行只抢券。",
+        "cmcc_activity_id / cmcc_channel_id 留空用默认 1021122301 / P00000109876。"
       ],
       "icons": [
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/cmcc.png",
@@ -406,7 +403,7 @@
           "autoGrow": true,
           "rows": 5,
           "placeholder": "",
-          "desc": "由 rewrite 抓取自动写入，勿手填；含 token/userCheckId/jwt"
+          "desc": "由 rewrite 抓取自动写入，勿手填"
         },
         {
           "id": "cmcc_claim",
@@ -420,14 +417,14 @@
           "name": "AI豆任务",
           "val": false,
           "type": "boolean",
-          "desc": "默认关闭；开启后自动完成签到页待办任务并领取 AI豆(浏览/跳转/点击三类)"
+          "desc": "完成签到页待办任务并领 AI豆"
         },
         {
           "id": "cmcc_seckill",
           "name": "秒杀抢券",
           "val": false,
           "type": "boolean",
-          "desc": "默认关闭；开启后签到完成即参与同活动秒杀抢券"
+          "desc": "签到后参与同活动秒杀抢券"
         },
         {
           "id": "cmcc_activity_id",

@@ -122,6 +122,8 @@ function GetCookie() {
             // App 端 localStorage 里的 jwt 比旧缓存新，缺失时保留旧值
             'jwt': body.jwtToken || old.jwt || '',
             'jwt_first': old.jwt_first || Date.now(),
+            // 重新抓包不该把当天"已签到"标记清掉，否则同日会再签一次
+            'signDay': old.signDay || '',
         };
 
         const index = $.userArr.findIndex(e => e.userCheckId == newData.userCheckId);
@@ -134,84 +136,82 @@ function GetCookie() {
     }
 }
 
-// 任务: 建会话 → 查状态 → 签到 → (可选)领连签奖励
+// 任务: 建会话 → App 端 + 小程序端双签到 → (可选)连签奖励/AI豆任务 → (可选)抢券
+// 当天两端签到都完成后(user.signDay)，再次执行本脚本只做抢券，不再跑签到/领奖/任务
 async function doSign(user) {
     const lines = [];
+    const today = $.time('yyyyMMdd');
     try {
-        let ctx = await exchangeSession(user);
-        let statusData = null;
-        // 第一次失败若是会话问题，重建后再试一次
-        for (let attempt = 1; ; attempt++) {
-            try {
-                statusData = await queryMarkstatus(ctx);
-                break;
-            } catch (e) {
-                if (attempt === 2) throw e;
-                $.log(`会话异常(${e.message})，重建后重试`);
-                ctx = await exchangeSession(user);
-            }
-        }
-
-        const today = $.time('yyyyMMdd');
-        const userinfo = statusData.userinfo || {};
-        let acc = userinfo.accumulateTimes || '?';
-        const signedToday = (statusData.markstatus || []).some(d => d.date === today && d.status === '1');
-        $.log(`当前累计签到 ${acc} 天，今日${signedToday ? '已签' : '未签'}`);
-
-        if (signedToday) {
-            // App 端已签则跳过 App 签到与连签领奖；小程序端/任务/抢兑各自判状态照常执行
-            lines.push(`App 端今日已签（累计 ${acc} 天）`);
-        } else {
-            const result = await doMark(ctx, today);
-            const code = result && result.code, respMsg = (result && result.msg) || '', status = (result && result.status) || '';
-            $.log(`domark 响应: code=${code} status=${status} msg=${respMsg}`);
-            // HAVE_MARKED 是服务端幂等保护（重复签到返回该码），视为已签成功
-            if (code === 'SUCCESS' || respMsg.includes('已签') || status === 'HAVE_MARKED') {
-                const prize = parsePrize(result);
-                try {
-                    acc = ((await queryMarkstatus(ctx)).userinfo || {}).accumulateTimes || acc;
-                } catch (e) { }
-                if (status === 'HAVE_MARKED') {
-                    lines.push(`今日已签到过（服务端幂等），累计 ${acc} 天`);
-                } else {
-                    lines.push(`签到成功！累计 ${acc} 天`);
-                    if (prize) lines.push(`获得奖品: ${prize}`);
-                    else if (status === 'PRIZE_NO_CONFIG') lines.push(`今日无单日奖品（奖励按累计签到门槛发放）`);
-                }
+        if (user.signDay === today) {
+            if (!SECKILL) {
+                lines.push(`今日签到已完成，本次无抢券任务`);
             } else {
-                throw new Error(`签到失败: ${code} / ${status} / ${respMsg}`);
+                lines.push(...await doSeckill(await exchangeSession(user)));
             }
-        }
+        } else {
+            const { ctx, statusData } = await openCtx(user);
+            let acc = (statusData.userinfo || {}).accumulateTimes || '?';
+            const signedToday = (statusData.markstatus || []).some(d => d.date === today && d.status === '1');
+            $.log(`当前累计签到 ${acc} 天，App 端今日${signedToday ? '已签' : '未签'}`);
 
-        try {
-            lines.push(await doMiniMark(ctx));
-        } catch (e) {
-            lines.push(`[小程序] 失败: ${e.message || e}`);
-        }
-
-        if (CLAIM_AWARD && !signedToday) {
-            try {
-                const latest = await queryMarkstatus(ctx);
-                if (!(latest.taskAwardChance || []).length) $.log('[领奖] 当前无可领取的连签任务');
-                lines.push(...await claimTaskAwards(ctx, latest));
-            } catch (e) {
-                lines.push(`[领奖] 尝试失败: ${e.message || e}`);
+            if (signedToday) {
+                lines.push(markLine('App 端', false, `累计 ${acc} 天`));
+            } else {
+                const result = await doMark(ctx, today);
+                const code = result && result.code, respMsg = (result && result.msg) || '', status = (result && result.status) || '';
+                $.log(`domark 响应: code=${code} status=${status} msg=${respMsg}`);
+                // HAVE_MARKED 是服务端幂等保护（重复签到返回该码），视为已签成功
+                if (code === 'SUCCESS' || respMsg.includes('已签') || status === 'HAVE_MARKED') {
+                    const prize = prizeText((result.data || {}).markPrize);
+                    try {
+                        acc = ((await queryMarkstatus(ctx)).userinfo || {}).accumulateTimes || acc;
+                    } catch (e) { }
+                    lines.push(status === 'HAVE_MARKED'
+                        ? markLine('App 端', false, `累计 ${acc} 天`, '', '服务端幂等')
+                        : markLine('App 端', true, `累计 ${acc} 天`, prize,
+                            !prize && status === 'PRIZE_NO_CONFIG' ? '今日无单日奖品(按累计门槛发放)' : ''));
+                } else {
+                    throw new Error(`App 端签到失败: ${code} / ${status} / ${respMsg}`);
+                }
             }
-        }
 
-        if (RUN_TASKS) {
+            // 小程序端签到成功/已签才算当天签到闭环，失败则下次执行重试
+            let miniOk = false;
             try {
-                lines.push(...await doMarkTasks(ctx));
+                lines.push(await doMiniMark(ctx));
+                miniOk = true;
             } catch (e) {
-                lines.push(`[任务] 失败: ${e.message || e}`);
+                lines.push(`小程序端 签到失败: ${e.message || e}`);
             }
-        }
+            if (miniOk) {
+                user.signDay = today;
+                saveUsers();
+            }
 
-        if (SECKILL) {
-            try {
-                lines.push(...await doSeckill(ctx));
-            } catch (e) {
-                lines.push(`[秒杀] 失败: ${e.message || e}`);
+            if (CLAIM_AWARD && !signedToday) {
+                try {
+                    const latest = await queryMarkstatus(ctx);
+                    if (!(latest.taskAwardChance || []).length) $.log('[领奖] 当前无可领取的连签任务');
+                    lines.push(...await claimTaskAwards(ctx, latest));
+                } catch (e) {
+                    lines.push(`[领奖] 尝试失败: ${e.message || e}`);
+                }
+            }
+
+            if (RUN_TASKS) {
+                try {
+                    lines.push(...await doMarkTasks(ctx));
+                } catch (e) {
+                    lines.push(`[任务] 失败: ${e.message || e}`);
+                }
+            }
+
+            if (SECKILL) {
+                try {
+                    lines.push(...await doSeckill(ctx));
+                } catch (e) {
+                    lines.push(`[秒杀] 失败: ${e.message || e}`);
+                }
             }
         }
     } catch (e) {
@@ -219,6 +219,20 @@ async function doSign(user) {
     }
     lines.forEach(l => $.log(l));
     $.messages = $.messages.concat(lines);
+}
+
+// 建会话并查签到状态；首次若是会话问题，重建后再试一次
+async function openCtx(user) {
+    let ctx = await exchangeSession(user);
+    for (let attempt = 1; ; attempt++) {
+        try {
+            return { ctx, statusData: await queryMarkstatus(ctx) };
+        } catch (e) {
+            if (attempt === 2) throw e;
+            $.log(`会话异常(${e.message})，重建后重试`);
+            ctx = await exchangeSession(user);
+        }
+    }
 }
 
 // 走 SSO 换取活动会话（QWHD_SESSION_TOKEN 落在 jar 里），返回 { jar, ua, referer }
@@ -398,10 +412,13 @@ async function doMiniMark(ctx) {
     if (code !== 'SUCCESS' && status !== 'TODAY_MARKED' && status !== 'HAVE_MARKED' && !/已签/.test(msg)) {
         throw new Error(`小程序端签到失败: ${code} / ${status} / ${msg}`);
     }
-    const d = result.data || {};
-    const prize = d.prizeName || (d.prizeValue ? `${d.prizeValue}${d.prizeCategory === 'FLOW' ? 'MB' : '元'}` : '');
-    const period = await miniPeriod(ctx);
-    return `${code === 'SUCCESS' ? '小程序端签到成功' : '小程序端今日已签'}${period ? `（${period}）` : ''}${prize ? `，获得: ${prize}` : ''}`;
+    const prize = prizeText(result.data || {});
+    return markLine('小程序端', code === 'SUCCESS', await miniPeriod(ctx), prize);
+}
+
+// 两端签到结果统一格式: <端> <状态>（<天数>）[，获得: X][，备注]
+function markLine(who, ok, days, prize, note) {
+    return `${who} ${ok ? '签到成功' : '今日已签'}${days ? `（${days}）` : ''}${prize ? `，获得: ${prize}` : ''}${note ? `，${note}` : ''}`;
 }
 
 // 小程序端本期/本月已签天数：prizeInfo 的计数字段优先；
@@ -418,7 +435,7 @@ async function miniPeriod(ctx) {
         return '';
     }
     const month = $.time('yyyyMM');
-    return `本月已签 ${list.filter(x => String(x.month) === month).length} 天`;
+    return `本月 ${list.filter(x => String(x.month) === month).length} 天`;
 }
 
 // 秒杀抢券: 校时 → 场次 → 资格(未签补签) → 等到开抢 → 循环 redeem
@@ -554,13 +571,10 @@ function fmtCn(ms) {
     return `${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
 }
 
-// 从 domark 响应里提取奖品描述
-function parsePrize(markResult) {
-    const prize = (markResult && markResult.data) && markResult.data.markPrize;
-    if (!prize) return '';
-    const parts = [prize.name || ''];
-    if (prize.prizeValue) parts.push(`${prize.prizeValue}${prize.prizeCategory === 'FLOW' ? 'MB' : '元'}`);
-    return parts.filter(p => p).join(' ');
+// 奖品描述：两端统一口径，优先奖品名，没名称才用 面额+单位
+function prizeText(p) {
+    if (!p) return '';
+    return p.name || p.prizeName || (p.prizeValue ? `${p.prizeValue}${p.prizeCategory === 'FLOW' ? 'MB' : '元'}` : '');
 }
 
 // 手机号十六进制(userCheckId) -> 尾号
