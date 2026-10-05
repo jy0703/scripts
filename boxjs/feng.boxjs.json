@@ -479,6 +479,39 @@
           "desc": "由 rewrite 抓取自动写入，勿手填；含 token/mallNo/imei/deviceParams/appVersion/osVersion"
         }
       ]
+    },
+    {
+      "id": "hdl_sign",
+      "name": "海底捞签到",
+      "author": "@Feng",
+      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/hdl_sign.js",
+      "descs_html": [
+        "海底捞会员小程序每日签到，奖励碎片/成长值/菜品，并查询碎片余额与会员信息（捞币/捞龄/成长值）",
+        "依赖「Code Server」分组中「获取小程序code」配置项（@wxCode.address / @wxCode.ref / @wxCode.token），支持多账号（已真机验证）",
+        "登录链路：微信 code → CaterWeixin/ws/external/getId.json 换 openid/unionId → wechatLogin(openId+uid) 取 token；海底捞的 uid 就是 unionId",
+        "token 缓存 24 小时并自动验活（queryMemberCacheInfo），失效自动重新登录，无需手动干预",
+        "HDL 变量为可选抓包兜底（同一序号上优先于 code 服务）：openId&uid / wx#openId&uid / app#TOKEN / TOKEN，多条以换行或 ; 分隔",
+        "排查提示：请求头需带全套小程序头（User-Agent / Referer / platformname 等，脚本已内置），缺头时服务端回 -50005 参数异常，容易被误判成凭证错误"
+      ],
+      "icons": [
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/hdl.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/hdl.png"
+      ],
+      "keys": [
+        "HDL"
+      ],
+      "settings": [
+        {
+          "id": "HDL",
+          "name": "抓包兜底凭证",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 2,
+          "placeholder": "",
+          "desc": "可选抓包兜底，留空则走 code 服务；格式 openId&uid / wx#openId&uid / app#TOKEN / TOKEN，多条以换行或 ; 分隔"
+        }
+      ]
     }
   ]
 }
