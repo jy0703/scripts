@@ -380,6 +380,7 @@
         "抓取：开启「中国移动获取Cookie」→ 打开中国移动 App -「我」-「签到」进入活动页即自动写入，抓完请关闭捕获。",
         "凭证：cmcc_data 含 App 票据与长期 jwt，jwt 有效时不消耗票据；两者都失效才需重新抓包。",
         "开关：cmcc_claim 连签奖励 / cmcc_task AI豆任务 / cmcc_seckill 秒杀抢券(定时设在开抢前 1~2 分钟)。当天签到完成后再次执行只抢券。",
+        "小程序端签到走微信渠道会话(实测 do/mark 的当日奖品池按会话渠道区分，App 渠道调它会报无库存/无配置)：脚本自动完成 小程序code→wechat86-applet/login→wmhsso→活动页落会话，需要 boxjs 里「Code Server」分组的 @wxCode.address / @wxCode.ref / @wxCode.token(Node 用 WX_CODE_ADDRESS/REF/TOKEN)；cmcc_mini_wx 置 false 可关掉这条链(回退用 App 渠道会话调，通常会失败)。",
         "AI豆任务逐条实时输出到日志；通知里只留成功项加一行汇总。连续 2 次领奖被拒(未达到奖品领取条件)的任务自动进黑名单(cmcc_task_fail)，不再发请求，满 cmcc_task_skip_days 天(默认 7)自动重试；一旦领到奖立即移出。",
         "cmcc_activity_id / cmcc_channel_id 留空用默认 1021122301 / P00000109876。"
       ],
@@ -392,6 +393,7 @@
         "cmcc_claim",
         "cmcc_task",
         "cmcc_seckill",
+        "cmcc_mini_wx",
         "cmcc_task_fail",
         "cmcc_task_skip_days",
         "cmcc_activity_id",
@@ -428,6 +430,13 @@
           "val": false,
           "type": "boolean",
           "desc": "签到后参与同活动秒杀抢券"
+        },
+        {
+          "id": "cmcc_mini_wx",
+          "name": "小程序端微信渠道会话",
+          "val": true,
+          "type": "boolean",
+          "desc": "小程序端签到用小程序自身登录链单独建微信渠道会话(依赖 Code Server @wxCode.*)；关闭则退回 App 渠道会话、大概率失败"
         },
         {
           "id": "cmcc_task_skip_days",

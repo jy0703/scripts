@@ -2,8 +2,9 @@
  * 脚本名称：中国移动签到
  * 活动规则：中国移动「签到领流量/话费」活动(1021122301) 有两套互相独立的签到：App 端 mark31 与小程序端 mark/do/mark，各自一天一次；另有 AI豆任务(mark/task) 与秒杀抢券(markSeckill)
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。账号参数（App 票据/省市编码等）由本脚本 GetCookie 抓取后存入 cmcc_data
- * 环境变量：cmcc_data / cmcc_claim / cmcc_task / cmcc_seckill / cmcc_task_skip_days；cmcc_task_fail 为脚本自动维护的任务黑名单
- * 更新时间：2026-10-05 合并秒杀抢券(cmcc_seckill 开关)；AI豆任务逐条实时输出、连续失败任务自动拉黑(cmcc_task_fail)
+ * 环境变量：cmcc_data / cmcc_claim / cmcc_task / cmcc_seckill / cmcc_mini_wx / cmcc_task_skip_days；cmcc_task_fail 为脚本自动维护的任务黑名单
+ * 依赖：小程序端签到要建微信渠道会话，需要 Code Server 的 @wxCode.address / @wxCode.ref / @wxCode.token（Node 下用 WX_CODE_ADDRESS/REF/TOKEN）
+ * 更新时间：2026-10-06 小程序端改走微信渠道会话(小程序 applet 登录链)；AI豆任务逐条实时输出、连续失败任务自动拉黑；finishTask 提示"特殊处理"时增加 hlwyxhdhub openFinish 握手兜底
 
 ------------------ Surge 配置 ------------------
 Surge 没有捕获开关参数，需要更新凭证时临时启用「获取Cookie」那条（或整个模块），抓完再关掉。
@@ -55,6 +56,17 @@ const CLAIM_AWARD = getEnv('cmcc_claim') === 'true';
 const RUN_TASKS = getEnv('cmcc_task') === 'true';   // 签到页 AI豆任务(小程序端 mark/task 体系)
 const SECKILL = getEnv('cmcc_seckill') === 'true';  // 签到有礼秒杀抢券(同活动 1021122301)
 const TASK_API = API_MARK + '/task';
+// hlwyxhdhub 开放任务入口：finishTask 提示"特殊处理"时到该 hub 换会话做 openFinish 握手
+const OPEN_TASK_ENTRY = BASE + '/hlwyxhdhub/act-wedrecharge/index.html?pageId=1849008675699650560';
+// 小程序端(微信渠道)会话：do/mark 的当日奖品按会话渠道取不同池子，App 渠道会话调它拿不到小程序那份流量
+const MINI_WX = getEnv('cmcc_mini_wx') !== 'false';
+const MINI_UA = getEnv('cmcc_mini_ua') || 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.79(0x18004f26) NetType/WIFI Language/zh_CN';
+const WMH_API = 'https://wx.online-cmcc.cn/wmhnewcenter';
+const MINI_APPID = 'wx43aab19a93a3a6f2';   // 中国移动小程序 appid
+const MINI_REFERER = `https://servicewechat.com/${MINI_APPID}/531/page-frame.html`;
+const MINI_ASK_CONFIG = 'feeCard,callBalance,broadband,noReal,noPuk,fareLink,recommendCard,xmeFloatBar,showGrayUI,NBEJXHSN,commodityDisableProvince,txCooperateOffingPro,netAge,oneKeyLogin,miniSubscribePopu';
+const MINI_YX = 'JH202410181539';           // 活动页归因参数，照抓包原样带上，只影响归因
+const MINI_TOUCH_ID = '01-05-10005-2007-sy04';
 // 秒杀抢券参数 (照 py 默认值)
 const SK_API = API_MARK + '/markSeckill';
 const SK_INTERVAL = 350;      // 重试间隔(ms)
@@ -181,7 +193,16 @@ async function doSign(user) {
             // 小程序端签到成功/已签才算当天签到闭环，失败则下次执行重试
             let miniOk = false;
             try {
-                say(await doMiniMark(ctx));
+                let miniCtx = ctx;
+                if (MINI_WX) {
+                    try {
+                        miniCtx = await openMiniCtx(user);
+                        $.log(`微信渠道会话就绪（channel=${miniCtx.channel} openid=${miniCtx.openid}，未消耗 App 票据）`);
+                    } catch (e) {
+                        $.log(`微信渠道会话失败: ${e.message || e}；回退 App 渠道会话调 do/mark`);
+                    }
+                }
+                say(await doMiniMark(miniCtx));
                 miniOk = true;
             } catch (e) {
                 say(`小程序端 签到失败: ${e.message || e}`);
@@ -240,10 +261,10 @@ async function openCtx(user) {
 // 走 SSO 换取活动会话（QWHD_SESSION_TOKEN 落在 jar 里），返回 { jar, ua, referer }
 // 凭证策略（py 实测结论）：jwt 是账号级长期凭证，appTokenLogin 里 jwtToken 优先于 token，
 // 故优先用缓存 jwt 免票据续期，App 票据仅在 jwt 缺失/失效时作引导兜底。
-async function exchangeSession(user) {
+async function exchangeSession(user, entryUrl) {
     const jar = {};
     const ua = user.userAgent || USER_AGENT;
-    const actUrl = `${BASE}/qwhdhub/qwhdmark/${ACTIVITY_ID}?channelId=${CHANNEL_ID}`;
+    const actUrl = entryUrl || `${BASE}/qwhdhub/qwhdmark/${ACTIVITY_ID}?channelId=${CHANNEL_ID}`;
 
     // ① 登录中转页，提取一次性 sid
     const page = await Request({ url: `${SSO_LOGIN}?dlwmh=true&actUrl=${encodeURIComponent(actUrl)}`, headers: baseHeaders(jar, ua), _respType: 'all', _timeout: 30000 });
@@ -304,6 +325,62 @@ async function exchangeSession(user) {
     }
 
     return { jar, ua, referer: data.url };
+}
+
+// 建微信渠道(小程序)会话，全程照小程序自身链路(2026-10-06 完整小程序包实测)：
+// ① code 服务取小程序 code → ② wechat86-applet/login 拿 applet 登录态(sessionId，即 X-CORE-APPLET-TOKEN)
+// → ③ wechat86-applet/wmhsso 拿 wmhToken(必须同时带 X-WECHAT86-APPLET-JWT，缺它只回鉴权错误)
+// → ④ 活动页带 wmhToken 直接落 QWHD_SESSION_TOKEN，渠道自检应为 wechat/wxmini
+async function openMiniCtx(user) {
+    const jar = {};
+    const code = await miniAppletCode();
+    const lg = await Request({ url: `${WMH_API}/wechat86-applet/login`, headers: miniHeaders(code), _timeout: 30000 });
+    const d = (lg && lg.data) || {};
+    const token = d.sessionId || '';
+    if (!token) throw new Error(`applet/login 未回登录态: ${lg && (lg.returnCode || lg.code)} ${lg && (lg.returnMessage || lg.msg)}`);
+
+    const sso = await Request({ url: `${WMH_API}/wechat86-applet/wmhsso?redirectSource=SSO_YQS`, method: 'post', headers: miniHeaders(token, d.provinceCode || user.provinceCode || ''), body: '', _timeout: 30000 });
+    const wmh = (sso && sso.bean && sso.bean.token) || '';
+    if (!wmh) throw new Error(`wmhsso 未回 wmhToken: ${sso && sso.returnCode} ${sso && sso.returnMessage}`);
+
+    const page = `${BASE}/qwhdhub/qwhdmark/${ACTIVITY_ID}?yx=${MINI_YX}&touch_id=${MINI_TOUCH_ID}&wmhToken=${encodeURIComponent(wmh)}`;
+    const act = await Request({ url: page, headers: baseHeaders(jar, MINI_UA), _respType: 'all', followRedirect: false, _timeout: 30000 });
+    takeCookies(jar, act && act.headers);
+    if (!hasSessionToken(jar)) throw new Error(`活动页未落会话令牌: HTTP ${act && act.statusCode} cookies=[${Object.keys(jar).join(',')}]`);
+
+    const ctx = { jar, ua: MINI_UA, referer: page };
+    const info = await Request({ url: `${API_MARK}/user/info`, method: 'post', headers: apiHeaders(ctx), body: { appVersion: '', miniVersion: '' }, _timeout: 20000 });
+    ctx.channel = ((info || {}).data || {}).channel || '?';
+    ctx.openid = (((info || {}).data || {}).openid || '').slice(0, 6) + '…';
+    if (!/wechat|wxmini/.test(ctx.channel)) $.log(`渠道自检 channel=${ctx.channel}（预期 wechat/wxmini），仍继续`);
+    return ctx;
+}
+
+// 小程序侧请求头：未登录时带 X-WX-Code，登录后带 X-CORE-APPLET-TOKEN + X-WECHAT86-APPLET-JWT(同值)
+function miniHeaders(val, province) {
+    const h = { accept: '*/*', 'content-type': 'application/x-www-form-urlencoded', 'user-agent': MINI_UA, referer: MINI_REFERER };
+    if (province === undefined) return Object.assign(h, { 'x-wx-code': val });
+    h['x-core-applet-token'] = val;
+    h['x-wechat86-applet-jwt'] = val;
+    h['x-applet-ask-config'] = MINI_ASK_CONFIG;
+    h['x-emergency-new'] = 'yes';
+    h['x-emergency-province'] = province || '';
+    return h;
+}
+
+// 向 code 服务取一次性小程序 code（与 yxx_sign 同一台 YYB 服务、同一组 @wxCode.* 配置）
+async function miniAppletCode() {
+    const addr = (getEnv('WX_CODE_ADDRESS', '@wxCode.address') || '').replace(/\/+$/, '');
+    const ref = getEnv('WX_CODE_REF', '@wxCode.ref') || '';
+    const token = getEnv('WX_CODE_TOKEN', '@wxCode.token') || '';
+    if (!addr || !ref) throw new Error('未配置 code 服务(@wxCode.address / @wxCode.ref)');
+    const headers = { accept: '*/*', 'content-type': 'application/json' };
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const resp = await Request({ url: `${addr}/wxapp/getCode`, method: 'post', headers, body: { ref, app_id: MINI_APPID }, _timeout: 60000 });
+    if (!resp || resp.code !== 0) throw new Error(`/wxapp/getCode 失败: ${resp && resp.code} ${resp && resp.msg}`);
+    const code = ((resp.data || {}).result || {}).code || '';
+    if (!code) throw new Error(`/wxapp/getCode 未返回 code: ${$.toStr(resp.data, '{}').slice(0, 160)}`);
+    return code;
 }
 
 async function queryMarkstatus(ctx) {
@@ -396,7 +473,7 @@ async function doMarkTasks(ctx, user) {
     for (const t of runnable) {
         const label = `${t.taskName || t.taskId}${t.awardNum ? `(+${t.awardNum}AI豆)` : ''}`;
         try {
-            const r = await finishOneTask(ctx, t);
+            const r = await finishOneTask(ctx, t, user);
             if (r.ok) {
                 done++; beans += r.num;
                 delete fails[t.taskId];
@@ -425,8 +502,9 @@ async function doMarkTasks(ctx, user) {
 
 // 单个任务：taskInfo → 到访目标页并停留 scanTime → (cToken?openFinish : 非浏览类 finishTask) → getTaskAward
 // 三种完成形态按抓包还原：浏览类(taskType=2)到访即完成；跳转类(taskType=5)回 cToken 走 openFinish；其余走 finishTask
+// finishTask 提示"特殊处理"时走 hlwyxhdhub 握手兜底（openHubHandshake）
 // 返回 { ok, num } 或 { ok:false, code, msg }，由调用方决定展示与黑名单计数
-async function finishOneTask(ctx, task) {
+async function finishOneTask(ctx, task, user) {
     const tid = String(task.taskId);
     const info = await Request({ url: `${TASK_API}/taskInfo`, method: 'post', headers: apiHeaders(ctx), body: { taskId: tid }, _timeout: 30000 });
     const d = (info && info.data) || {};
@@ -448,11 +526,36 @@ async function finishOneTask(ctx, task) {
         if (fin && fin.code !== 'SUCCESS' && /未达到/.test(fin.msg || '') && ju.startsWith('https://')) {
             fin = await Request({ url: `${TASK_API}/finishTask`, method: 'post', headers: Object.assign(apiHeaders(ctx), { referer: ju }), body: { taskId: tid, taskType }, _timeout: 30000 });
         }
+        // "特殊处理"兜底：服务端要求先在 hlwyxhdhub 完成 openFinish 握手，握手成功再回主站重试
+        if (fin && fin.code !== 'SUCCESS' && /特殊处理|openFinish/.test(fin.msg || '') && /taskToken=/i.test(ju)) {
+            if (await openHubHandshake(user, ju)) {
+                fin = await Request({ url: `${TASK_API}/finishTask`, method: 'post', headers: Object.assign(apiHeaders(ctx), { referer: ju }), body: { taskId: tid, taskType }, _timeout: 30000 });
+            }
+        }
     }
 
     const aw = await Request({ url: `${TASK_API}/getTaskAward`, method: 'post', headers: apiHeaders(ctx), body: { taskId: tid }, _timeout: 30000 });
     if (aw && aw.code === 'SUCCESS') return { ok: true, num: Number((aw.data || {}).awardNum) || 0 };
     return { ok: false, code: (aw && aw.code) || 'NO_RESP', msg: (aw && aw.msg) || '' };
+}
+
+// hlwyxhdhub 握手兜底（参考 yupaiLy/cmcc-auto-checkin 实测链路）：
+// 该 hub 换活动会话 → jumpUrl 里的 taskToken 作 jtToken 调 getOneTaskInfo 取 cToken → 停留 scanTime → openFinish
+// jwt 是账号级凭证，跨 hub 换票不消耗 App 票据，故直接复用 exchangeSession、只换入口页
+async function openHubHandshake(user, ju) {
+    const jt = (/taskToken=([^&]+)/i.exec(ju) || [])[1];
+    if (!jt) return false;
+    const octx = await exchangeSession(user, OPEN_TASK_ENTRY);
+    const info = await Request({ url: `${BASE}/hlwyxhdhub/api/open/_pub/task/getOneTaskInfo`, method: 'post', headers: apiHeaders(octx), body: { jtToken: jt }, _timeout: 30000 });
+    const d = (info && info.data) || {};
+    if (!d.cToken) {
+        $.log(`[握手] getOneTaskInfo 未回 cToken: ${info && info.code} ${info && info.msg || ''}`);
+        return false;
+    }
+    await $.wait((Number(d.scanTime || 0) + 1) * 1000);
+    const fin = await Request({ url: `${BASE}/hlwyxhdhub/api/open/_pub/task/openFinish`, method: 'post', headers: apiHeaders(octx), body: { cToken: d.cToken }, _timeout: 30000 });
+    $.log(`[握手] hlwyxhdhub openFinish: ${fin && fin.code} ${fin && fin.msg || ''}`);
+    return !!(fin && fin.code === 'SUCCESS');
 }
 
 // 小程序端签到（mark/do/mark）：与 App 端 mark31 是两套独立计数，各自一天一次
