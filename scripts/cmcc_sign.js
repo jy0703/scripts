@@ -41,7 +41,7 @@ hostname = wx.10086.cn
  */
 
 const $ = new Env('中国移动');
-$.is_debug = getEnv('is_debug') || 'false';  // 调试模式
+$.is_debug = getEnv('cmcc_debug', 'is_debug') || 'false';  // 调试模式(打印每次请求/响应含头，boxjs 开关 cmcc_debug)
 $.userInfo = getEnv('cmcc_data') || '';  // 获取账号
 $.userArr = $.toObj($.userInfo) || [];  // 用户信息
 $.Messages = [];
