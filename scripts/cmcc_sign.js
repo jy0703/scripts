@@ -1,10 +1,9 @@
 /**
  * 脚本名称：中国移动签到
- * 活动规则：中国移动「签到领流量/话费」活动(1021122301) 有两套互相独立的签到：App 端 mark31 与小程序端 mark/do/mark，各自一天一次；另有 AI豆任务(mark/task) 与秒杀抢券(markSeckill)
+ * 活动规则：中国移动「签到领流量/话费」活动(1021122301) 的 App 端 mark31 签到，每天一次；另有 AI豆任务(mark/task) 与秒杀抢券(markSeckill)
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。账号参数（App 票据/省市编码等）由本脚本 GetCookie 抓取后存入 cmcc_data
- * 环境变量：cmcc_data / cmcc_claim / cmcc_task / cmcc_seckill / cmcc_mini_wx / cmcc_task_skip_days；cmcc_task_fail 为脚本自动维护的任务黑名单
- * 依赖：小程序端签到要建微信渠道会话，需要 Code Server 的 @wxCode.address / @wxCode.ref / @wxCode.token（Node 下用 WX_CODE_ADDRESS/REF/TOKEN）
- * 更新时间：2026-10-06 小程序端改走微信渠道会话(小程序 applet 登录链)；AI豆任务逐条实时输出、连续失败任务自动拉黑；finishTask 提示"特殊处理"时增加 hlwyxhdhub openFinish 握手兜底
+ * 环境变量：cmcc_data / cmcc_claim / cmcc_task / cmcc_seckill / cmcc_task_skip_days；cmcc_task_fail 为脚本自动维护的任务黑名单
+ * 更新时间：2026-10-06 移除小程序端签到(微信渠道会话)代码；AI豆任务逐条实时输出、连续失败任务自动拉黑；finishTask 提示"特殊处理"时增加 hlwyxhdhub openFinish 握手兜底
 
 ------------------ Surge 配置 ------------------
 Surge 没有捕获开关参数，需要更新凭证时临时启用「获取Cookie」那条（或整个模块），抓完再关掉。
@@ -58,15 +57,6 @@ const SECKILL = getEnv('cmcc_seckill') === 'true';  // 签到有礼秒杀抢券(
 const TASK_API = API_MARK + '/task';
 // hlwyxhdhub 开放任务入口：finishTask 提示"特殊处理"时到该 hub 换会话做 openFinish 握手
 const OPEN_TASK_ENTRY = BASE + '/hlwyxhdhub/act-wedrecharge/index.html?pageId=1849008675699650560';
-// 小程序端(微信渠道)会话：do/mark 的当日奖品按会话渠道取不同池子，App 渠道会话调它拿不到小程序那份流量
-const MINI_WX = getEnv('cmcc_mini_wx') !== 'false';
-const MINI_UA = getEnv('cmcc_mini_ua') || 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.79(0x18004f26) NetType/WIFI Language/zh_CN';
-const WMH_API = 'https://wx.online-cmcc.cn/wmhnewcenter';
-const MINI_APPID = 'wx43aab19a93a3a6f2';   // 中国移动小程序 appid
-const MINI_REFERER = `https://servicewechat.com/${MINI_APPID}/531/page-frame.html`;
-const MINI_ASK_CONFIG = 'feeCard,callBalance,broadband,noReal,noPuk,fareLink,recommendCard,xmeFloatBar,showGrayUI,NBEJXHSN,commodityDisableProvince,txCooperateOffingPro,netAge,oneKeyLogin,miniSubscribePopu';
-const MINI_YX = 'JH202410181539';           // 活动页归因参数，照抓包原样带上，只影响归因
-const MINI_TOUCH_ID = '01-05-10005-2007-sy04';
 // 秒杀抢券参数 (照 py 默认值)
 const SK_API = API_MARK + '/markSeckill';
 const SK_INTERVAL = 350;      // 重试间隔(ms)
@@ -149,8 +139,8 @@ function GetCookie() {
     }
 }
 
-// 任务: 建会话 → App 端 + 小程序端双签到 → (可选)连签奖励/AI豆任务 → (可选)抢券
-// 当天两端签到都完成后(user.signDay)，再次执行本脚本只做抢券，不再跑签到/领奖/任务
+// 任务: 建会话 → App 端签到 → (可选)连签奖励/AI豆任务 → (可选)抢券
+// 当天签到完成后(user.signDay)，再次执行本脚本只做抢券，不再跑签到/领奖/任务
 // 结果边产生边 $.log（say），通知内容仍攒在 lines 里最后一起推送
 async function doSign(user) {
     const lines = [];
@@ -190,27 +180,9 @@ async function doSign(user) {
                 }
             }
 
-            // 小程序端签到成功/已签才算当天签到闭环，失败则下次执行重试
-            let miniOk = false;
-            try {
-                let miniCtx = ctx;
-                if (MINI_WX) {
-                    try {
-                        miniCtx = await openMiniCtx(user);
-                        $.log(`微信渠道会话就绪（channel=${miniCtx.channel} openid=${miniCtx.openid}，未消耗 App 票据）`);
-                    } catch (e) {
-                        $.log(`微信渠道会话失败: ${e.message || e}；回退 App 渠道会话调 do/mark`);
-                    }
-                }
-                say(await doMiniMark(miniCtx));
-                miniOk = true;
-            } catch (e) {
-                say(`小程序端 签到失败: ${e.message || e}`);
-            }
-            if (miniOk) {
-                user.signDay = today;
-                saveUsers();
-            }
+            // 签到成功/已签即算当天闭环，抢券与任务失败下次执行仍会重试
+            user.signDay = today;
+            saveUsers();
 
             if (CLAIM_AWARD && !signedToday) {
                 try {
@@ -325,78 +297,6 @@ async function exchangeSession(user, entryUrl) {
     }
 
     return { jar, ua, referer: data.url };
-}
-
-// 建微信渠道(小程序)会话，全程照小程序自身链路(2026-10-06 完整小程序包实测)：
-// ① code 服务取小程序 code → ② wechat86-applet/login 拿 applet 登录态(sessionId，即 X-CORE-APPLET-TOKEN)
-// → ③ wechat86-applet/wmhsso 拿 wmhToken(必须同时带 X-WECHAT86-APPLET-JWT，缺它只回鉴权错误)
-// → ④ 活动页带 wmhToken 直接落 QWHD_SESSION_TOKEN，渠道自检应为 wechat/wxmini
-async function openMiniCtx(user) {
-    const jar = {};
-    const code = await miniAppletCode();
-    const lg = await Request({ url: `${WMH_API}/wechat86-applet/login`, headers: miniHeaders(code), _timeout: 30000 });
-    const d = (lg && lg.data) || {};
-    const token = d.sessionId || '';
-    if (!token) throw new Error(`applet/login 未回登录态: ${lg && (lg.returnCode || lg.code)} ${lg && (lg.returnMessage || lg.msg)}`);
-    // 落一行微信身份日志：channelNonsupport 类失败时可确认 code 服务给的是哪条微信身份(应与验证过的 @wxCode.ref 一致)
-    $.log(`applet 身份: openid=${(d.appletUser && d.appletUser.openid) || d.openid || '-'} province=${d.provinceCode || '-'}`);
-
-    const sso = await Request({ url: `${WMH_API}/wechat86-applet/wmhsso?redirectSource=SSO_YQS`, method: 'post', headers: miniHeaders(token, d.provinceCode || user.provinceCode || ''), body: '', _timeout: 30000 });
-    const wmh = (sso && sso.bean && sso.bean.token) || '';
-    if (!wmh) throw new Error(`wmhsso 未回 wmhToken: ${sso && sso.returnCode} ${sso && sso.returnMessage}`);
-
-    const page = `${BASE}/qwhdhub/qwhdmark/${ACTIVITY_ID}?yx=${MINI_YX}&touch_id=${MINI_TOUCH_ID}&wmhToken=${encodeURIComponent(wmh)}`;
-    let act = await Request({ url: page, headers: baseHeaders(jar, MINI_UA), _respType: 'all', followRedirect: false, _timeout: 30000 });
-    takeCookies(jar, act && act.headers);
-    // wmhToken 可能经多跳 302 消化后才落会话令牌(首跳只回 qwhd_center_router 等普通 cookie)，手动逐跳跟随
-    for (let hop = 1; hop <= 3 && !hasSessionToken(jar); hop++) {
-        const hd = (act && act.headers) || {};
-        const loc = hd.location || hd.Location || '';
-        if (!loc || !/^3\d\d$/.test(String((act && act.statusCode) || ''))) break;
-        const next = /^https?:\/\//i.test(loc) ? loc : BASE + (loc.startsWith('/') ? loc : '/' + loc);
-        assertSafeUrl(next);
-        $.log(`活动页 ${act.statusCode} 未落令牌，跟随跳转(${hop}): ${next.slice(0, 140)}`);
-        act = await Request({ url: next, headers: Object.assign(baseHeaders(jar, MINI_UA), { referer: page }), _respType: 'all', followRedirect: false, _timeout: 30000 });
-        takeCookies(jar, act && act.headers);
-    }
-    if (!hasSessionToken(jar)) {
-        const hd = (act && act.headers) || {};
-        throw new Error(`活动页未落会话令牌: HTTP ${act && act.statusCode} cookies=[${Object.keys(jar).join(',')}] location=${String(hd.location || hd.Location || '-').slice(0, 140)}`);
-    }
-
-    const ctx = { jar, ua: MINI_UA, referer: page };
-    const info = await Request({ url: `${API_MARK}/user/info`, method: 'post', headers: apiHeaders(ctx), body: { appVersion: '', miniVersion: '' }, _timeout: 20000 });
-    ctx.channel = ((info || {}).data || {}).channel || '?';
-    ctx.openid = (((info || {}).data || {}).openid || '').slice(0, 6) + '…';
-    if (!/wechat|wxmini/.test(ctx.channel)) $.log(`渠道自检 channel=${ctx.channel}（预期 wechat/wxmini），仍继续`);
-    return ctx;
-}
-
-// 小程序侧请求头：未登录时带 X-WX-Code，登录后带 X-CORE-APPLET-TOKEN + X-WECHAT86-APPLET-JWT(同值)
-function miniHeaders(val, province) {
-    const h = { accept: '*/*', 'content-type': 'application/x-www-form-urlencoded', 'user-agent': MINI_UA, referer: MINI_REFERER };
-    if (province === undefined) return Object.assign(h, { 'x-wx-code': val });
-    h['x-core-applet-token'] = val;
-    h['x-wechat86-applet-jwt'] = val;
-    h['x-applet-ask-config'] = MINI_ASK_CONFIG;
-    h['x-emergency-new'] = 'yes';
-    h['x-emergency-province'] = province || '';
-    return h;
-}
-
-// 向 code 服务取一次性小程序 code（与 yxx_sign 同一台 YYB 服务、同一组 @wxCode.* 配置）
-async function miniAppletCode() {
-    const addr = (getEnv('WX_CODE_ADDRESS', '@wxCode.address') || '').replace(/\/+$/, '');
-    const ref = getEnv('WX_CODE_REF', '@wxCode.ref') || '';
-    const token = getEnv('WX_CODE_TOKEN', '@wxCode.token') || '';
-    if (!addr || !ref) throw new Error('未配置 code 服务(@wxCode.address / @wxCode.ref)');
-    const headers = { accept: '*/*', 'content-type': 'application/json' };
-    if (token) headers.Authorization = `Bearer ${token}`;
-    const resp = await Request({ url: `${addr}/wxapp/getCode`, method: 'post', headers, body: { ref, app_id: MINI_APPID }, _timeout: 60000 });
-    if (!resp || resp.code !== 0) throw new Error(`/wxapp/getCode 失败: ${resp && resp.code} ${resp && resp.msg}`);
-    const code = ((resp.data || {}).result || {}).code || '';
-    if (!code) throw new Error(`/wxapp/getCode 未返回 code: ${$.toStr(resp.data, '{}').slice(0, 160)}`);
-    return code;
 }
 
 async function queryMarkstatus(ctx) {
@@ -574,41 +474,9 @@ async function openHubHandshake(user, ju) {
     return !!(fin && fin.code === 'SUCCESS');
 }
 
-// 小程序端签到（mark/do/mark）：与 App 端 mark31 是两套独立计数，各自一天一次
-// 状态一律以 do/mark 的返回为准(TODAY_MARKED=今日已签)；prizeInfo 只用于展示本期天数，
-// 它对 App 渠道会话可能不返回数据，取不到就省略，不参与判定。
-async function doMiniMark(ctx) {
-    const result = await Request({ url: `${API_MARK}/do/mark`, method: 'post', headers: apiHeaders(ctx), body: {}, _timeout: 30000 });
-    if (!result) throw new Error('小程序端签到无响应');
-    const code = result.code, status = result.status || '', msg = result.msg || '';
-    $.log(`mark/do/mark 响应: code=${code} status=${status} msg=${msg}`);
-    if (code !== 'SUCCESS' && status !== 'TODAY_MARKED' && status !== 'HAVE_MARKED' && !/已签/.test(msg)) {
-        throw new Error(`小程序端签到失败: ${code} / ${status} / ${msg}`);
-    }
-    const prize = prizeText(result.data || {});
-    return markLine('小程序端', code === 'SUCCESS', await miniPeriod(ctx), prize);
-}
-
-// 两端签到结果统一格式: <端> <状态>（<天数>）[，获得: X][，备注]
+// 签到结果统一格式: <端> <状态>（<天数>）[，获得: X][，备注]
 function markLine(who, ok, days, prize, note) {
     return `${who} ${ok ? '签到成功' : '今日已签'}${days ? `（${days}）` : ''}${prize ? `，获得: ${prize}` : ''}${note ? `，${note}` : ''}`;
-}
-
-// 小程序端本期/本月已签天数：prizeInfo 的计数字段优先；
-// App 渠道会话下它回 null，回落到 markInfo 的本月签到记录条数
-async function miniPeriod(ctx) {
-    const resp = await Request({ url: `${API_MARK}/info/prizeInfo`, method: 'post', headers: apiHeaders(ctx), body: {}, _timeout: 30000 });
-    const d = (resp && resp.data) || {};
-    if (d.markedTimes != null && d.totalMarkTimes != null) return `本期 ${d.markedTimes}/${d.totalMarkTimes} 天`;
-
-    const rec = await Request({ url: `${API_MARK}/info/markInfo`, method: 'post', headers: apiHeaders(ctx), body: {}, _timeout: 30000 });
-    const list = rec && rec.data;
-    if (!Array.isArray(list)) {
-        $.log(`prizeInfo(markedTimes=${d.markedTimes}) 与 markInfo(code=${rec && rec.code}) 均未给出本期天数`);
-        return '';
-    }
-    const month = $.time('yyyyMM');
-    return `本月 ${list.filter(x => String(x.month) === month).length} 天`;
 }
 
 // 秒杀抢券: 校时 → 场次 → 资格(未签补签) → 等到开抢 → 循环 redeem
@@ -747,7 +615,7 @@ function fmtCn(ms) {
     return `${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}`;
 }
 
-// 奖品描述：两端统一口径，优先奖品名，没名称才用 面额+单位
+// 奖品描述：优先奖品名，没名称才用 面额+单位
 function prizeText(p) {
     if (!p) return '';
     return p.name || p.prizeName || (p.prizeValue ? `${p.prizeValue}${p.prizeCategory === 'FLOW' ? 'MB' : '元'}` : '');
