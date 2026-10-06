@@ -338,6 +338,8 @@ async function openMiniCtx(user) {
     const d = (lg && lg.data) || {};
     const token = d.sessionId || '';
     if (!token) throw new Error(`applet/login 未回登录态: ${lg && (lg.returnCode || lg.code)} ${lg && (lg.returnMessage || lg.msg)}`);
+    // 落一行微信身份日志：channelNonsupport 类失败时可确认 code 服务给的是哪条微信身份(应与验证过的 @wxCode.ref 一致)
+    $.log(`applet 身份: openid=${(d.appletUser && d.appletUser.openid) || d.openid || '-'} province=${d.provinceCode || '-'}`);
 
     const sso = await Request({ url: `${WMH_API}/wechat86-applet/wmhsso?redirectSource=SSO_YQS`, method: 'post', headers: miniHeaders(token, d.provinceCode || user.provinceCode || ''), body: '', _timeout: 30000 });
     const wmh = (sso && sso.bean && sso.bean.token) || '';
