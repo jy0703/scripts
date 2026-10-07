@@ -259,11 +259,11 @@ async function signBiliBili() {
 	}
 }
 
-//目前只循环三次，也可设置多次
+//auth_code 有效 180s, 轮询窗口为首轮 10s + 35 次 x 3s ≈ 115s, 需同机截图扫码时留足操作时间
 async function waitConfirmLoop(times, login_confirm, qrCode) {
-	if (times >= 3) return $.msg("- 扫码确认失败！")
-	if (login_confirm) return
-	await $.wait(5000)
+	if (times >= 35) return $.msg($.name + "扫码", "- 扫码确认超时！")
+	if (login_confirm === true || login_confirm === "stop") return
+	await $.wait(3000)
 	await waitConfirmLoop(++times, await loginConfirm(qrCode), qrCode)
 }
 
@@ -287,10 +287,11 @@ async function getQrcode() {
 			const body = $.toObj(response.body)
 			if (body.code === 0 && body.message === "OK") {
 				const auth_url = body.data.url || `https://passport.bilibili.com/x/passport-tv-login/h5/qrcode/auth?auth_code=${body.data.auth_code}&mobi_app=iphone`
+				const qr_img = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=10&data=${encodeURIComponent(auth_url)}`
 				// Loon 在 mediaUrl 图片下载失败时会丢弃整条通知, 故先发一条不含图片的文本通知
-				$.msg($.name + "扫码", "点击推送直达 B 站扫一扫", `请在 25 秒内完成扫码,地址同时复制到剪贴板\n${auth_url}`, { 'open-url': 'bilibili://qrcode', 'update-pasteboard': auth_url })
-				$.msg($.name + "扫码", "二维码", "长按推送放大二维码,点击推送在浏览器打开确认页", { 'open-url': auth_url, 'media-url': `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=10&data=${encodeURIComponent(auth_url)}` })
-				$.log("二维码已生成，如在通知中获取图片失败，请20s内使用浏览器打开以下地址\n" + `${auth_url}`)
+				$.msg($.name + "扫码", "点击推送直达 B 站扫一扫", `请在 115 秒内完成扫码,地址同时复制到剪贴板(网页版已登录可直接确认)\n${auth_url}`, { 'open-url': 'bilibili://qrcode', 'update-pasteboard': auth_url })
+				$.msg($.name + "扫码", "二维码", "长按推送放大二维码供其他设备扫,点击推送打开图片可存相册后用扫一扫识别", { 'open-url': qr_img, 'media-url': qr_img })
+				$.log("二维码已生成，如在通知中获取图片失败，请在 115 秒内使用浏览器打开以下地址\n" + `${auth_url}`)
 				return body.data.auth_code
 			} else {
 				$.log("- 生成Qrcode失败")
@@ -328,19 +329,19 @@ async function loginConfirm(auth_code) {
 			}
 			switch (body.code) {
 				case 0:
-					$.msg("- 扫码确认成功！")
 					return true
 				case 86038:
-					$.msg("- 二维码已失效")
-					return false
+					$.msg($.name + "扫码", "- 二维码已失效,请重新开启扫码开关")
+					return "stop"
 				case 86039:
-					$.msg("- 二维码尚未确认")
+					$.log("- 二维码尚未确认")
 					return false
 				case 86090:
-					$.msg("- 二维码已扫码未确认")
+					$.log("- 二维码已扫码未确认")
 					return false
 				default:
-					return false
+					$.msg($.name + "扫码", `- 轮询异常 code=${body.code} ${body.message}`)
+					return "stop"
 			}
 		} catch (e) {
 			$.logErr(e, response)
