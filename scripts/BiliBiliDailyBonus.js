@@ -288,8 +288,8 @@ async function getQrcode() {
 			if (body.code === 0 && body.message === "OK") {
 				const auth_url = body.data.url || `https://passport.bilibili.com/x/passport-tv-login/h5/qrcode/auth?auth_code=${body.data.auth_code}&mobi_app=iphone`
 				// Loon 在 mediaUrl 图片下载失败时会丢弃整条通知, 故先发一条不含图片的文本通知
-				$.msg($.name + "扫码", "使用客户端扫描二维码", `请20s内完成扫码,点击推送可打开网页并复制地址\n${auth_url}`, { 'open-url': auth_url, 'update-pasteboard': auth_url })
-				$.msg($.name + "扫码", "二维码", "长按推送放大二维码或点击推送跳转网页", { 'open-url': auth_url, 'media-url': `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=10&data=${encodeURIComponent(auth_url)}` })
+				$.msg($.name + "扫码", "点击推送直达 B 站扫一扫", `请在 25 秒内完成扫码,地址同时复制到剪贴板\n${auth_url}`, { 'open-url': 'bilibili://qrcode', 'update-pasteboard': auth_url })
+				$.msg($.name + "扫码", "二维码", "长按推送放大二维码,点击推送在浏览器打开确认页", { 'open-url': auth_url, 'media-url': `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=10&data=${encodeURIComponent(auth_url)}` })
 				$.log("二维码已生成，如在通知中获取图片失败，请20s内使用浏览器打开以下地址\n" + `${auth_url}`)
 				return body.data.auth_code
 			} else {
