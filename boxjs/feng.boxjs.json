@@ -579,8 +579,10 @@
       "descs_html": [
         "永旺小程序每日签到领积分（活动期 10-01~12-31，每日 2 积分，连续签到另有阶段奖励），并查询会员卡等级/积分与本月到期积分",
         "依赖「Code Server」分组中「获取小程序code」配置项（@wxCode.address / @wxCode.token），账号 ref 填在本区域 aeon_ref，支持多账号（一个 ref 一个微信身份）",
-        "登录链路：微信 code → silentWechatMiniLogin 静默登录换 x-http-token（签到接口只需这一个静态头，无签名/无 ticket/无 cookie），storeCode 随登录响应一并缓存，代表该账号所属商场",
+        "登录链路：微信 code → silentWechatMiniLogin 静默登录换 x-http-token（签到接口只需这一个静态头，无签名/无 ticket/无 cookie），storeCode 随登录响应缓存，即该微信绑定的商场",
+        "签到活动按商场配置：aeon_store 填了商场编码就对所有账号强制生效（统一在一家商场签到），留空则各账号用登录响应里自己绑定的商场；填了之后某账号仍报「未配置签到活动」说明该商场没上架签到活动",
         "token 缓存 aeon_cache 约 28 天（按接口 tokenExpire 计算），失效时脚本会自动重新取 code 登录并重跑任务，无需手动干预；无法用旧 token 续签，续期必须要新的微信 code",
+        "同一会员同时只有一个有效 token：手机上打开永旺小程序会顶掉脚本缓存的 token，脚本下次运行会自动重新登录，属正常现象",
         "重要：silentWechatMiniLogin 按 code 里的微信身份静默登录，ref 对应的微信必须已绑定永旺会员，否则会静默注册出一个新会员（表现为积分/等级为 0）",
         "排查提示：接口回 102050010 即授权失效；通知里出现「重新登录后仍提示未登录」时，检查该微信在永旺的会员状态"
       ],
@@ -616,13 +618,13 @@
         },
         {
           "id": "aeon_store",
-          "name": "兜底商场编码",
+          "name": "指定商场编码",
           "val": "",
           "type": "textarea",
           "autoGrow": true,
           "rows": 1,
           "placeholder": "MYDSC02024",
-          "desc": "可选，仅当登录响应缺 storeCode 时使用"
+          "desc": "可选：填写后对所有账号强制生效（统一在该商场签到）；留空则各账号使用登录响应返回的绑定商场"
         }
       ]
     }

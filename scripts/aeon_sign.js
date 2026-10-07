@@ -11,7 +11,9 @@
  *          账号 ref 配在本脚本的 boxjs 区域 aeon_ref 中, 多个以英文逗号隔开
  *          Node 环境变量同名可用: WX_CODE_ADDRESS / WX_CODE_TOKEN / AEON_REF
  *          注意: 登录是按 code 里的微信身份静默进行的, ref 对应的微信必须已绑定永旺会员, 否则会静默注册出一个新会员
- * 环境变量：aeon_ref（账号 ref）、aeon_cache（脚本自动维护）、aeon_store（可选, 登录响应缺 storeCode 时的兜底商场编码）
+ * 环境变量：aeon_ref（账号 ref）、aeon_cache（脚本自动维护）、
+ *          aeon_store（可选, 商场编码；填了就对所有账号强制生效, 留空则各账号用登录响应返回的绑定商场）
+ *          注: 同一会员同时只有一个有效 token, 手机上打开小程序会顶掉脚本缓存的 token, 脚本会自动重新登录
  * 更新时间：2026-10-07
 
 ------------------ Surge 配置 ------------------
@@ -172,9 +174,11 @@ async function runTasks(account) {
     $.account = account;
     $.mobile = account.mobile;
     $.nickname = account.nickname;
-    $.storeCode = account.storeCode || getEnv('AEON_STORE', 'aeon_store') || '';
 
-    if (!$.storeCode) return fail('❌ 登录响应缺少 storeCode，请配置 aeon_store 兜底');
+    const store = resolveStoreCode(account);
+    $.storeCode = store.code;
+    if (!$.storeCode) return fail('❌ 登录响应缺少 storeCode，请在 aeon_store 指定商场编码');
+    $.log(`🏬 商场: ${$.storeCode}（${store.from}）`);
 
     const act = await getSignInByStore();
     if ($.expired) return;
@@ -183,6 +187,13 @@ async function runTasks(account) {
 
     await getMySignInDate();
     await queryMembers();
+}
+
+// 商场编码: aeon_store 非空时对所有账号强制生效, 否则用登录响应返回的绑定商场
+function resolveStoreCode(account) {
+    const forced = (getEnv('AEON_STORE', 'aeon_store') || '').trim();
+    if (forced) return { code: forced, from: 'aeon_store 强制' };
+    return { code: account.storeCode || '', from: '登录响应' };
 }
 
 // 活动信息
@@ -196,7 +207,7 @@ async function getSignInByStore() {
     if (result?.code === TOKEN_INVALID) return tokenExpired();
     const data = result?.data;
     if (!data?.id) {
-        $.log(`❌ 未获取到签到活动: ${$.toStr(result)}`);
+        fail(`❌ 商场 ${$.storeCode} 未配置签到活动，若手机端是在别的商场签到，请把该商场编码填入 aeon_store`);
         return null;
     }
 
