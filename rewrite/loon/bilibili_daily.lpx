@@ -1,0 +1,22 @@
+#!name = BiliBili每日等级任务
+#!desc = B站每日经验/投币等任务，支持 APP 请求头与扫码两种方式获取 Cookie（fork 自 ClydeTime/BiliBili，修复 Loon 扫码通知被丢弃）
+#!author = Fengzzzz
+#!homepage = https://github.com/ClydeTime/BiliBili
+#!icon = https://raw.githubusercontent.com/ClydeTime/BiliBili/main/database/icon_Avatar.png
+#!tag = 签到,自动化
+#!type = normal
+
+[Argument]
+qrCookie = switch,false,tag=扫码 Cookie,desc=开启后冷启动 B 站 APP 会推送二维码，扫码成功后请关闭；与「APPCookie」互斥，不可同开
+appCookie = switch,false,tag=APPCookie,desc=常驻抓取 APP 请求头里的 Cookie，检测到变更自动更新；使用扫码方式时请关闭
+cronExpression = input,"30 7 * * *",tag=定时参数,desc=这里需要输入符合 CRON 表达式的参数
+bigPoint = switch,false,tag=观看剧集大积分,desc=大会员可选，每天 7:41 执行
+
+[Script]
+cron {cronExpression} script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/BiliBiliDailyBonus.js,timeout=600,tag=B站每日等级任务,enable=true
+cron "41 7 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/BiliBiliDailyBonus.js,timeout=600,tag=B站观看剧集大积分,enable={bigPoint}
+http-response ^https?:\/\/app\.bilibili\.com\/x\/resource\/fingerprint\? script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/BiliBiliDailyBonus.js,timeout=60,tag=B站Cookie(扫码),enable={qrCookie}
+http-request ^https?:\/\/app\.bilibili\.com\/x\/resource\/fingerprint\? script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/BiliBiliDailyBonus.js,timeout=30,tag=B站Cookie(APP),enable={appCookie}
+
+[Mitm]
+hostname = app.bilibili.com
