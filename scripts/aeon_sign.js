@@ -1,189 +1,151 @@
 /**
- * 脚本名称：途虎养车签到
- * 活动规则：途虎养车小程序每日签到领积分
+ * 脚本名称：永旺签到
+ * 活动规则：永旺小程序每日签到得积分（活动期内每天 1 次，连续签到另有阶段奖励），并查询会员卡等级/积分与本月到期积分
  * 脚本说明：通过 code 服务(YYB Go)获取微信 code，
- *          login/authSilentSign 用 code 换 userSession → getSignInInfo 查签到状态与积分 → dailyCheckIn/userCheckIn 提交签到，
- *          userSession 本地缓存自动复用/失效刷新。支持 Node.js / Quantumult X / Loon / Surge / Stash。
+ *          silentWechatMiniLogin 用 code 静默登录换 x-http-token（有效期约 28 天，按接口 tokenExpire 缓存复用），
+ *          token 失效自动重新取 code 登录并重跑任务。支持 Node.js / Quantumult X / Loon / Surge / Stash。
  * 配置说明：boxjs 订阅「Code Server」分组中填写「获取小程序code」配置项(@wxCode.*):
  *          - @wxCode.open    开启code模式(true)
  *          - @wxCode.address 服务器地址, 如 http://192.168.2.5:8000
  *          - @wxCode.token   接口鉴权 token (请求头 Authorization: Bearer <token>)
- *          账号 ref 配在本脚本的 boxjs 区域 THYC_REF 中, 多个以英文逗号隔开
- *          Node 环境变量同名可用: WX_CODE_ADDRESS / WX_CODE_TOKEN / THYC_REF
- * 更新时间：2026-10-04
+ *          账号 ref 配在本脚本的 boxjs 区域 aeon_ref 中, 多个以英文逗号隔开
+ *          Node 环境变量同名可用: WX_CODE_ADDRESS / WX_CODE_TOKEN / AEON_REF
+ *          注意: 登录是按 code 里的微信身份静默进行的, ref 对应的微信必须已绑定永旺会员, 否则会静默注册出一个新会员
+ * 环境变量：aeon_ref（账号 ref）、aeon_cache（脚本自动维护）、aeon_store（可选, 登录响应缺 storeCode 时的兜底商场编码）
+ * 更新时间：2026-10-07
 
 ------------------ Surge 配置 ------------------
 
 [Script]
-途虎养车签到 = type=cron,cronexp="24 8 * * *",script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/thyc_sign.js,wake-system=1
+永旺签到 = type=cron,cronexp="10 8 * * *",wake-system=1,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aeon_sign.js,script-update-interval=0
 
 ------------------- Loon 配置 -------------------
 
 [Script]
-cron "24 8 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/thyc_sign.js, timeout=600, tag=途虎养车签到
+cron "10 8 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aeon_sign.js,timeout=600,tag=永旺签到,enable=true
 
 --------------- Quantumult X 配置 ---------------
 
 [task_local]
-"24 8 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/thyc_sign.js, tag=途虎养车签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/thyc.png, enabled=true
+10 8 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aeon_sign.js, tag=永旺签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/aeon.png, enabled=true
 
  */
 
-const $ = new Env('途虎养车');
+const $ = new Env('永旺签到');
 $.is_debug = getEnv('is_debug') || 'false';  // 调试模式
 $.Messages = [];
 
-// ---- 业务常量 ----
-const APPID = 'wx27d20205249c56a3';
-const BASE_URL = 'https://cl-gateway.tuhu.cn';
-const LOGIN_URL = `${BASE_URL}/cl-user-auth-login/login/authSilentSign`;
-const SIGN_INFO_URL = `${BASE_URL}/cl-common-api/api/member/getSignInInfo`;
-const SIGN_SUBMIT_URL = `${BASE_URL}/cl-common-api/api/dailyCheckIn/userCheckIn`;
-const CACHE_KEY = 'THYC_SESSION_CACHE';  // 缓存: {ref:{token,nickName,label,expireTime,updateTime}}
-
-const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36 MicroMessenger/7.0.20.1781(0x6700143B) NetType/WIFI MiniProgramEnv/Windows WindowsWechat/WMPF WindowsWechat(0x63090a13) UnifiedPCWindowsWechat(0xf2541938) XWEB/19823';
-const REFERER = `https://servicewechat.com/${APPID}/1319/page-frame.html`;
-
+// ---- 业务常量 (照抓包搬运) ----
+const APPID = 'wx55996449c48dd8c7';                       // 永旺小程序
+const LOGIN_URL = 'https://api.aeonbuy.com/api/access-auth-api/auth/third/silentWechatMiniLogin';
+const MAPI = 'https://mapi.aeonbuy.com';                  // 商城接口
+const H5 = 'https://m.aeonbuy.com';                       // 会员卡接口
+const CARD_APP_ID = 'wxbb1ffcc3c65f030f';                 // 会员卡 appId
+const CACHE_KEY = 'aeon_cache';   // 缓存键: 存 {ref:{token,storeCode,mobile,nickname,label,expireTime,updateTime}}
+const TOKEN_INVALID = 102050010;  // 授权已失效
 
 // 主函数
 async function main() {
     $.codeServer = (getEnv('WX_CODE_ADDRESS', '@wxCode.address') || '').replace(/\/+$/, '');
-    $.refStr = getEnv('THYC_REF') || '';
     $.yybToken = getEnv('WX_CODE_TOKEN', '@wxCode.token') || '';
 
     const openRaw = getEnv('WX_CODE_OPEN', '@wxCode.open');
-    const refs = $.refStr.split(/[,，\s\n]+/).filter(Boolean);
+    const refs = (getEnv('aeon_ref') || '').split(/[,，\s\n]+/).filter(Boolean);
 
-    if (openRaw && String(openRaw).toLowerCase() === 'false') {
-        throw new Error('boxjs 中「开启code模式」未开启 ❌');
-    }
-    if (!refs.length) {
-        throw new Error('未配置账号：请在 boxjs「途虎养车签到」填写 THYC_REF ❌');
-    }
-    if (!$.codeServer) {
-        throw new Error('未配置 code 服务地址 @wxCode.address ❌');
-    }
+    if (openRaw && String(openRaw).toLowerCase() === 'false') throw new Error('boxjs 中「开启code模式」未开启 ❌');
+    if (!refs.length) throw new Error('未配置账号：请在 boxjs「永旺签到」填写 aeon_ref ❌');
+    if (!$.codeServer) throw new Error('未配置 code 服务地址 @wxCode.address ❌');
 
     for (let i = 0; i < refs.length; i++) {
         $.log(`\n----- 账号 [${i + 1}/${refs.length}] ref=${refs[i]} 开始执行 -----\n`);
         $.messages = [];
+        $.notify = false;
+        $.refLabel = '';
         await runAccount(refs[i]);
-        $.messages.splice(0, 0, `🚗 账号 ${i + 1} [${$.refLabel || refs[i]}]`);
-        $.Messages = $.Messages.concat($.messages);
+
+        // 有实际动作的账号才写进通知
+        if ($.notify) {
+            $.messages.unshift(`🔹 永旺 ${$.refLabel || $.nickname || hideSensitiveData($.mobile, 3, 4)} [${$.storeCode}]`);
+            $.Messages = $.Messages.concat($.messages);
+        }
         if (i < refs.length - 1) await $.wait(2000);
     }
+
+    if ($.Messages.length && refs.length > 1) $.Messages.unshift(`📊 共 ${refs.length} 个账号，本次签到成功 ${$.okCount || 0} 个\n`);
 }
 
-// 单账号: 登录 + 签到
+// 单账号: 取 token(缓存优先) + 任务, token 失效则重新登录后重跑一次
 async function runAccount(ref) {
     await $.wait(1000 * (2 + Math.floor(Math.random() * 5)));  // 启动随机延迟
 
     let account = await loginWithCache(ref);
     if (!account) return;
 
-    let info = account.info || await getSignInInfo(account.token);
+    $.expired = false;
+    await runTasks(account);
 
-    // 缓存的 userSession 判活通过后仍可能失效, 强制重登一次
-    if (!isRespOk(info) && account.cached) {
-        $.log('🔁 [刷新] 缓存 userSession 已失效, 重新登录');
-        clearCache(ref);
-        account = await loginWithCache(ref);
+    if ($.expired) {
+        $.log(`⚠️ [登录] token 已失效, 重新取 code 登录`);
+        account = await loginFlow(ref);
         if (!account) return;
-        info = account.info || await getSignInInfo(account.token);
-    }
-
-    if (!isRespOk(info)) {
-        $.messages.push(`📊 签到状态: ❌ ${errMsg(info)}`);
-        return;
-    }
-
-    const before = toInt(info.data.userIntegral);
-    if ($.nickName) $.messages.push(`👤 昵称: ${$.nickName}`);
-
-    if (info.data.signInStatus) {
-        $.messages.push(`📝 签到: 今日已签到`);
-        $.messages.push(`💰 当前积分: ${before}`);
-        return;
-    }
-
-    $.log('📝 [签到] 未签到, 开始签到...');
-    const submit = await Request({ url: SIGN_SUBMIT_URL, headers: commonHeaders(account.token), body: { channel: 'WXAPP' }, _timeout: 30000 });
-
-    if (!isRespOk(submit)) {
-        const m = errMsg(submit);
-        if (!/已签到|重复/.test(m)) {
-            $.messages.push(`📝 签到: ❌ ${m}`);
-            return;
-        }
-        $.messages.push(`📝 签到: 今日已签到`);
-        $.messages.push(`💰 当前积分: ${before}`);
-        return;
-    }
-
-    const reward = toInt(submit.data.rewardIntegral);
-    const days = toInt(submit.data.continuousDays);
-    $.messages.push(`📝 签到: ✅ 签到成功 +${reward}积分，连续签到${days}天`);
-
-    await $.wait(1000 + Math.floor(Math.random() * 2000));
-    const after = await getSignInInfo(account.token);
-    if (isRespOk(after)) {
-        const afterPoint = toInt(after.data.userIntegral);
-        const earned = reward || Math.max(afterPoint - before, 0);
-        $.messages.push(`💰 积分: ${before} → ${afterPoint} (+${earned})`);
-    } else {
-        $.messages.push(`💰 积分: ${before} (+${reward})`);
+        $.expired = false;
+        await runTasks(account);
+        if ($.expired) fail(`❌ 重新登录后仍提示未登录，请确认该 ref 的微信已绑定永旺会员`);
     }
 }
 
-// 查询签到状态与积分
-async function getSignInInfo(token) {
-    return await Request({ url: SIGN_INFO_URL, headers: commonHeaders(token), body: { channel: 'WXAPP' }, _timeout: 30000 });
-}
-
-// 优先缓存 userSession(以签到状态查询验活), 失效则 code 登录
+// 优先复用缓存 token（按 tokenExpire 判定），否则走 code 登录
 async function loginWithCache(ref) {
     const cache = $.getjson(CACHE_KEY, {}) || {};
     const item = cache[ref];
-    if (item?.token && item?.expireTime && Date.now() < item.expireTime - 3600 * 1000) {
-        const info = await getSignInInfo(item.token);
-        if (isRespOk(info)) {
-            $.refLabel = item.label || '';
-            $.nickName = item.nickName || '';
-            $.log('✅ [缓存] userSession 有效');
-            return { token: item.token, nickName: $.nickName, cached: true, info };
-        }
-        $.log('⚠️ [缓存] userSession 已失效, 重新登录');
+    if (item?.token && item?.expireTime && item.expireTime > Date.now() + 24 * 3600 * 1000) {
+        $.refLabel = item.label || '';
+        $.log(`✅ [缓存] 复用 token，剩余 ${Math.floor((item.expireTime - Date.now()) / 86400 / 1000)} 天`);
+        return item;
     }
-
-    const account = await loginFlow(ref);
-    if (!account) return null;
-
-    cache[ref] = { ...account, label: $.refLabel || '', expireTime: Date.now() + 24 * 3600 * 1000, updateTime: new Date().toISOString() };
-    $.setdata($.toStr(cache), CACHE_KEY);
-    return { ...account, cached: false };
+    return await loginFlow(ref);
 }
 
-// 使缓存失效
-function clearCache(ref) {
-    const cache = $.getjson(CACHE_KEY, {}) || {};
-    delete cache[ref];
-    $.setdata($.toStr(cache), CACHE_KEY);
-}
-
-// code → userSession
+// code → silentWechatMiniLogin → token + 会员信息
 async function loginFlow(ref) {
     const code = await getWxCode(ref);
     if (!code) return null;
 
-    const resp = await Request({ url: LOGIN_URL, headers: commonHeaders(), body: { channel: 'WXAPP', code }, _timeout: 30000 });
-    const token = resp?.data?.userSession || '';
-    if (!isRespOk(resp) || !token) {
-        $.messages.push(`❌ 登录: 未获取到 userSession ${$.toStr(resp)}`);
+    const result = await Request({
+        url: LOGIN_URL,
+        headers: {
+            'content-type': 'application/json',
+            'x-http-channel': 'mp',
+            'x-http-devicetype': 'iphone',
+            'x-http-version': '2.3.71'
+        },
+        body: { wxCode: code }
+    });
+
+    const data = result?.data;
+    if (result?.code !== 200 || !data?.token || !data?.mobile) {
+        fail(`❌ 登录: 换取 token 失败 ${$.toStr(result)}`);
         return null;
     }
-    $.nickName = resp.data.nickName || '微信用户';
-    $.log(`✅ [登录] ${$.nickName} userSession: ${mask(token)}`);
-    return { token, nickName: $.nickName };
+
+    const account = {
+        mobile: data.mobile,
+        token: data.token,
+        memberId: data.memberId,
+        nickname: data.nickname,
+        storeCode: data.storeCode,
+        corporationCode: data.corporationCode,
+        expireTime: data.tokenExpire ? data.tokenExpire * 1000 : Date.now() + 28 * 86400 * 1000,
+        label: $.refLabel || '',
+        updateTime: new Date().toISOString()
+    };
+
+    const cache = $.getjson(CACHE_KEY, {}) || {};
+    cache[ref] = account;
+    $.setdata($.toStr(cache), CACHE_KEY);
+
+    $.log(`✅ [登录] token 获取成功，有效期至 ${new Date(account.expireTime).toLocaleDateString('zh-CN')}`);
+    return account;
 }
 
 // 调用 code 服务(YYB Go)获取微信 code; data.account 备注存入 $.refLabel
@@ -191,13 +153,13 @@ async function getWxCode(ref) {
     const options = {
         url: `${$.codeServer}/wxapp/getCode`,
         headers: { 'Content-Type': 'application/json' },
-        body: { ref, app_id: APPID },
-        _timeout: 30000
+        body: { ref, app_id: APPID }
     };
     if ($.yybToken) options.headers['Authorization'] = `Bearer ${$.yybToken}`;
+
     const resp = await Request(options);
     if (!resp || resp.code !== 0 || !resp?.data?.result?.code) {
-        $.messages.push(`❌ 授权: code 获取失败 ${$.toStr(resp)}`);
+        fail(`❌ 授权: code 获取失败 ${$.toStr(resp)}`);
         return null;
     }
     $.refLabel = resp.data.account?.remark || resp.data.account?.nickname || resp.data.account?.alias || $.refLabel || '';
@@ -205,63 +167,145 @@ async function getWxCode(ref) {
     return String(resp.data.result.code);
 }
 
-// ---------- 途虎业务请求头 ----------
+// 任务: 活动 → 签到 → 本月记录 → 会员卡
+async function runTasks(account) {
+    $.account = account;
+    $.mobile = account.mobile;
+    $.nickname = account.nickname;
+    $.storeCode = account.storeCode || getEnv('AEON_STORE', 'aeon_store') || '';
 
-function commonHeaders(userSession) {
-    const h = {
-        'Host': 'cl-gateway.tuhu.cn',
-        'Connection': 'keep-alive',
+    if (!$.storeCode) return fail('❌ 登录响应缺少 storeCode，请配置 aeon_store 兜底');
+
+    const act = await getSignInByStore();
+    if ($.expired) return;
+    if (act) await doSign(act);
+    if ($.expired) return;
+
+    await getMySignInDate();
+    await queryMembers();
+}
+
+// 活动信息
+async function getSignInByStore() {
+    const result = await Request({
+        url: `${MAPI}/api/app-api/marketing/signin/getSignInByStore`,
+        headers: headers(),
+        body: { storeCode: $.storeCode }
+    });
+
+    if (result?.code === TOKEN_INVALID) return tokenExpired();
+    const data = result?.data;
+    if (!data?.id) {
+        $.log(`❌ 未获取到签到活动: ${$.toStr(result)}`);
+        return null;
+    }
+
+    const today = beijingDate();
+    if (today < data.startTime.slice(0, 10) || today > data.endTime.slice(0, 10)) {
+        $.log(`⏸️ 活动 [${data.name}] 不在进行期 (${data.startTime} ~ ${data.endTime})`);
+        return null;
+    }
+    $.log(`✅ 活动: ${data.name}，每日 ${data.daySignAward?.pointCount || '?'} 积分`);
+    return data;
+}
+
+// 每日签到
+async function doSign(act) {
+    const result = await Request({
+        url: `${MAPI}/api/app-api/marketing/signin/signIng`,
+        headers: headers(),
+        body: { storeCode: $.storeCode }
+    });
+
+    if (result?.code === TOKEN_INVALID) return tokenExpired();
+
+    if (result?.code === 200 && result?.data?.successFlag) {
+        $.okCount = ($.okCount || 0) + 1;
+        success(`✅ 签到成功: +${result.data.daySignAward?.pointCount ?? act.daySignAward?.pointCount ?? '?'} 积分，连续 ${result.data.consecDay} 天`);
+    } else if (result?.code === 0 && /已签/.test(result?.message || '')) {
+        $.log(`⏸️ ${result.message}`);
+    } else {
+        fail(`❌ 签到失败: ${$.toStr(result)}`);
+    }
+}
+
+// 本月签到记录
+async function getMySignInDate() {
+    const today = beijingDate();
+    const result = await Request({
+        url: `${MAPI}/api/app-api/marketing/signin/getMySignInDate`,
+        headers: headers(),
+        body: { startTime: `${today.slice(0, 7)}-01`, endTime: today, storeCode: $.storeCode }
+    });
+
+    if (result?.code === TOKEN_INVALID) return tokenExpired();
+    const list = result?.data?.signInDayList || [];
+    const msg = `🌀 本月已签到 ${list.length} 天，连续 ${result?.data?.conSecDay ?? 0} 天`;
+    $.log(msg), $.notify && $.messages.push(msg);
+}
+
+// 查询会员卡
+async function queryMembers() {
+    const result = await Request({
+        url: `${H5}/api/app-api/card/main/corporation/detail`,
+        headers: { ...headers(), 'x-http-card-channel': '3' },
+        body: { appId: CARD_APP_ID, corporationCode: '' }
+    });
+
+    if (result?.code === TOKEN_INVALID) return tokenExpired();
+    if (!result?.data) return $.log(`❌ 查询会员失败: ${$.toStr(result)}`);
+
+    const { levelName, totalPoint, totalPointOrAmount, invaildPointList } = result.data;
+    let msg = `🌀 等级: ${levelName}，积分: ${totalPoint}，消费: ${totalPointOrAmount} 元`;
+    const month = beijingDate().slice(0, 7);
+    const invaild = (invaildPointList || []).filter(e => String(e.invaildDate || '').includes(month));
+    if (invaild.length) msg += `，本月到期积分: ${invaild.map(e => e.totalPointStr).join('/')}`;
+    $.log(msg), $.notify && $.messages.push(msg);
+}
+
+// token 失效: 交给 runAccount 触发重新登录
+function tokenExpired() {
+    if ($.expired) return null;
+    $.expired = true;
+    $.log(`⚠️ 接口回 ${TOKEN_INVALID}，当前 token 已失效`);
+    return null;
+}
+
+// 进通知的行
+function success(msg) { $.notify = true; $.log(msg), $.messages.push(msg); }
+function fail(msg) { $.notify = true; $.log(msg), $.messages.push(msg); }
+
+// 请求头 (基于抓包, 剔除 Host/Content-Length 等转发头)
+function headers() {
+    return {
         'Content-Type': 'application/json',
-        'Accept': '*/*',
-        'Accept-Language': 'zh-CN,zh;q=0.9',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'User-Agent': USER_AGENT,
-        'Referer': REFERER,
-        'xweb_xhr': '1',
-        'channel': 'wechat-miniprogram',
-        'authType': 'oauth',
-        'api_level': '2',
-        'vehicleClass': 'CAR',
-        'version': '7.62.8',
-        'currentPage': 'memberMallPackage/pages/pointCenter/pointCenter',
-        'distinct_id': '6a68cbca-ce9a-4b0e-8092-cc5a85cf9a85',
-        'deviceId': `${Date.now()}-${randomInt(1000000, 9999999)}-0f6cb850fc64da-24853921`,
-        'fingerprint': `sMPVY${Math.floor(Date.now() / 1000)}QPV2wLVhl8f`,
-        'orion_biz_gps_latitude': '22.787150540279182',
-        'orion_biz_gps_longitude': '108.27980328217664',
-        'orion_biz_gps_province': '%E5%B9%BF%E8%A5%BF%E5%A3%AE%E6%97%8F%E8%87%AA%E6%B2%BB%E5%8C%BA',
-        'orion_biz_gps_city': '%E5%8D%97%E5%AE%81%E5%B8%82',
-        'Sec-Fetch-Site': 'cross-site',
-        'Sec-Fetch-Mode': 'cors',
-        'Sec-Fetch-Dest': 'empty'
+        'Accept': 'application/json',
+        'Origin': H5,
+        'Referer': `${H5}/`,
+        'x-http-channel': 'mp',
+        'x-http-token': $.account.token,
+        'x-http-locale': 'zh-CN',
+        'x-http-osversion': 'IOS 18.2',
+        'x-http-version': '2.3.71',
+        'x-http-browser': 'wechat',
+        'x-http-devicetype': 'wechat',
+        'x-http-network': 'wifi'
     };
-    if (userSession) h['Authorization'] = `Bearer ${userSession}`;
-    return h;
+}
+
+// 北京时间 YYYY-MM-DD (活动起止日期按此格式比较)
+function beijingDate() {
+    const d = new Date(Date.now() + 8 * 3600 * 1000);
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+}
+
+// 手机号脱敏
+function hideSensitiveData(str = '', before = 3, after = 4) {
+    const s = String(str);
+    return s.length <= before + after ? s : `${s.slice(0, before)}${'*'.repeat(s.length - before - after)}${s.slice(-after)}`;
 }
 
 // ---------- 工具函数 ----------
-
-function isRespOk(resp) {
-    return [10000, '10000'].includes(resp?.code);
-}
-
-function errMsg(resp) {
-    return String(resp?.message || resp?.msg || $.toStr(resp) || '请求失败');
-}
-
-function toInt(value) {
-    const n = Number(value || 0);
-    return Number.isFinite(n) ? Math.trunc(n) : 0;
-}
-
-function randomInt(min, max) {
-    return min + Math.floor(Math.random() * (max - min + 1));
-}
-
-function mask(value) {
-    const s = String(value || '');
-    return s.length <= 12 ? s : `${s.slice(0, 6)}...${s.slice(-6)}`;
-}
 
 function getEnv(...keys) {
     for (let key of keys) {

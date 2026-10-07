@@ -69,16 +69,27 @@
       "descs_html": [
         "WPS任务中心(签到+任务+抽奖)、天天领福利、WPS挑战计划、WPS超级会员小程序(签到+领昨日奖励+浏览任务+抽奖)，支持多账号，签到加密已本地化不依赖第三方",
         "Cookie抓取：开启插件捕获开关后从 WPS 会员中心横幅进入签到活动页即可抓取，Cookie 含 uid 即可入库",
-        "小程序浏览任务依赖「获取小程序code」配置项(@wxCode.address/ref/token)，多个 ref 按账号顺序对应；也可在 WPS_COOKIE 条目中加 ref 字段单独指定"
+        "小程序浏览任务依赖「获取小程序code」配置项(@wxCode.address/token)，账号 ref 填在本区域 WPS_REF，多个 ref 按账号顺序对应；也可在 WPS_COOKIE 条目中加 ref 字段单独指定"
       ],
       "icons": [
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/wps.png",
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/wps.png"
       ],
       "keys": [
+        "WPS_REF",
         "WPS_COOKIE"
       ],
       "settings": [
+        {
+          "id": "WPS_REF",
+          "name": "账号 ref",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "",
+          "desc": "code 服务的账号 ID/UIN/openid, 多个以英文逗号隔开, 按 WPS_COOKIE 账号顺序对应"
+        },
         {
           "id": "WPS_COOKIE",
           "name": "WPS Cookie",
@@ -236,7 +247,7 @@
       "descs_html": [
         "调用 YYB Go 服务 POST /wxapp/getCode 获取小程序 code",
         "请求头需携带 Authorization: Bearer <token> (对应服务端环境变量 YYB_PROTOCOL_TOKEN)",
-        "请求体: {\"ref\": \"账号ID/UIN/openid\", \"app_id\": \"小程序app_id\"}"
+        "请求体: {\"ref\": \"账号ID/UIN/openid\", \"app_id\": \"小程序app_id\"}；app_id 由各脚本内置，ref 在各脚本自己的 boxjs 区域配置（如 HDL_REF / aeon_ref），本处不填 ref"
       ],
       "icons": [
         "https://raw.githubusercontent.com/FoKit/Scripts/main/images/WeChat.png",
@@ -263,24 +274,6 @@
           "desc": "填写服务器地址, 不包含/, 如 http://192.168.2.5:8000"
         },
         {
-          "id": "@wxCode.ref",
-          "name": "ref",
-          "val": "",
-          "type": "textarea",
-          "autoGrow": true,
-          "rows": 1,
-          "desc": "账号 ID、UIN 或 openid, 多个以英文逗号隔开"
-        },
-        {
-          "id": "@wxCode.app_id",
-          "name": "app_id",
-          "val": "",
-          "type": "textarea",
-          "autoGrow": true,
-          "rows": 1,
-          "desc": "小程序 app_id"
-        },
-        {
           "id": "@wxCode.token",
           "name": "token",
           "val": "",
@@ -298,7 +291,7 @@
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/yxx_sign.js",
       "descs_html": [
         "印享星会员小程序每日签到领积分 (印力集团, crm.scpgroup.com.cn)",
-        "依赖「Code Server」分组中「获取小程序code」配置项(@wxCode.address/ref/token)",
+        "依赖「Code Server」分组中「获取小程序code」配置项(@wxCode.address/token)，账号 ref 填在本区域 YXX_REF",
         "token 自动缓存复用, 失效自动通过 code 服务刷新"
       ],
       "icons": [
@@ -306,9 +299,20 @@
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/yxx.png"
       ],
       "keys": [
+        "YXX_REF",
         "YXX_PLAZA_CODE"
       ],
       "settings": [
+        {
+          "id": "YXX_REF",
+          "name": "账号 ref",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "",
+          "desc": "code 服务的账号 ID/UIN/openid, 多个以英文逗号隔开, 一个 ref 一个微信身份"
+        },
         {
           "id": "YXX_PLAZA_CODE",
           "name": "广场编码",
@@ -328,15 +332,28 @@
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/thyc_sign.js",
       "descs_html": [
         "途虎养车小程序每日签到领积分 (cl-gateway.tuhu.cn)",
-        "依赖「Code Server」分组中「获取小程序code」配置项(@wxCode.address/ref/token)",
+        "依赖「Code Server」分组中「获取小程序code」配置项(@wxCode.address/token)，账号 ref 填在本区域 THYC_REF",
         "userSession 自动缓存复用, 失效自动通过 code 服务刷新"
       ],
       "icons": [
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/thyc.png",
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/thyc.png"
       ],
-      "keys": [],
-      "settings": []
+      "keys": [
+        "THYC_REF"
+      ],
+      "settings": [
+        {
+          "id": "THYC_REF",
+          "name": "账号 ref",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "",
+          "desc": "code 服务的账号 ID/UIN/openid, 多个以英文逗号隔开, 一个 ref 一个微信身份"
+        }
+      ]
     },
     {
       "id": "ydyp_exchange",
@@ -517,7 +534,7 @@
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/hdl_sign.js",
       "descs_html": [
         "海底捞会员小程序每日签到，奖励碎片/成长值/菜品，并查询碎片余额与会员信息（捞币/捞龄/成长值）",
-        "依赖「Code Server」分组中「获取小程序code」配置项（@wxCode.address / @wxCode.ref / @wxCode.token），支持多账号（已真机验证）",
+        "依赖「Code Server」分组中「获取小程序code」配置项（@wxCode.address / @wxCode.token），账号 ref 填在本区域 HDL_REF，支持多账号（已真机验证）",
         "登录链路：微信 code → CaterWeixin/ws/external/getId.json 换 openid/unionId → wechatLogin(openId+uid) 取 token；海底捞的 uid 就是 unionId",
         "token 缓存 24 小时并自动验活（queryMemberCacheInfo），失效自动重新登录，无需手动干预",
         "HDL 变量为可选抓包兜底（同一序号上优先于 code 服务）：openId&uid / wx#openId&uid / app#TOKEN / TOKEN，多条以换行或 ; 分隔",
@@ -528,9 +545,20 @@
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/hdl.png"
       ],
       "keys": [
+        "HDL_REF",
         "HDL"
       ],
       "settings": [
+        {
+          "id": "HDL_REF",
+          "name": "账号 ref",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "",
+          "desc": "code 服务的账号 ID/UIN/openid, 多个以英文逗号隔开, 一个 ref 一个微信身份"
+        },
         {
           "id": "HDL",
           "name": "抓包兜底凭证",
@@ -540,6 +568,61 @@
           "rows": 2,
           "placeholder": "",
           "desc": "可选抓包兜底，留空则走 code 服务；格式 openId&uid / wx#openId&uid / app#TOKEN / TOKEN，多条以换行或 ; 分隔"
+        }
+      ]
+    },
+    {
+      "id": "aeon_sign",
+      "name": "永旺签到",
+      "author": "@Feng",
+      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aeon_sign.js",
+      "descs_html": [
+        "永旺小程序每日签到领积分（活动期 10-01~12-31，每日 2 积分，连续签到另有阶段奖励），并查询会员卡等级/积分与本月到期积分",
+        "依赖「Code Server」分组中「获取小程序code」配置项（@wxCode.address / @wxCode.token），账号 ref 填在本区域 aeon_ref，支持多账号（一个 ref 一个微信身份）",
+        "登录链路：微信 code → silentWechatMiniLogin 静默登录换 x-http-token（签到接口只需这一个静态头，无签名/无 ticket/无 cookie），storeCode 随登录响应一并缓存，代表该账号所属商场",
+        "token 缓存 aeon_cache 约 28 天（按接口 tokenExpire 计算），失效时脚本会自动重新取 code 登录并重跑任务，无需手动干预；无法用旧 token 续签，续期必须要新的微信 code",
+        "重要：silentWechatMiniLogin 按 code 里的微信身份静默登录，ref 对应的微信必须已绑定永旺会员，否则会静默注册出一个新会员（表现为积分/等级为 0）",
+        "排查提示：接口回 102050010 即授权失效；通知里出现「重新登录后仍提示未登录」时，检查该微信在永旺的会员状态"
+      ],
+      "icons": [
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/aeon.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/aeon.png"
+      ],
+      "keys": [
+        "aeon_ref",
+        "aeon_cache",
+        "aeon_store"
+      ],
+      "settings": [
+        {
+          "id": "aeon_ref",
+          "name": "账号 ref",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "",
+          "desc": "code 服务的账号 ID/UIN/openid, 多个以英文逗号隔开, 一个 ref 一个微信身份"
+        },
+        {
+          "id": "aeon_cache",
+          "name": "永旺 token 缓存",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 5,
+          "placeholder": "",
+          "desc": "脚本自动维护，勿手填；按 ref 存 token/storeCode/nickname/expireTime/label"
+        },
+        {
+          "id": "aeon_store",
+          "name": "兜底商场编码",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "MYDSC02024",
+          "desc": "可选，仅当登录响应缺 storeCode 时使用"
         }
       ]
     }

@@ -7,9 +7,9 @@
  * 配置说明：boxjs 订阅「Code Server」分组中填写「获取小程序code」配置项(@wxCode.*):
  *          - @wxCode.open    开启code模式(true)
  *          - @wxCode.address 服务器地址, 如 http://192.168.2.5:8000
- *          - @wxCode.ref     账号ID/UIN/openid, 多个以英文逗号隔开
  *          - @wxCode.token   接口鉴权 token (请求头 Authorization: Bearer <token>)
- *          Node 环境变量同名可用: WX_CODE_ADDRESS / WX_CODE_REF / WX_CODE_TOKEN
+ *          账号 ref 配在本脚本的 boxjs 区域 HDL_REF 中, 多个以英文逗号隔开
+ *          Node 环境变量同名可用: WX_CODE_ADDRESS / WX_CODE_TOKEN / HDL_REF
  *          HDL 变量为可选抓包兜底（同一序号上优先于 code 服务）：
  *          - openId&uid 或 wx#openId&uid  抓 wechatLogin 请求体所得
  *          - app#TOKEN 或 TOKEN           直接用现成 token
@@ -54,10 +54,10 @@ async function main() {
     $.codeServer = (getEnv('WX_CODE_ADDRESS', '@wxCode.address') || '').replace(/\/+$/, '');
     $.yybToken = getEnv('WX_CODE_TOKEN', '@wxCode.token') || '';
 
-    const refs = (getEnv('WX_CODE_REF', '@wxCode.ref') || '').split(/[,，\s\n]+/).filter(Boolean);
+    const refs = (getEnv('HDL_REF') || '').split(/[,，\s\n]+/).filter(Boolean);
     const hdl = parseHdlEnv(getEnv('HDL'));
     const total = Math.max(refs.length, hdl.length);
-    if (!total) throw new Error('未配置账号：填写 HDL 抓包凭证 openId&uid，或在 boxjs「获取小程序code」填 ref ❌');
+    if (!total) throw new Error('未配置账号：填写 HDL_REF（code 服务账号 ref），或 HDL 抓包凭证 openId&uid ❌');
 
     // 同一序号上 HDL 抓包凭证优先于 code 服务
     $.accounts = [];

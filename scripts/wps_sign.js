@@ -3,8 +3,8 @@
  * 活动规则：WPS任务中心(签到+任务+抽奖)、天天领福利、WPS挑战计划、WPS超级会员小程序(签到+浏览任务+抽奖)
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。对齐 wps.py v4.0.0。
  * 环境变量：WPS_COOKIE（自动抓取，JSON数组 [{uid,cookie}]，条目可加 ref 字段用于小程序浏览任务）
- * 小程序浏览任务：依赖 YYB code 服务，boxjs 配置 @wxCode.address / @wxCode.ref / @wxCode.token
- *          （Node 环境变量 WX_CODE_ADDRESS / WX_CODE_REF / WX_CODE_TOKEN 亦可，多个 ref 逗号分隔按账号顺序对应）
+ * 小程序浏览任务：依赖 YYB code 服务，boxjs 配置 @wxCode.address / @wxCode.token，账号 ref 填在本脚本区域 WPS_REF
+ *          （Node 环境变量 WX_CODE_ADDRESS / WX_CODE_TOKEN / WPS_REF 亦可，多个 ref 逗号分隔按账号顺序对应）
  * 获取 Cookie：在 WPS 内从会员中心横幅进入签到活动页（触发 rubik2/portal 页面请求）即可抓取，Cookie 含 uid 即可入库
  * 更新时间：2026-10-04 天天领福利切福利中心新期(YM2025060910400185)，打卡复用序列/抽奖动态场次，sign_date 改北京日期；签到加密本地化；小程序动态签名+动态盐+领昨日奖励
 
@@ -81,7 +81,7 @@ const GLOBAL_CONFIG = {
 
 // 小程序浏览任务依赖的 code 服务(YYB Go)配置
 $.codeServer = (getEnv('WX_CODE_ADDRESS', '@wxCode.address') || '').replace(/\/+$/, '');
-$.refStr = getEnv('WX_CODE_REF', '@wxCode.ref') || '';
+$.refStr = getEnv('WPS_REF') || '';
 $.yybToken = getEnv('WX_CODE_TOKEN', '@wxCode.token') || '';
 $.refList = $.refStr.split(',').map(s => s.trim()).filter(Boolean);
 
@@ -123,7 +123,7 @@ async function main() {
             $.messages = [];
             $.cookie = $.userArr[i].cookie;  // 从对象中提取cookie字符串
             $.uid = extractUidFromCookie($.userArr[i]);
-            // 小程序任务 ref：账号条目自带 > @wxCode.ref 按序对应 > 单 ref 全局共用
+            // 小程序任务 ref：账号条目自带 > WPS_REF 按序对应 > 单 ref 全局共用
             $.ref = $.userArr[i].ref || $.refList[i] || ($.refList.length === 1 ? $.refList[0] : '');
 
             if (!$.uid) {

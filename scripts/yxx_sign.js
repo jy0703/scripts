@@ -7,9 +7,9 @@
  * 配置说明：boxjs 订阅「Code Server」分组中填写「获取小程序code」配置项(@wxCode.*):
  *          - @wxCode.open    开启code模式(true)
  *          - @wxCode.address 服务器地址, 如 http://192.168.2.5:8000
- *          - @wxCode.ref     账号ID/UIN/openid, 多个以英文逗号隔开
  *          - @wxCode.token   接口鉴权 token (请求头 Authorization: Bearer <token>)
- *          Node 环境变量同名可用: WX_CODE_ADDRESS / WX_CODE_REF / WX_CODE_TOKEN
+ *          账号 ref 配在本脚本的 boxjs 区域 YXX_REF 中, 多个以英文逗号隔开
+ *          Node 环境变量同名可用: WX_CODE_ADDRESS / WX_CODE_TOKEN / YXX_REF
  * 更新时间：2026-10-04
 
 ------------------ Surge 配置 ------------------
@@ -51,7 +51,7 @@ const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
 // 主函数
 async function main() {
     $.codeServer = (getEnv('WX_CODE_ADDRESS', '@wxCode.address') || '').replace(/\/+$/, '');
-    $.refStr = getEnv('WX_CODE_REF', '@wxCode.ref') || '';
+    $.refStr = getEnv('YXX_REF') || '';
     $.yybToken = getEnv('WX_CODE_TOKEN', '@wxCode.token') || '';
     $.plazaCode = getEnv('YXX_PLAZA_CODE') || 'G001Z003C0018';
 
@@ -62,7 +62,7 @@ async function main() {
         throw new Error('boxjs 中「开启code模式」未开启 ❌');
     }
     if (!refs.length) {
-        throw new Error('未配置账号：请在 boxjs「获取小程序code」填写 ref ❌');
+        throw new Error('未配置账号：请在 boxjs「印享星签到」填写 YXX_REF ❌');
     }
     if (!$.codeServer) {
         throw new Error('未配置 code 服务地址 @wxCode.address ❌');
