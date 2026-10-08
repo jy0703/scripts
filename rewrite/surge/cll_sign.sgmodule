@@ -1,0 +1,5 @@
+#!name=车来了签到
+#!desc=每日定时签到、领取惊喜任务（分享朋友圈等），支持多账号；参数由「车来了获取签到参数」模块抓取
+
+[Script]
+车来了签到 = type=cron,cronexp="0 1 * * *",wake-system=1,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js,script-update-interval=0

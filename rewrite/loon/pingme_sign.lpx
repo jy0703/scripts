@@ -2,6 +2,7 @@
 #!desc = 自动抓取 PingMe 签到参数，并定时签到、领取视频奖励（打开 PingMe App 自动获取）
 #!author = Fengzzzz
 #!homepage = https://github.com/jy0703/scripts
+#!icon = https://raw.githubusercontent.com/jy0703/scripts/main/icons/pingme.png
 #!tag = 签到,自动化
 #!type = normal
 

@@ -2,6 +2,7 @@
 #!desc = 自动抓取中通快递 Token，并每日定时签到（打开中通快递小程序进入签到中心自动获取）
 #!author = Fengzzzz
 #!homepage = https://github.com/jy0703/scripts
+#!icon = https://raw.githubusercontent.com/jy0703/scripts/main/icons/zt.png
 #!tag = 签到,自动化
 #!type = normal
 

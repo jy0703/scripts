@@ -2,6 +2,7 @@
 #!desc = 自动抓取艾克帮签到 Token，并每日定时签到（打开艾克帮小程序自动获取）
 #!author = Fengzzzz
 #!homepage = https://github.com/jy0703/scripts
+#!icon = https://raw.githubusercontent.com/jy0703/scripts/main/icons/aikebang.png
 #!tag = 签到,自动化
 #!type = normal
 

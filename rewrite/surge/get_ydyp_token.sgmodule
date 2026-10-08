@@ -1,5 +1,5 @@
 #!name=移动云盘获取Token
-#!desc=自动抓取移动云盘 Authorization（Basic 手机号+Token）（Surge 无捕获开关，抓完请停用本模块）
+#!desc=自动抓取移动云盘 Authorization（Basic 手机号+Token）
 #!打开移动云盘 App 首页即可触发抓取；deviceId 不在抓取范围内，需要时抓 m.mcloud.139.com/ycloud/signin/page/startSignIn 的 deviceId 参数填入 BoxJS 的 ydyp_device_id。
 
 [Script]

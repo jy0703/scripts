@@ -3,7 +3,7 @@
   "name": "Feng 应用订阅",
   "author": "@Feng",
   "icon": "https://avatars.githubusercontent.com/u/30423352",
-  "repo": "https://github.com/Feng/scripts",
+  "repo": "https://github.com/jy0703/scripts",
   "apps": [
     {
       "id": "aikebang_sign",
@@ -67,9 +67,9 @@
       "author": "@Feng",
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js",
       "descs_html": [
-        "WPS任务中心(签到+任务+抽奖)、天天领福利、WPS挑战计划、WPS超级会员小程序(签到+领昨日奖励+浏览任务+抽奖)，支持多账号，签到加密已本地化不依赖第三方",
-        "Cookie抓取：开启插件捕获开关后从 WPS 会员中心横幅进入签到活动页即可抓取，Cookie 含 uid 即可入库",
-        "小程序浏览任务依赖「获取小程序code」配置项(@wxCode.address/token)，账号 ref 填在本区域 WPS_REF，多个 ref 按账号顺序对应；也可在 WPS_COOKIE 条目中加 ref 字段单独指定"
+        "WPS 任务中心(签到/任务/抽奖)、天天领福利、挑战计划、超级会员小程序，支持多账号",
+        "抓取：开启插件捕获开关后从 WPS 会员中心横幅进入签到活动页，Cookie 含 uid 即可入库",
+        "小程序浏览任务依赖「获取小程序code」(@wxCode.address/token)，账号 ref 填本区域 WPS_REF，也可在 WPS_COOKIE 账号项里单独指定"
       ],
       "icons": [
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/wps.png",
@@ -108,11 +108,9 @@
       "author": "@Feng",
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js",
       "descs_html": [
-        "移动云盘自动签到 v5.0.9：每日签到/戳一戳、云朵中心新版任务(上传/分享/AI相机/云笔记/开启通知)、算力大作战、红包派对、139邮箱任务，支持多账号",
-        "抓取：开启插件的捕获开关后打开移动云盘 App 首页即可（命中 user-njs.yun.139.com/user/ 的 Authorization，手机号从 Basic 认证里自动解析），抓完记得关闭开关",
-        "ydyp_data 为 JSON 数组：[{\"Authorization\":\"Basic xxx\",\"phone\":\"138xxxxxxxx\",\"deviceId\":\"\"}]；deviceId 不参与抓取，可选，需抓 m.mcloud.139.com/ycloud/signin/page/startSignIn 的 deviceId 参数填入 ydyp_device_id 或账号项，留空时脚本自动生成",
-        "Authorization 由脚本按有效期自动刷新(AES-ECB 调 refreshToken)，刷新结果与 deviceId 缓存在 ydyp_cache，无需手动维护；CK 彻底失效时通知会列出失效账号",
-        "算力大作战好友助力默认邀请码已在脚本内，按需在 TOKENPK_INVITE_CODE 修改"
+        "移动云盘自动签到：每日签到/戳一戳、云朵中心任务、算力大作战、红包派对、139邮箱任务，支持多账号",
+        "抓取：开启插件捕获开关后打开移动云盘 App 首页即可，抓完关闭；deviceId 可不填，留空由脚本自动生成",
+        "Authorization 由脚本按有效期自动刷新，与 deviceId 一起缓存在 ydyp_cache，无需手动维护；彻底失效时通知会列出账号"
       ],
       "icons": [
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/ydyp.png",
@@ -245,9 +243,9 @@
       "name": "获取小程序code",
       "author": "@Feng",
       "descs_html": [
-        "调用 YYB Go 服务 POST /wxapp/getCode 获取小程序 code",
-        "请求头需携带 Authorization: Bearer <token> (对应服务端环境变量 YYB_PROTOCOL_TOKEN)",
-        "请求体: {\"ref\": \"账号ID/UIN/openid\", \"app_id\": \"小程序app_id\"}；app_id 由各脚本内置，ref 在各脚本自己的 boxjs 区域配置（如 HDL_REF / aeon_ref），本处不填 ref"
+        "调用 YYB Go 服务 POST /wxapp/getCode 获取小程序 code，供印享星/途虎/海底捞/永旺/WPS 等脚本使用",
+        "本处只填服务器地址与 token(请求头 Authorization: Bearer，对应服务端 YYB_PROTOCOL_TOKEN)",
+        "app_id 由各脚本内置，账号 ref 填在各脚本自己的 boxjs 区域，本处不填 ref"
       ],
       "icons": [
         "https://raw.githubusercontent.com/FoKit/Scripts/main/images/WeChat.png",
@@ -290,9 +288,8 @@
       "author": "@Feng",
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/yxx_sign.js",
       "descs_html": [
-        "印享星会员小程序每日签到领积分 (印力集团, crm.scpgroup.com.cn)",
-        "依赖「Code Server」分组中「获取小程序code」配置项(@wxCode.address/token)，账号 ref 填在本区域 YXX_REF",
-        "token 自动缓存复用, 失效自动通过 code 服务刷新"
+        "印享星会员小程序(印力集团)每日签到领积分，支持多账号",
+        "依赖「Code Server」分组中「获取小程序code」(@wxCode.address/token)，账号 ref 填本区域 YXX_REF"
       ],
       "icons": [
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/yxx.png",
@@ -331,9 +328,8 @@
       "author": "@Feng",
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/thyc_sign.js",
       "descs_html": [
-        "途虎养车小程序每日签到领积分 (cl-gateway.tuhu.cn)",
-        "依赖「Code Server」分组中「获取小程序code」配置项(@wxCode.address/token)，账号 ref 填在本区域 THYC_REF",
-        "userSession 自动缓存复用, 失效自动通过 code 服务刷新"
+        "途虎养车小程序每日签到领积分，支持多账号",
+        "依赖「Code Server」分组中「获取小程序code」(@wxCode.address/token)，账号 ref 填本区域 THYC_REF"
       ],
       "icons": [
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/thyc.png",
@@ -361,11 +357,9 @@
       "author": "@Feng",
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp_exchange.js",
       "descs_html": [
-        "移动云盘云朵中心(sign_in_3)商品抢兑(App 端)，自动识别滑块偏移量后调用 exchangeV3 兑换 (m.mcloud.139.com)",
-        "账号复用「移动云盘签到」分组：读取 ydyp_data 里抓包得到的 App 端 Authorization，并按 ydyp_cache 中签到脚本刷新后的 token 优先使用；本脚本不再依赖 Code Server / 微信小程序 code",
-        "使用前需先装「移动云盘签到」插件抓一次 App 首页并让其每日定时运行，以保证 Authorization 未过期",
-        "deviceId 由本脚本每次动态向数美 deviceprofile/v4 取号(RSA 公钥加密设备指纹, 与真机同形态 89 字符)；取号失败时回退「移动云盘签到」(ydyp.js) 写在 ydyp_cache 里的 deviceId，再缺失则靠服务端 Set-Cookie 回填",
-        "商品ID 需在补货时刻(每日 10:00/16:00/00:00)前配置，留空则只查询商品列表与待领取奖品、不兑换"
+        "移动云盘云朵中心商品抢兑(App 端)，自动识别滑块偏移量后兑换",
+        "账号复用「移动云盘签到」分组：需先装该插件抓一次 App 首页并每日运行，保证 Authorization 未过期",
+        "商品ID 需在补货时刻(每日 10:00/16:00/00:00)前配置好"
       ],
       "icons": [
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/ydyp.png",
@@ -393,12 +387,10 @@
       "author": "@Feng",
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js",
       "descs_html": [
-        "中国移动「签到领流量/话费」(活动 1021122301)，支持多账号，每天签一次。",
-        "抓取：开启「中国移动获取Cookie」→ 打开中国移动 App -「我」-「签到」进入活动页即自动写入，抓完请关闭捕获。",
-        "凭证：cmcc_data 含 App 票据与长期 jwt，jwt 有效时不消耗票据；两者都失效才需重新抓包。",
-        "开关：cmcc_claim 连签奖励 / cmcc_task AI豆任务 / cmcc_seckill 秒杀抢券(定时设在开抢前 1~2 分钟)。当天签到完成后再次执行只抢券。",
-        "AI豆任务逐条实时输出到日志；通知里只留成功项加一行汇总。连续 2 次领奖被拒(未达到奖品领取条件)的任务自动进黑名单(cmcc_task_fail)，不再发请求，满 cmcc_task_skip_days 天(默认 7)自动重试；一旦领到奖立即移出。",
-        "cmcc_activity_id / cmcc_channel_id 留空用默认 1021122301 / P00000109876。"
+        "中国移动「签到领流量/话费」(活动 1021122301) App 端签到，每天一次，支持多账号",
+        "抓取：开启「中国移动获取Cookie」→ 打开中国移动 App「我」-「签到」进入活动页；cmcc_data 里的长期 jwt 可自续期，jwt 与 App 票据都失效才需重抓",
+        "开关：连签奖励 / AI豆任务 / 秒杀抢券(定时设在开抢前 1~2 分钟) / 追剧领福利(打卡与任务挣抽奖次数，仅周日开放抽奖)",
+        "当天签到完成后再次执行只做抢券，签到、任务、追剧都不再跑"
       ],
       "icons": [
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/cmcc.png",
@@ -409,6 +401,7 @@
         "cmcc_claim",
         "cmcc_task",
         "cmcc_seckill",
+        "cmcc_video",
         "cmcc_task_fail",
         "cmcc_task_skip_days",
         "cmcc_activity_id",
@@ -446,6 +439,13 @@
           "val": false,
           "type": "boolean",
           "desc": "签到后参与同活动秒杀抢券"
+        },
+        {
+          "id": "cmcc_video",
+          "name": "追剧领福利",
+          "val": false,
+          "type": "boolean",
+          "desc": "追剧页每日打卡 + 代币任务挣抽奖次数；抽奖仅周日开放，其余日子只攒不抽"
         },
         {
           "id": "cmcc_task_skip_days",
@@ -501,11 +501,10 @@
       "author": "@Feng",
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/mixc_sign.js",
       "descs_html": [
-        "华润万象生活「一点万象」APP 每日签到领积分，连签达阶段可领阶段奖，覆盖万象汇/万象城/万象天地等华润商场，支持多账号",
-        "抓取步骤：开启「一点万象获取Cookie」rewrite 后，打开一点万象 APP 任意页面停留 1 秒（自动触发 getPersonalData）即写入 mixc_data；抓取完成后建议关闭捕获开关",
-        "mixc_data 内含 token 与设备参数（imei/deviceParams/appVersion/osVersion），签名盐与 appId 属 H5 常量已内置，无需配置",
-        "一条数据只对应一家商场：在 APP 内切到别的商场后重抓一次，脚本会把该商场作为独立账号追加，各家商场分别签到",
-        "通知出现「未经授权」或签到失败提示未登录时，说明 token 已失效，重抓 Cookie 即可"
+        "华润万象生活「一点万象」APP 每日签到领积分，连签达阶段可领阶段奖，支持多账号",
+        "抓取：开启「一点万象获取Cookie」后打开 APP 任意页面停留 1 秒即写入，抓完关闭捕获开关",
+        "一条数据只对应一家商场：在 APP 内切到别的商场后重抓一次，会作为独立账号追加",
+        "通知出现「未经授权」或提示未登录 = token 已失效，重抓即可"
       ],
       "icons": [
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/mixc.png",
@@ -533,12 +532,9 @@
       "author": "@Feng",
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/hdl_sign.js",
       "descs_html": [
-        "海底捞会员小程序每日签到，奖励碎片/成长值/菜品，并查询碎片余额与会员信息（捞币/捞龄/成长值）",
-        "依赖「Code Server」分组中「获取小程序code」配置项（@wxCode.address / @wxCode.token），账号 ref 填在本区域 HDL_REF，支持多账号（已真机验证）",
-        "登录链路：微信 code → CaterWeixin/ws/external/getId.json 换 openid/unionId → wechatLogin(openId+uid) 取 token；海底捞的 uid 就是 unionId",
-        "token 缓存 24 小时并自动验活（queryMemberCacheInfo），失效自动重新登录，无需手动干预",
-        "HDL 变量为可选抓包兜底（同一序号上优先于 code 服务）：openId&uid / wx#openId&uid / app#TOKEN / TOKEN，多条以换行或 ; 分隔",
-        "排查提示：请求头需带全套小程序头（User-Agent / Referer / platformname 等，脚本已内置），缺头时服务端回 -50005 参数异常，容易被误判成凭证错误"
+        "海底捞会员小程序每日签到(碎片/成长值/菜品)，并查询碎片余额与会员信息",
+        "依赖「Code Server」分组中「获取小程序code」(@wxCode.address/token)，账号 ref 填本区域 HDL_REF，支持多账号",
+        "HDL 为可选抓包兜底，同一账号序号上优先于 code 服务，留空则全走 code 服务"
       ],
       "icons": [
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/hdl.png",
@@ -577,14 +573,11 @@
       "author": "@Feng",
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aeon_sign.js",
       "descs_html": [
-        "永旺小程序每日签到领积分（活动期 10-01~12-31，每日 2 积分，连续签到另有阶段奖励），并查询会员卡等级/积分与本月到期积分",
-        "依赖「Code Server」分组中「获取小程序code」配置项（@wxCode.address / @wxCode.token），账号 ref 填在本区域 aeon_ref，支持多账号（一个 ref 一个微信身份）",
-        "登录链路：微信 code → silentWechatMiniLogin 静默登录换 x-http-token（签到接口只需这一个静态头，无签名/无 ticket/无 cookie），storeCode 随登录响应缓存，即该微信绑定的商场",
-        "签到活动按商场配置：aeon_store 填了商场编码就对所有账号强制生效（统一在一家商场签到），留空则各账号用登录响应里自己绑定的商场；填了之后某账号仍报「未配置签到活动」说明该商场没上架签到活动",
-        "token 缓存 aeon_cache 约 28 天（按接口 tokenExpire 计算），失效时脚本会自动重新取 code 登录并重跑任务，无需手动干预；无法用旧 token 续签，续期必须要新的微信 code",
-        "同一会员同时只有一个有效 token：手机上打开永旺小程序会顶掉脚本缓存的 token，脚本下次运行会自动重新登录，属正常现象",
-        "重要：silentWechatMiniLogin 按 code 里的微信身份静默登录，ref 对应的微信必须已绑定永旺会员，否则会静默注册出一个新会员（表现为积分/等级为 0）",
-        "排查提示：接口回 102050010 即授权失效；通知里出现「重新登录后仍提示未登录」时，检查该微信在永旺的会员状态"
+        "永旺小程序每日签到领积分(活动期 10-01~12-31，连续签到另有阶段奖励)，并查询会员卡等级/积分与本月到期积分",
+        "依赖「Code Server」分组中「获取小程序code」(@wxCode.address/token)，账号 ref 填本区域 aeon_ref",
+        "aeon_store 填了则所有账号强制在该商场签到，留空用各微信绑定的商场；仍报「未配置签到活动」说明该商场没上架",
+        "重要：ref 对应的微信必须已绑定永旺会员，否则会静默注册出一个新会员(表现为积分/等级为 0)",
+        "手机上打开永旺小程序会顶掉脚本缓存的 token，下次运行自动重新登录，属正常现象"
       ],
       "icons": [
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/aeon.png",
@@ -625,6 +618,121 @@
           "rows": 1,
           "placeholder": "MYDSC02024",
           "desc": "可选：填写后对所有账号强制生效（统一在该商场签到）；留空则各账号使用登录响应返回的绑定商场"
+        }
+      ]
+    },
+    {
+      "id": "pingme_sign",
+      "name": "PingMe签到",
+      "author": "@Feng",
+      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/pingme_sign.js",
+      "descs_html": [
+        "PingMe 每日签到领 Coins，并自动领取视频奖励，支持多账号",
+        "抓取：开启「PingMe获取签到参数」重写后打开 App 首页即写入 pingme_data，抓完请关闭捕获"
+      ],
+      "icons": [
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/pingme.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/pingme.png"
+      ],
+      "keys": [
+        "pingme_data"
+      ],
+      "settings": [
+        {
+          "id": "pingme_data",
+          "name": "PingMe 数据",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 5,
+          "placeholder": "",
+          "desc": "由 rewrite 抓取自动写入，勿手填；签到请求头与公共参数都存在这里"
+        }
+      ]
+    },
+    {
+      "id": "smzdm_sign",
+      "name": "什么值得买签到",
+      "author": "@Feng",
+      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/smzdm.js",
+      "descs_html": [
+        "什么值得买每日签到 + 完成每日任务（浏览/分享/评论/抽奖），支持多账号",
+        "抓取：开启「什么值得买获取Cookie」后打开 App 进入签到页，自动保存 Cookie、User-Agent、sk 到 smzdm_data",
+        "评论任务文案需大于 10 个汉字；SMZDM_CROWD_SILVER_5 填 yes 才会执行 5 碎银子抽奖任务",
+        "SMZDM_COOKIE / SMZDM_SK 为 Node、青龙手工填写兜底，优先级低于 smzdm_data"
+      ],
+      "icons": [
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/smzdm.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/smzdm.png"
+      ],
+      "keys": [
+        "smzdm_data",
+        "SMZDM_COOKIE",
+        "SMZDM_SK",
+        "SMZDM_COMMENT",
+        "SMZDM_CROWD_SILVER_5",
+        "SMZDM_CROWD_KEYWORD"
+      ],
+      "settings": [
+        {
+          "id": "smzdm_data",
+          "name": "什么值得买数据",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 5,
+          "placeholder": "",
+          "desc": "由 rewrite 抓取自动写入，勿手填；含 cookie/UA/sk 的账号数组"
+        },
+        {
+          "id": "SMZDM_COOKIE",
+          "name": "抓包兜底 Cookie",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 3,
+          "placeholder": "",
+          "desc": "可选，smzdm_data 为空时生效；多账号用 & 或换行分隔"
+        },
+        {
+          "id": "SMZDM_SK",
+          "name": "抓包兜底 sk",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "",
+          "desc": "可选，与 SMZDM_COOKIE 顺序一致"
+        },
+        {
+          "id": "SMZDM_COMMENT",
+          "name": "评论任务文案",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 2,
+          "placeholder": "",
+          "desc": "需大于 10 个汉字，留空则跳过评论任务"
+        },
+        {
+          "id": "SMZDM_CROWD_SILVER_5",
+          "name": "5 碎银子抽奖",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "yes",
+          "desc": "填 yes 才执行众测/抽奖里的 5 碎银子任务，留空不抽"
+        },
+        {
+          "id": "SMZDM_CROWD_KEYWORD",
+          "name": "抽奖优先关键词",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "",
+          "desc": "非免费抽奖时优先匹配的奖品关键词"
         }
       ]
     }

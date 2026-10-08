@@ -1,12 +1,11 @@
 /**
  * 脚本名称：中国移动签到
- * 活动规则：中国移动「签到领流量/话费」活动(1021122301) 的 App 端 mark31 签到，每天一次；另有 AI豆任务(mark/task) 与秒杀抢券(markSeckill)
+ * 活动规则：中国移动「签到领流量/话费」活动(1021122301) 的 App 端 mark31 签到，每天一次；另有 AI豆任务(mark/task) 与秒杀抢券(markSeckill)；开关 cmcc_video 后追加「追剧领福利」页(1126082530) 的每日打卡 + 代币任务 + 周日抽奖
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。账号参数（App 票据/省市编码等）由本脚本 GetCookie 抓取后存入 cmcc_data
- * 环境变量：cmcc_data / cmcc_claim / cmcc_task / cmcc_seckill / cmcc_task_skip_days；cmcc_task_fail 为脚本自动维护的任务黑名单
- * 更新时间：2026-10-06 移除小程序端签到(微信渠道会话)代码；AI豆任务逐条实时输出、连续失败任务自动拉黑；finishTask 提示"特殊处理"时增加 hlwyxhdhub openFinish 握手兜底
+ * 环境变量：cmcc_data / cmcc_claim / cmcc_task / cmcc_seckill / cmcc_video / cmcc_task_skip_days；cmcc_task_fail 为脚本自动维护的任务黑名单
+ * 更新时间：2026-10-08 新增追剧领福利(diy-client 1126082530)：每日打卡 + diyTask 代币任务 + 周日抽奖消耗次数，开关 cmcc_video
 
 ------------------ Surge 配置 ------------------
-Surge 没有捕获开关参数，需要更新凭证时临时启用「获取Cookie」那条（或整个模块），抓完再关掉。
 
 [Script]
 中国移动获取Cookie = type=http-request,pattern=^https?:\/\/wx\.10086\.cn\/qwhdsso\/appTokenLogin,requires-body=1,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,script-update-interval=0
@@ -57,6 +56,15 @@ const SECKILL = getEnv('cmcc_seckill') === 'true';  // 签到有礼秒杀抢券(
 const TASK_API = API_MARK + '/task';
 // hlwyxhdhub 开放任务入口：finishTask 提示"特殊处理"时到该 hub 换会话做 openFinish 握手
 const OPEN_TASK_ENTRY = BASE + '/hlwyxhdhub/act-wedrecharge/index.html?pageId=1849008675699650560';
+// 追剧领福利(diy-client 活动页)：打卡 + 代币任务 + 抽奖，与签到页同一 SSO 通道但要按自己的活动页换票
+const RUN_VIDEO = getEnv('cmcc_video') === 'true';
+const VIDEO_ENTRY = BASE + '/qwhdhub/diy-client/1126082530?A_C_CODE=10hep1ZhkL&channelId=P00000119581';
+const VIDEO_SIGN_API = BASE + '/qwhdhub/api/diyVideoDayRedesign/sign';
+const DIY_TASK_API = BASE + '/qwhdhub/diyTask';
+const DIY_LOTTERY_API = BASE + '/qwhdhub/diyLottery';
+// 该活动的任务与抽奖共用同一个 componentId：任务 earnOpportunity 加的就是抽奖次数
+const VIDEO_COMPONENT = '4EC96l0-9btuobajC9Yu';
+const VIDEO_DRAW_WEEKDAY = 0;  // 抽奖开放日(北京时间周日)：实测非周日回 FAILED「抽奖时间为周日，请确认~」，且次数过期作废
 // 秒杀抢券参数 (照 py 默认值)
 const SK_API = API_MARK + '/markSeckill';
 const SK_INTERVAL = 350;      // 重试间隔(ms)
@@ -139,8 +147,8 @@ function GetCookie() {
     }
 }
 
-// 任务: 建会话 → App 端签到 → (可选)连签奖励/AI豆任务 → (可选)抢券
-// 当天签到完成后(user.signDay)，再次执行本脚本只做抢券，不再跑签到/领奖/任务
+// 任务: 建会话 → App 端签到 → (可选)连签奖励/AI豆任务/追剧领福利 → (可选)抢券
+// 当天签到完成后(user.signDay)，再次执行本脚本只做抢券，不再跑签到/领奖/任务/追剧
 // 结果边产生边 $.log（say），通知内容仍攒在 lines 里最后一起推送
 async function doSign(user) {
     const lines = [];
@@ -199,6 +207,15 @@ async function doSign(user) {
                     lines.push(...await doMarkTasks(ctx, user));
                 } catch (e) {
                     say(`[任务] 失败: ${e.message || e}`);
+                }
+            }
+
+            // 追剧领福利是独立活动页，自己换票；放在秒杀之前，免得被抢券的等待挤掉
+            if (RUN_VIDEO) {
+                try {
+                    lines.push(...await doVideoAct(user));
+                } catch (e) {
+                    say(`[追剧] 失败: ${e.message || e}`);
                 }
             }
 
@@ -472,6 +489,104 @@ async function openHubHandshake(user, ju) {
     const fin = await Request({ url: `${BASE}/hlwyxhdhub/api/open/_pub/task/openFinish`, method: 'post', headers: apiHeaders(octx), body: { cToken: d.cToken }, _timeout: 30000 });
     $.log(`[握手] hlwyxhdhub openFinish: ${fin && fin.code} ${fin && fin.msg || ''}`);
     return !!(fin && fin.code === 'SUCCESS');
+}
+
+// ---------- 追剧领福利（diy-client 1126082530，参考 yupaiLy/cmcc-auto-checkin 的 cmcc_extra.py）----------
+
+// 独立活动：换该活动页会话 → 每日打卡 → diyTask 任务(挣抽奖次数) → 抽奖
+// 返回结果行，由 main() 拼进本账号通知
+async function doVideoAct(user) {
+    const lines = [];
+    const say = t => { lines.push(t); $.log(t); };
+    try {
+        const ctx = await exchangeSession(user, VIDEO_ENTRY);
+        say(`[追剧] ${await videoSign(ctx)}`);
+        lines.push(...await runDiyTasks(ctx));
+        lines.push(...await runDiyLottery(ctx));
+    } catch (e) {
+        say(`[追剧] 失败: ${e.message || e}`);
+    }
+    return lines;
+}
+
+// 每日打卡：querySignStatus 判今天，doSign 与状态查询同为 GET 无 body
+async function videoSign(ctx) {
+    const st = ((await Request({ url: `${VIDEO_SIGN_API}/querySignStatus`, headers: apiHeaders(ctx), _timeout: 30000 })) || {}).data || {};
+    if (st.todaySignFlag === '1') return `今日已打卡（连签 ${st.signDays || 0} 天）`;
+    const r = await Request({ url: `${VIDEO_SIGN_API}/doSign`, headers: apiHeaders(ctx), _timeout: 30000 });
+    const msg = (r && r.msg) || '';
+    if (!r || (r.code !== 'SUCCESS' && !msg.includes('已签'))) {
+        throw new Error(`打卡失败: ${r && r.code} ${msg}${hasSessionToken(ctx.jar) ? '' : '（环境未回传活动页 302 的 Set-Cookie，会话无法建立）'}`);
+    }
+    const rd = r.data || {};
+    $.log(`[追剧] doSign data=${$.toStr(rd, '{}').slice(0, 200)}`);
+    // doSign 不回连签天数，重查状态取准确值
+    let days = '';
+    try {
+        const after = ((await Request({ url: `${VIDEO_SIGN_API}/querySignStatus`, headers: apiHeaders(ctx), _timeout: 30000 })) || {}).data || {};
+        if (after.signDays != null) days = `（连签 ${after.signDays} 天）`;
+    } catch (e) { }
+    const prize = prizeText(rd.lotteryPrize || rd.prize);
+    return `打卡成功${days}${prize ? `，获得: ${prize}` : ''}`;
+}
+
+// diyTask 代币任务：UNDO 任务 POST finish 即发奖（服务端不校验真实到访，browse/share 等类型通吃）
+// 逐条只进日志，通知留一行汇总
+async function runDiyTasks(ctx) {
+    const lines = [];
+    const say = t => { lines.push(t); $.log(t); };
+    const resp = await Request({ url: `${DIY_TASK_API}/list/${VIDEO_COMPONENT}`, headers: apiHeaders(ctx), _timeout: 30000 });
+    if (!resp || resp.code !== 'SUCCESS') throw new Error(`任务清单获取失败: ${resp && resp.code} ${resp && resp.msg}`);
+    const tasks = resp.data || [];
+    const todo = tasks.filter(t => t.taskStage === 'UNDO' && t.taskId);
+    $.log(`[追剧·任务] 共 ${tasks.length} 个，待办 ${todo.length} 个`);
+    if (!todo.length) return lines;
+
+    let done = 0;
+    for (const t of todo) {
+        const fin = await Request({ url: `${DIY_TASK_API}/finish/${t.taskId}`, method: 'post', headers: apiHeaders(ctx), body: {}, _timeout: 30000 });
+        // 复查清单：完成后任务可能直接移出列表，"消失"也算成功
+        const chk = await Request({ url: `${DIY_TASK_API}/list/${VIDEO_COMPONENT}`, headers: apiHeaders(ctx), _timeout: 30000 });
+        const cur = ((chk && chk.data) || []).find(x => x.taskId === t.taskId);
+        const ok = !cur || cur.taskStage === 'DONE';
+        $.log(`[追剧·任务] ${t.name || t.taskId}: ${ok ? '✅ 完成' : `⚠️ finish=${fin && fin.code} ${(fin && fin.msg) || ''}`}`);
+        if (ok) done++;
+        await $.wait(randomInt(1000, 2500));
+    }
+    say(`[追剧·任务] 待办 ${todo.length} 个，完成 ${done} 个`);
+    return lines;
+}
+
+// diyLottery 抽奖：remain 是可用次数（1 次/抽，由任务挣得）。服务端仅周日开放消耗，
+// 且次数过期作废 → 周日抽满(未中奖也继续)，其余日子只记日志不消耗
+async function runDiyLottery(ctx) {
+    const lines = [];
+    const say = t => { lines.push(t); $.log(t); };
+    const rem = await Request({ url: `${DIY_LOTTERY_API}/period/remain/${VIDEO_COMPONENT}`, method: 'post', headers: apiHeaders(ctx), _timeout: 30000 });
+    if (!rem || rem.code !== 'SUCCESS') throw new Error(`抽奖余额查询失败: ${rem && rem.code} ${rem && rem.msg}`);
+    const remain = Number((rem.data || {}).remain) || 0;
+    if (!remain) { $.log('[追剧·抽奖] 可用次数 0，无需抽奖'); return lines; }
+    if (beijingWeekday() !== VIDEO_DRAW_WEEKDAY) { $.log(`[追剧·抽奖] 有 ${remain} 次，未到开放日(周日)，本次不消耗`); return lines; }
+
+    $.log(`[追剧·抽奖] 余额 ${remain} 次，开始消耗`);
+    const prizes = [];
+    let drawn = 0, aborted = '';
+    for (let i = 0; i < remain; i++) {
+        const r = await Request({ url: `${DIY_LOTTERY_API}/lotterySafely/${VIDEO_COMPONENT}`, headers: apiHeaders(ctx), _timeout: 30000 });
+        drawn++;
+        const won = r && r.code === 'SUCCESS' && (Array.isArray(r.data) ? r.data[0] : null);
+        if (won) prizes.push(won.prizeName || '?');
+        else if (r && (r.code === 'SUCCESS' || r.code === 'NOT_WON')) $.log(`[追剧·抽奖] 第${drawn}次 未中奖`);
+        else { aborted = `${r && r.code} ${r && r.msg || ''}`; break; }
+        await $.wait(randomInt(1200, 2800));
+    }
+    say(`[追剧·抽奖] 已抽 ${drawn}/${remain} 次${prizes.length ? `，中奖: ${prizes.join(' / ')}` : ''}${aborted ? `，中断于 ${aborted}` : ''}`);
+    return lines;
+}
+
+// 北京时间星期（不依赖设备时区）：周日=0
+function beijingWeekday() {
+    return new Date(Date.now() + 8 * 3600000).getUTCDay();
 }
 
 // 签到结果统一格式: <端> <状态>（<天数>）[，获得: X][，备注]

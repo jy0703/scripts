@@ -2,6 +2,7 @@
 #!desc = 自动抓取什么值得买 Cookie，并每日定时签到 + 完成每日任务（打开 App 进入签到页自动获取）
 #!author = Fengzzzz
 #!homepage = https://github.com/jy0703/scripts
+#!icon = https://raw.githubusercontent.com/jy0703/scripts/main/icons/smzdm.png
 #!tag = 签到,自动化
 #!type = normal
 
