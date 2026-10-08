@@ -1,6 +1,6 @@
 /**
  * 脚本名称：什么值得买 - 签到 + 每日任务
- * 脚本说明：参考 lhtj_new 的单文件框架，合并 smzdm_checkin 与 smzdm_task。
+ * 脚本说明：参考 lhtj 的单文件框架，合并 smzdm_checkin 与 smzdm_task。
  * 环境变量：
  *   1. smzdm_data：抓包保存的账号数组（推荐）
  *   2. SMZDM_COOKIE：Node/青龙可直接填 Cookie，多账号用 & 或换行分隔
