@@ -1,7 +1,7 @@
 /**
  * 脚本名称：慢慢买签到
  * 活动规则：每日签到领积分与金币，幸运日可开启幸运礼盒
- * 脚本说明：支持多账号，支持 NE / Node.js 环境。签到接口只认 username + 应用级 token，账号由响应侧抓取（首页 index_json.ashx 返回的 u_name）写入 manmanbuy_data，也可在 manmanbuy_users 里直接填用户名
+ * 脚本说明：支持多账号，支持 NE / Node.js 环境。签到接口只认 username + 应用级 token，账号由响应侧抓取（首页 index_json.ashx 返回的 u_name）写入 manmanbuy_data（形如 [{"username":"wx_xxxx","nickName":"昵称"}]，昵称仅用于通知显示），也可在 manmanbuy_users 里直接填用户名
  * 环境变量：manmanbuy_data、manmanbuy_users、manmanbuy_token(可选，token 轮换时覆盖)
  * 更新时间：2026-10-09
 
@@ -41,11 +41,24 @@ hostname = apapia.manmanbuy.com
 const $ = new Env('慢慢买');
 $.is_debug = getEnv('is_debug') || 'false';  // 调试模式
 $.userInfo = getEnv('manmanbuy_data') || '';  // 获取账号
-$.userArr = $.toObj($.userInfo) || [];  // 用户信息
-// 容错: 手写成单个对象/裸用户名的也能当账号用
-if (!Array.isArray($.userArr)) $.userArr = $.userArr ? [$.userArr] : [];
-if (!$.userArr.length && $.userInfo.trim()) $.userArr = [{ userName: $.userInfo.trim(), username: $.userInfo.trim() }];
+// 存储格式为 [{"username":"wx_xxxx","nickName":"昵称"}]，nickName 仅用于通知显示
+$.userArr = parseUsers($.userInfo);
 $.Messages = [];
+
+// 把 manmanbuy_data 解析成内部账号对象数组
+function parseUsers(raw) {
+    const list = $.toObj(raw, null);
+    if (!Array.isArray(list)) return [];
+    const out = [];
+    list.forEach(e => {
+        const name = String((e && e.username) || '').trim();
+        const nick = String((e && e.nickName) || '').trim();
+        if (name && !out.some(u => normName(u.username) === normName(name))) {
+            out.push(nick ? { username: name, nickName: nick } : { username: name });
+        }
+    });
+    return out;
+}
 
 // 业务常量 (照签到页 activity_check_in H5 抓包搬运)
 const API_HOST = 'https://basic-ucenter.manmanbuy.com';
@@ -65,15 +78,7 @@ const TOKEN_KEY = 'manmanbuy_token';
 async function main() {
     // manmanbuy_users 里手填的用户名并入账号列表（与抓包数据按用户名去重）
     (getEnv(USERS_KEY) || '').split(/[,，;；\s]+/).filter(Boolean).forEach(name => {
-        if (!$.userArr.some(e => normName(e.username) === normName(name))) $.userArr.push({ userName: name, username: name });
-    });
-    // 抓包数据自身也可能有重复，按用户名收敛
-    const seen = {};
-    $.userArr = $.userArr.filter(e => {
-        const key = normName(e.username);
-        if (!key || seen[key]) return false;
-        seen[key] = 1;
-        return true;
+        if (!$.userArr.some(e => normName(e.username) === normName(name))) $.userArr.push({ username: name });
     });
 
     if ($.userArr.length) {
@@ -95,9 +100,9 @@ async function main() {
                 $.messages.push(`❌ 签到: ${e.message || e}`);
             }
 
-            // 账号信息作为该账号通知的开头
+            // 账号信息作为该账号通知的开头（昵称优先）
             if ($.beforeMsgs) $.beforeMsgs += '\n';
-            $.beforeMsgs += `🔹 账号 慢慢买${i + 1}: ${$.user.userName || $.user.username || '未知'}`;
+            $.beforeMsgs += `🔹 账号${i + 1}: ${$.user.nickName || $.user.username || '未知'}`;
             $.messages.splice(0, 0, $.beforeMsgs), $.Messages = $.Messages.concat($.messages);
         }
         $.log(`\n----- 所有账号执行完成 -----\n`);
@@ -166,17 +171,17 @@ function GetCookie() {
 
         if (isResp) {
             if (!RESP_CAPTURE_REGEX.test(url)) return;
-            const username = findInBody(respBodyText());
-            if (!username) {
-                $.log(`[抓取诊断] 响应未带 u_name: ${url.split('?')[0]} (${respBodyText().length} 字节)`);
+            const acc = findInBody(respBodyText());
+            if (!acc) {
+                debug(`响应未带 u_name: ${url.split('?')[0]} (${respBodyText().length} 字节)`, '抓取');
                 return;
             }
-            saveAccount(username);
+            saveAccount(acc.username, acc.nickName);
         } else {
             if (!url || !REQ_CAPTURE_REGEX.test(url)) return;
             const params = pickParams($request);
             if (!params.username) {
-                $.log(`[抓取诊断] 请求未带 username: ${url.split('?')[0]} (APP 走原生注入时不带，靠响应侧抓取)`);
+                debug(`请求未带 username: ${url.split('?')[0]} (APP 走原生注入时不带，靠响应侧抓取)`, '抓取');
                 return;
             }
             saveAccount(params.username);
@@ -193,17 +198,21 @@ function respBodyText() {
     return '';
 }
 
-// 从响应体里取用户名: 兼容 "u_name":"x" 与被转义的 \"u_name\":\"x\" 与 JSONP 包裹
+// 从响应体里取账号: u_name/userName 作用户名, 同一条里的 nickName 作显示昵称
 function findInBody(text) {
-    if (!text) return '';
+    if (!text) return null;
     const flat = text.indexOf('\\u') !== -1 ? text.replace(/\\(["\\])/g, '$1') : text;
     for (const t of [text, flat]) {
         for (const k of NAME_KEYS) {
             const m = t.match(new RegExp('"' + k + '"\\s*:\\s*"([^"]{2,60})"'));
-            if (m) { const v = safeDecode(m[1]).trim(); if (isUserName(v)) return v; }
+            if (!m) continue;
+            const v = safeDecode(m[1]).trim();
+            if (!isUserName(v)) continue;
+            const n = t.match(/"nickName"\s*:\s*"([^"]{1,30})"/);
+            return { username: v, nickName: n ? String(n[1]).trim() : '' };
         }
     }
-    return '';
+    return null;
 }
 
 // 用户名形态: 慢慢买是 wx_xxxxxxxx / 手机号 / 字母数字下划线，排除纯中文昵称等误取
@@ -211,22 +220,34 @@ function isUserName(v) {
     return !!v && /^[A-Za-z0-9_\-\+@.]{2,60}$/.test(v);
 }
 
-// 写入账号数组：已存在且内容相同则不写不推送
-function saveAccount(username) {
+// 写入账号数组：已存在则不重复推送（昵称变了只更新显示名）
+function saveAccount(username, nickName) {
     username = String(username).trim();
+    nickName = String(nickName || '').trim();
     if (!isUserName(username)) {
-        $.log(`[抓取诊断] 忽略可疑用户名: ${username}`);
+        debug(`忽略可疑用户名: ${username}`, '抓取');
         return;
     }
-    const index = $.userArr.findIndex(e => normName(e.username) === normName(username));
-    if (index !== -1 && normName($.userArr[index].userName) === normName(username)) {
-        $.log(`慢慢买账号 ${username} 已存在，无需更新`);
+    const exist = $.userArr.find(e => normName(e.username) === normName(username));
+    if (exist) {
+        if (nickName && exist.nickName !== nickName) {
+            exist.nickName = nickName;
+            persistUsers();
+            $.log(`慢慢买账号 ${username} 昵称已更新: ${nickName}`);
+        } else {
+            $.log(`慢慢买账号 ${username} 已存在，无需更新`);
+        }
         return;
     }
-    index !== -1 ? $.userArr[index] = { userName: username, username } : $.userArr.push({ userName: username, username });
-    $.setdata($.toStr($.userArr), DATA_KEY);
-    $.Messages.push(`🎉获取慢慢买账号成功: ${username}`);
-    $.log(`🎉获取慢慢买账号成功: ${username}`);
+    $.userArr.push(nickName ? { username, nickName } : { username });
+    persistUsers();
+    $.Messages.push(`🎉获取慢慢买账号成功: ${nickName || username}`);
+    $.log(`🎉获取慢慢买账号成功: ${username}${nickName ? ` (${nickName})` : ''}`);
+}
+
+// 落盘只保留 username 与可选的 nickName
+function persistUsers() {
+    $.setdata($.toStr($.userArr.map(e => e.nickName ? { username: e.username, nickName: e.nickName } : { username: e.username })), DATA_KEY);
 }
 
 function normName(v) {
@@ -255,15 +276,6 @@ function pickParams(req) {
         }
     });
     return out;
-}
-
-// 抓不到 username 时把请求形态打出来，便于定位凭证在哪个字段
-function dumpRequest(req) {
-    const header = ObjectKeys2LowerCase(req.headers || {});
-    const body = typeof req.body === 'string' ? req.body : $.toStr(req.body || '');
-    $.log(`[抓取诊断] ${req.method || '?'} ${req.url}`);
-    $.log(`[抓取诊断] header keys: ${Object.keys(header).join(', ') || '(无)'}`);
-    $.log(`[抓取诊断] content-type: ${header['content-type'] || '(无)'} , body ${body.length} 字节: ${body.slice(0, 300) || '(空)'}`);
 }
 
 function safeDecode(v) {
