@@ -79,11 +79,16 @@ async function runAccount(acc) {
     $.log(signLine);
     $.messages.push(signLine);
 
-    // 抽奖: 逐条进日志，通知只留真实中奖项
+    // 抽奖: 逐条进日志，通知只留真实中奖项；连发会被判 RequestFrequent，故拉开间隔并各重试一次
     const prizes = [];
     for (let i = 0; i < DRAW_TASKS.length; i++) {
-        await $.wait(3000);
-        const r = await doDraw(jar, DRAW_TASKS[i]);
+        await $.wait(6000);
+        let r = await doDraw(jar, DRAW_TASKS[i]);
+        if (r.freq) {
+            $.log(`🎁 抽奖${i + 1}: ${r.log}，15 秒后重试`);
+            await $.wait(15000);
+            r = await doDraw(jar, DRAW_TASKS[i]);
+        }
         $.log(`🎁 抽奖${i + 1}: ${r.log}`);
         if (r.prize) prizes.push(`第${i + 1}次 ${r.prize}`);
     }
@@ -225,7 +230,8 @@ async function doSign(jar) {
     if (!resp || typeof resp !== 'object') throw new Error(`签到无有效响应: ${String(resp).slice(0, 120)}`);
     const bonus = resp.netdiskBonus;
     debug($.toStr(resp), '[userSign]');
-    return String(resp.isSign) === 'false' ? `✅ 签到: 成功，获得 ${bonus}M 空间` : `✔️ 签到: 今日已签到 (${bonus}M)`;
+    const got = bonus === undefined || bonus === null ? '' : `，获得 ${bonus}M 空间`;
+    return String(resp.isSign) === 'false' ? `✅ 签到: 成功${got}` : `✔️ 签到: 今日已签到${got}`;
 }
 
 // 抽奖：无次数时服务端回 errorCode，按 py 原样判
@@ -233,9 +239,10 @@ async function doDraw(jar, taskId) {
     const url = `https://m.cloud.189.cn/v2/drawPrizeMarketDetails.action?taskId=${taskId}&activityId=ACT_SIGNIN`;
     const resp = await Request({ url, headers: apiHeaders(jar, UA_SIGN), _timeout: 25000 });
     const text = typeof resp === 'string' ? resp : $.toStr(resp);
-    if (/errorCode/i.test(text || '')) {
-        const code = (/"errorCode"\s*:\s*"?([^",}\s]+)/.exec(text) || [])[1] || '';
-        return { prize: '', log: `次数不足${code ? ` (${code})` : ''}` };
+    const code = (/"errorCode"\s*:\s*"?([^",}\s]+)/.exec(text || '') || [])[1];
+    if (code) {
+        const freq = /RequestFrequent/i.test(code);
+        return { freq, prize: '', log: `${freq ? '请求过频' : '次数不足'} (${code})` };
     }
     if (!resp || typeof resp !== 'object') return { prize: '', log: `无有效响应: ${String(text).slice(0, 80)}` };
     debug($.toStr(resp), `[draw ${taskId}]`);
