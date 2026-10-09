@@ -916,6 +916,58 @@
           "desc": "逐条打印请求/响应明细，排查问题用；日志可能含 Cookie、token 等敏感信息，看完记得关掉"
         }
       ]
+    },
+    {
+      "id": "tyyp_sign",
+      "name": "天翼云盘签到",
+      "author": "@Feng",
+      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/tyyp_sign.js",
+      "descs_html": [
+        "天翼云盘每日签到领空间，签到后抽奖 3 次，支持多账号",
+        "在 tyyp_account 填「账号;密码」，多个账号以 # 或换行分隔，例：18888888888;yourpassword（账号可以是手机号/邮箱/天翼账号）",
+        "账号自己登录，不用抓包：登录时现取登录页下发的 RSA 公钥加密账密，密码明文只在本机 boxjs/环境变量里",
+        "tyyp_cache 是脚本自动维护的会话缓存（按账号存 Cookie，6 小时内先用业务接口验活后复用）；换密码或登录异常时清空它即可",
+        "通知出现「图形验证码错误，请重新输入」＝服务端风控要求验证码，脚本无法代填；先在天翼云盘 APP 或网页登录一次再跑",
+        "Stash 等会自动跟随重定向的环境收不到 SSO 302 上的 LT/STK，可能登录失败，建议用 Loon / Surge / Quantumult X / 青龙"
+      ],
+      "icons": [
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/tyyp.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/tyyp.png"
+      ],
+      "keys": [
+        "tyyp_account",
+        "tyyp_cache",
+        "tyyp_debug"
+      ],
+      "settings": [
+        {
+          "id": "tyyp_account",
+          "name": "天翼云盘账号",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 2,
+          "placeholder": "18888888888;yourpassword",
+          "desc": "账号;密码，多个账号以 # 或换行分隔"
+        },
+        {
+          "id": "tyyp_cache",
+          "name": "会话缓存",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 5,
+          "placeholder": "",
+          "desc": "脚本自动写入，形如 {\"账号\":{\"jar\":{...},\"expireTime\":...}}；换密码或登录异常时清空"
+        },
+        {
+          "id": "tyyp_debug",
+          "name": "调试模式",
+          "val": false,
+          "type": "boolean",
+          "desc": "逐条打印请求/响应明细，排查问题用；日志可能含 Cookie、token 等敏感信息，看完记得关掉"
+        }
+      ]
     }
   ]
 }

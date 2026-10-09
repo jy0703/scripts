@@ -1,0 +1,13 @@
+#!name = 天翼云盘签到
+#!desc = 天翼云盘每日签到领空间+3次抽奖，账号在本插件变量里填「账号;密码」，支持多账号
+#!author = Fengzzzz
+#!homepage = https://github.com/jy0703/scripts
+#!icon = https://raw.githubusercontent.com/jy0703/scripts/main/icons/tyyp.png
+#!tag = 签到,自动化
+#!type = normal
+
+[Argument]
+cronExpression = input,"30 7 * * *",tag=定时参数,desc=这里需要输入符合 CRON 表达式的参数
+
+[Script]
+cron {cronExpression} script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/tyyp_sign.js,timeout=600,tag=天翼云盘签到,enable=true
