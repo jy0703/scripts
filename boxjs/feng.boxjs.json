@@ -986,7 +986,7 @@
       "author": "@Feng",
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/nj_sign.js",
       "descs_html": [
-        "柠季柠檬茶专门店(美团 CRM)小程序每日签到得积分，连签若干天额外送优惠券",
+        "柠季柠檬茶专门店(美团 CRM)小程序每日签到得积分，连签若干天额外送优惠券；通知里带本月/累计签到天数、本次得到的券、积分余额与券包张数",
         "依赖「Code Server」分组中「获取小程序code」(@wxCode.address/token)，取号走 /wxapp/getPhoneNumber(会员按手机号认人，账号需已绑手机号)，账号 ref 填本区域 NJ_REF，支持多账号",
         "登录态 UNI-TOKEN 服务端只给 2 小时，脚本缓存 100 分钟后自动重新取号登录，无需抓包",
         "活动接口的 mtgsig 调自建签名服务生成(地址填 Code Server 分组的 @wxCode.mtgsig, 鉴权复用 @wxCode.token)，留空或调用失败会自动降级为不签名"
@@ -1041,6 +1041,7 @@
         "抓取：开启「阿里云社区获取Cookie」后，用浏览器打开 https://developer.aliyun.com 并登录，进入 个人中心 或 积分商城 页面即写入，抓完关闭捕获开关",
         "账号以 Cookie 里的 login_aliyunid_ticket 去重：isg/tfstk 等风控 cookie 每次都变，重复抓取只更新不新增账号",
         "aliyun_interact 为文章互动轮数(默认 5)，首轮额外做评论与分享；aliyun_cancel 仅在分界后的领奖模式生效，取消站内收藏列表里的点赞与收藏，用于次日重复刷任务",
+        "aliyun_video 打开后在任务模式多跑一个直播观看任务(ucc 直播开放接口，进度靠 danmu 的 seek 上报)：默认视频 253842 时长约 74 秒，整轮多花 1~2 分钟；直播会换，可用 aliyun_video_id 指定其它 id",
         "云起实验室「场景」任务未实现：旧接口 /adc/api/startSceneById 已废弃(实测回\"用户操作异常\")，新链 skillBuilder 需真实开通云资源，抽样 25 个场景 21 个 requirePay、0 个免费，不值得自动做",
         "通知出现「Cookie已失效」= ticket 过期，重新登录抓取即可"
       ],
@@ -1052,6 +1053,8 @@
         "aliyun_data",
         "aliyun_time",
         "aliyun_interact",
+        "aliyun_video",
+        "aliyun_video_id",
         "aliyun_cancel",
         "aliyun_debug"
       ],
@@ -1085,6 +1088,23 @@
           "rows": 1,
           "placeholder": "5",
           "desc": "每轮随机取一篇文章点赞+收藏并问答点赞一次；首轮追加评论与分享。填 0 则跳过文章与问答"
+        },
+        {
+          "id": "aliyun_video",
+          "name": "视频观看任务",
+          "val": false,
+          "type": "boolean",
+          "desc": "任务模式下多跑一个直播观看(约 1~2 分钟)，进度按 seek 秒数上报，长直播会自动放大跳幅控制在 40 轮内"
+        },
+        {
+          "id": "aliyun_video_id",
+          "name": "直播视频 id",
+          "val": "253842",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "253842",
+          "desc": "对应 https://developer.aliyun.com/live/<id>；上游脚本写死的那个仍有效，直播换了就从页面地址里取新 id 填进来"
         },
         {
           "id": "aliyun_cancel",

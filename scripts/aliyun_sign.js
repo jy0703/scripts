@@ -2,7 +2,7 @@
  * 脚本名称：阿里云开发者社区签到 - 社区签到、积分抽奖、文章互动、问答点赞、电子书评价
  * 活动规则：developer.aliyun.com 各社区板块每日签到得积分，积分商城另有点赞/收藏/评论/分享/问答/电子书等每日任务，完成后可领待领取积分
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。Cookie 由本脚本 GetCookie 抓取后存入 aliyun_data
- * 环境变量：aliyun_data、aliyun_time、aliyun_interact、aliyun_cancel、aliyun_debug
+ * 环境变量：aliyun_data、aliyun_time、aliyun_interact、aliyun_video、aliyun_video_id、aliyun_cancel、aliyun_debug
  * 备注：Cookie 取自 developer.aliyun.com 站内请求，需在浏览器（或 APP 内嵌页）登录状态下打开"个人中心/积分商城"触发抓取
  * 更新时间：2026-10-10
 
@@ -53,6 +53,7 @@ const splitHour = Number.isNaN(splitCfg) ? 12 : Math.min(23, Math.max(0, splitCf
 const HOST = 'developer.aliyun.com';
 const API = `https://${HOST}/developer/api`;
 const UCC = 'https://ucc.aliyun.com';
+const LIVE_VERSION = '1.1.23';
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
 
 // 社区板块：实测只有"我的社区"有签到任务组，其余具名社区对账号回 data=null（白跑 18 次请求），故只留这一个
@@ -80,7 +81,7 @@ async function main() {
             // 初始化
             $.messages = [];
             $.beforeMsgs = '';
-            $.stat = { actCount: 0, acts: [], votes: [], ebooks: [], signs: [], bonuses: [], collected: 0, canceled: 0 };
+            $.stat = { actCount: 0, acts: [], votes: [], ebooks: [], signs: [], bonuses: [], videos: [], collected: 0, canceled: 0 };
             $.user = normalizeUser($.userArr[i]);
 
             if (!await checkLogin($.user)) {
@@ -118,6 +119,12 @@ async function main() {
                 // 3. 电子书评价
                 $.log('\n--- 电子书评价 ---');
                 await doEbook($.user);
+
+                // 4. 视频观看（默认关闭，一轮约 1~2 分钟）
+                if (getEnv('aliyun_video') === 'true') {
+                    $.log('\n--- 视频任务 ---');
+                    await doVideo($.user);
+                }
             } else {
                 // 1. 领取各社区达标奖励
                 $.log('\n--- 领取签到奖励 ---');
@@ -143,7 +150,7 @@ async function main() {
 
             const bonusText = `抽奖 ${$.stat.bonuses.length} 次(${$.stat.bonuses.reduce((a, b) => a + b.score, 0)}分)`;
             const sum = isTaskTime
-                ? `\n📊 签到 ${$.stat.signs.length}/${COMMUNITIES.length} 个社区, ${bonusText}, 互动 ${$.stat.actCount} 次, 回答点赞 ${$.stat.votes.length} 次, 电子书 ${$.stat.ebooks.length} 本`
+                ? `\n📊 签到 ${$.stat.signs.length}/${COMMUNITIES.length} 个社区, ${bonusText}, 互动 ${$.stat.actCount} 次, 回答点赞 ${$.stat.votes.length} 次, 电子书 ${$.stat.ebooks.length} 本${$.stat.videos.length ? `, 视频 ${$.stat.videos.join(" / ")}` : ''}`
                 : `\n📊 ${bonusText}, 收取待领取 ${$.stat.collected} 积分, 取消互动 ${$.stat.canceled} 项`;
             $.log(sum);
             $.messages.push(`当前积分 ${$.user.score}，待领取 ${$.user.pendingScore}`, sum);
@@ -417,6 +424,51 @@ async function doEbook(user) {
     } else {
         $.log(`❌ 电子书评价: ${result?.message || $.toStr(result)}`);
     }
+}
+
+
+// ---------- 视频任务（ucc 直播开放接口，默认关闭）----------
+
+// 观看进度靠 danmu 的 seek 秒数上报；时长很长的直播按 step 放大跳幅，最多 40 轮，避免撞 cron timeout
+async function doVideo(user) {
+    const videoId = getEnv('aliyun_video_id') || '253842';
+    const sessionId = Date.now().toString(16) + Math.random().toString(16).slice(2, 10);
+
+    const detail = await liveApi(user, 'detail', videoId);
+    const live = detail?.data?.live;
+    if (!live?.name) {
+        $.log(`⛔️ 视频任务: 取不到直播信息 [${videoId}] ${detail?.message || $.toStr(detail)}`);
+        return;
+    }
+
+    const duration = Number(live.duration) || 0;
+    $.log(`✅ 获取视频信息: ${live.name}, 时长 ${duration} 秒`);
+
+    await liveApi(user, 'view', videoId, { sessionId });
+    await $.wait(randDelay());
+    await liveApi(user, 'play', videoId, { sessionId });
+    $.log(`✅ 开始播放视频: ${live.name}`);
+
+    const step = Math.max(3, Math.ceil(duration / 40));
+    for (let seek = step; seek < duration; seek += step) {
+        await liveApi(user, 'danmu', videoId, { seek });
+        if (seek % 60 === 0) {
+            await liveApi(user, 'online', videoId, { sessionId });
+            $.log(`✅ 在线心跳确认: ${seek} 秒`);
+        }
+        await $.wait(3000);
+    }
+
+    await liveApi(user, 'danmu', videoId, { seek: duration });
+    $.stat.videos.push(`${live.name}(${duration}秒)`);
+    $.log(`✅ 视频播放完毕: ${live.name}`);
+}
+
+// 直播开放接口为 JSONP，统一带 _/callback/version/id
+async function liveApi(user, action, videoId, extra = {}) {
+    const params = { _: Date.now(), callback: jsonpCallback(), version: LIVE_VERSION, id: videoId, ...extra };
+    const url = `${UCC}/api/ucc/live/open/${action}?${buildQuery(params)}`;
+    return await jsonp({ url, headers: baseHeaders(user, `https://${HOST}/live/${videoId}`) });
 }
 
 // 取消收藏与点赞

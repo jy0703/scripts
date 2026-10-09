@@ -42,6 +42,8 @@ $.Messages = [];
 // ---- 业务常量 (照抓包搬运) ----
 const APPID = 'wx177c513cc05c325d';                 // 柠季柠檬茶专门店
 const BASE_URL = 'https://pos.meituan.com';
+const RMS_URL = 'https://rms.meituan.com';                   // 会员资产(积分/券包)在点餐域, 实测同样不校验 mtgsig
+const RESTAURANT_VIEW_ID = '126269';
 const TENANT_ID = '10159618';                       // 柠季租户, 同时是 cookie 名 UNI-TOKEN-<tenantId> 的一部分
 const ORG_ID = '429605';
 const POI_ID = '0';
@@ -50,6 +52,7 @@ const CAMPAIGN_TYPE = '87';                         // 签到活动类型
 const DEFAULT_CAMPAIGN_ID = '1010906116';           // 「26年会员3月起签到活动」, 有效期至 2026-12-31
 const CACHE_KEY = 'NJ_TOKEN_CACHE';                 // 缓存键: 存 {ref:{token,cardId,memberId,label,expireTime,updateTime}}
 const QUERY_SUFFIX = `?yodaReady=wx&csecappid=${APPID}&csecplatform=3&csecversionname=127.34.000&csecversion=1.4.0`;
+const RMS_SUFFIX = `?mtShopId=&yodaReady=wx&csecappid=${APPID}&csecplatform=3&csecversionname=127.34.000&csecversion=1.4.0`;
 
 const USER_AGENT = 'Mozilla/5.0 (iPhone; CPU iPhone OS 27_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.79(0x18004f26) NetType/WIFI Language/zh_CN';
 
@@ -152,16 +155,19 @@ async function getPhoneAuthCode(ref) {
     return String(verifyCode);
 }
 
-// campaign/* 活动接口: 与小程序一致带 mtgsig(签名失败则不签名)
-async function campaignPost(path, account, body) {
-    const url = `${BASE_URL}${path}${QUERY_SUFFIX}`;
-    const headers = crmHeaders(account);
+// 业务接口统一带 mtgsig(签名服务不可用时留空)
+async function signedPost(url, headers, body) {
     const sig = await mtgsigOf(url, headers, body);
     if (sig) headers['mtgsig'] = sig;
     return await Request({ url, headers, body });
 }
 
-// 查本月签到记录 + 签到
+// campaign/* 活动接口
+async function campaignPost(path, account, body) {
+    return await signedPost(`${BASE_URL}${path}${QUERY_SUFFIX}`, crmHeaders(account), body);
+}
+
+// 查本月签到记录 + 签到 + 汇总会员资产
 async function signIn(account) {
     const range = monthRange();
     const records = await campaignPost('/api/v1/crm/frontend/campaign/sign-in/records-and-incentives', account,
@@ -174,7 +180,8 @@ async function signIn(account) {
     const total = records.totalSignInRecords?.totalSignInCount;
     $.log(`📅 [签到] 累计签到 ${total ?? '-'} 天, 本月 ${monthDays} 天, 按钮: ${records.signInButtonContent}`);
     if (records.alreadySignedInToday) {
-        $.messages.push(`⚠️ 签到: 今日已签到（本月 ${monthDays} 天）`);
+        $.messages.push(`⚠️ 签到: 今日已签到（${daysText(monthDays, total)}）`);
+        await assetsLine(account, records.nextStepIncentives);
         return;
     }
 
@@ -185,18 +192,45 @@ async function signIn(account) {
         $.messages.push(/(已签到|重复)/.test(String(msg)) ? `⚠️ 签到: ${msg}` : `❌ 签到: ${msg}`);
         return;
     }
-    const gained = [`+${sign.issuedPointAmount ?? 0} 积分`];
-    if (sign.issuedCouponNum) gained.push(`优惠券 ${sign.issuedCouponNum} 张`);
-    if (sign.issuedMedalNum) gained.push(`勋章 ${sign.issuedMedalNum} 枚`);
-    const next = stripHtml(sign.nextStepIncentives?.nextStepIncentivesContentPrefix);
-    $.messages.push(`✅ 签到: ${gained.join('、')}（本月 ${monthDays + 1} 天${next ? `，${next}` : ''}）`);
-    const coupons = sign.issuedCouponDisplayInfos || sign.nextStepIncentives?.toIssueCouponInfos || [];
-    for (const item of coupons) {
+    const after = total === null || total === undefined ? null : total + 1;
+    $.messages.push(`✅ 签到: +${sign.issuedPointAmount ?? 0} 积分（${daysText(monthDays + 1, after)}）`);
+    const got = couponNames(sign.issuedCouponDisplayInfos);
+    if (got.length) {
+        $.messages.push(`🎫 得券: ${got.join('、')}`);
+        $.log(`🎁 [签到] 本次得券: ${got.join('、')}`);
+    }
+    await assetsLine(account, sign.nextStepIncentives);
+}
+
+function daysText(month, total) {
+    return total === null || total === undefined ? `本月 ${month} 天` : `本月 ${month} 天，累计 ${total} 天`;
+}
+
+// 券列表 -> "名称(有效期)"; 已发放的券在 displayData 里, 待发放的在 couponTemplate 里
+function couponNames(list) {
+    const names = [];
+    for (const item of list || []) {
         const dd = item.displayData || {};
         const name = item.couponTemplate?.title || dd.name?.value || item.title || '';
         if (!name) continue;
-        $.log(`🎁 [签到] 券: ${name}${dd.time?.value ? `，${dd.time.value}` : ''}`);
+        names.push(dd.time?.value ? `${name}(${dd.time.value})` : name);
     }
+    return names;
+}
+
+// 一行报账户资产(积分余额/券包张数/卡级), 再报下一档连签奖励
+async function assetsLine(account, nextStep) {
+    const resp = await signedPost(`${RMS_URL}/api/v1/rmsmina/c/comp/member/membercard${RMS_SUFFIX}`, rmsHeaders(account),
+        { styleType: '1', cardId: account.cardId, restaurantViewId: RESTAURANT_VIEW_ID, bizIdType: '40' });
+    const card = resp?.data?.memberInfo?.mbCards?.[0];
+    if (card) {
+        $.messages.push(`💰 积分 ${card.point ?? '-'} · 券包 ${card.couponCount ?? '-'} 张${card.title ? ` · ${card.title}` : ''}`);
+    } else {
+        $.log(`⚠️ [资产] 查询失败: ${resp?.message || $.toStr(resp)}`);
+    }
+    const prefix = stripHtml(nextStep?.nextStepIncentivesContentPrefix);
+    const willGet = couponNames(nextStep?.toIssueCouponInfos);
+    if (prefix && willGet.length) $.messages.push(`🎁 ${prefix}: ${willGet.join('、')}`);
 }
 
 // ---------- 柠季(美团 CRM)请求头 ----------
@@ -248,9 +282,34 @@ function crmHeaders(account) {
     return h;
 }
 
+// 点餐域(rms)会员资产接口: appCode 51、poiId 留空、X-WxappVersion 用小程序版本号, 与抓包一致
+function rmsHeaders(account) {
+    const h = {
+        'content-type': 'application/json',
+        'User-Agent': USER_AGENT,
+        'Referer': `https://servicewechat.com/${APPID}/283/page-frame.html`,
+        'app-id': APPID,
+        'X-appId': APPID,
+        'poiId': '',
+        'tenantId': TENANT_ID,
+        'appCode': '51',
+        'versionCode': '6291000',
+        'app-version': '6.29.10',
+        'app-template': '2',
+        'app-container': '1',
+        'app-platform': '1',
+        'M-APPKEY': 'wxmp_com.sankuai.rmsmenuorderfe.v2.wxapp',
+        'X-Platform': '71',
+        'X-WxappVersion': '6.29.10',
+        'X-token': `UNI-TOKEN-${TENANT_ID}:${account.token};`,
+    };
+    if (account.cardId) h['x-cardId'] = account.cardId;
+    return h;
+}
+
 // ---------- mtgsig 签名(调自建签名服务, 拿不到就降级为不签名) ----------
 
-// 只对 campaign/* 接口签名(与小程序行为一致: member/login 与 queryMemberId 都不带 mtgsig)
+// 给 campaign/* 与 rms 会员资产接口签名(与小程序行为一致: member/login 和 queryMemberId 本来就不带 mtgsig)
 async function mtgsigOf(url, headers, data) {
     if ($.mtgsigDead || !$.mtgsigApi) return '';
     const resp = await Request({
