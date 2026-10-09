@@ -2,7 +2,7 @@
  * 脚本名称：泉水签到 - 签到
  * 活动规则：每日签到获得积分奖励
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。
- * 环境变量：QUANSHUI_TOKEN
+ * 环境变量：QUANSHUI_TOKEN、quanshui_debug
  * 更新时间：2026-01-08 更新活动 Code
 
 ------------------ Surge 配置 ------------------
@@ -61,7 +61,7 @@ script-providers:
  */
 
 const $ = new Env('泉水签到');
-$.is_debug = getEnv('is_debug') || 'false';  // 调试模式
+$.is_debug = getEnv('quanshui_debug', 'is_debug') || 'false';  // 调试模式
 $.userInfo = getEnv('QUANSHUI_TOKEN') || '';  // 获取账号
 $.userArr = $.userInfo.split(/&|\n/).filter(t => t.trim());  // 用户信息
 $.Messages = [];

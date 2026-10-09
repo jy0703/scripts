@@ -2,7 +2,7 @@
  * 脚本名称：车来了签到 - 签到、惊喜任务（分享朋友圈等）
  * 活动规则：每日签到获得金币奖励，7 天一周期；每日惊喜任务（如分享至朋友圈）完成可领额外金币
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。签到参数（URL 查询参数）由本脚本的 GetCookie 抓取后存入 cll_data
- * 环境变量：cll_data
+ * 环境变量：cll_data、cll_debug
  * 备注：secret 参数随登录变化，若签到返回"非法请求"，请重新打开签到页抓取参数
  * 更新时间：2026-10-05 修正任务领取：incomplete 先 report 再 claim
 
@@ -40,7 +40,7 @@ hostname = web.chelaile.net.cn
  */
 
 const $ = new Env('车来了签到');
-$.is_debug = getEnv('is_debug') || 'false';  // 调试模式
+$.is_debug = getEnv('cll_debug', 'is_debug') || 'false';  // 调试模式(boxjs 开关 cll_debug)
 $.userInfo = getEnv('cll_data') || '';  // 获取账号
 $.userArr = [].concat($.toObj($.userInfo) || []);  // 用户信息
 $.Messages = [];

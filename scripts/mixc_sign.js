@@ -2,7 +2,7 @@
  * 脚本名称：一点万象签到
  * 活动规则：华润万象生活「一点万象」APP 每日签到领积分，连签达阶段可领阶段奖，覆盖万象汇/万象城/万象天地等华润商场
  * 脚本说明：支持多账号（同一账号多家商场各抓一次），支持 NE / Node.js 环境。账号参数（token + 设备参数）由本脚本 GetCookie 抓取后存入 mixc_data
- * 环境变量：mixc_data
+ * 环境变量：mixc_data、mixc_debug
  * 更新时间：2026-10-05
 
 ------------------ Surge 配置 ------------------
@@ -39,7 +39,7 @@ hostname = app.mixcapp.com
  */
 
 const $ = new Env('一点万象');
-$.is_debug = getEnv('is_debug') || 'false';  // 调试模式
+$.is_debug = getEnv('mixc_debug', 'is_debug') || 'false';  // 调试模式(boxjs 开关 mixc_debug)
 $.userInfo = getEnv('mixc_data') || '';  // 获取账号
 $.userArr = $.toObj($.userInfo) || [];  // 用户信息
 $.Messages = [];

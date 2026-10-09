@@ -2,7 +2,7 @@
  * 脚本名称：WPS签到
  * 活动规则：WPS任务中心(签到+任务+抽奖)、天天领福利、WPS挑战计划、WPS超级会员小程序(签到+浏览任务+抽奖)
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。对齐 wps.py v4.0.0。
- * 环境变量：WPS_COOKIE（自动抓取，JSON数组 [{uid,cookie}]，条目可加 ref 字段用于小程序浏览任务）
+ * 环境变量：WPS_COOKIE（自动抓取，JSON数组 [{uid,cookie}]，条目可加 ref 字段用于小程序浏览任务）、wps_debug
  * 小程序浏览任务：依赖 YYB code 服务，boxjs 配置 @wxCode.address / @wxCode.token，账号 ref 填在本脚本区域 WPS_REF
  *          （Node 环境变量 WX_CODE_ADDRESS / WX_CODE_TOKEN / WPS_REF 亦可，多个 ref 逗号分隔按账号顺序对应）
  * 获取 Cookie：在 WPS 内从会员中心横幅进入签到活动页（触发 rubik2/portal 页面请求）即可抓取，Cookie 含 uid 即可入库
@@ -66,7 +66,7 @@ script-providers:
  */
 
 const $ = new Env('WPS签到');
-$.is_debug = getEnv('is_debug') || 'false';  // 调试模式
+$.is_debug = getEnv('wps_debug', 'is_debug') || 'false';  // 调试模式
 $.userInfo = getEnv('WPS_COOKIE') || '';  // 获取账号
 $.userArr = $.toObj($.userInfo) || [];  // 用户信息
 $.Messages = [];

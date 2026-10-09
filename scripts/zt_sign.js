@@ -2,7 +2,7 @@
  * 脚本名称：中通快递签到
  * 活动规则：每日签到获得奖励
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。
- * 环境变量：ZTO_TOKEN
+ * 环境变量：ZTO_TOKEN、zt_debug
  * 更新时间：2026-01-24
 
 ------------------ Surge 配置 ------------------
@@ -70,7 +70,7 @@ script-providers:
 
 
 const $ = new Env('中通快递签到');
-$.is_debug = getEnv('is_debug') || 'false';  // 调试模式
+$.is_debug = getEnv('zt_debug', 'is_debug') || 'false';  // 调试模式
 $.userInfo = getEnv('ZTO_TOKEN') || '';  // 获取账号
 $.userArr = $.toObj($.userInfo) || [];  // 用户信息
 $.Messages = [];

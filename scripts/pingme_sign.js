@@ -2,7 +2,7 @@
  * 脚本名称：PingMe签到 - 签到、视频奖励
  * 活动规则：每日签到获得 Coins，可继续领取视频奖励
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。签到参数（请求头 + 公共参数）由本脚本的 GetCookie 抓取后存入 pingme_data
- * 环境变量：pingme_data
+ * 环境变量：pingme_data、pingme_debug
  * 更新时间：2026-09-29
 
 ------------------ Surge 配置 ------------------
@@ -39,7 +39,7 @@ hostname = api.pingmeapp.net
  */
 
 const $ = new Env('PingMe签到');
-$.is_debug = getEnv('is_debug') || 'false';  // 调试模式
+$.is_debug = getEnv('pingme_debug', 'is_debug') || 'false';  // 调试模式(boxjs 开关 pingme_debug)
 $.userInfo = getEnv('pingme_data') || '';  // 获取账号
 $.userArr = [].concat($.toObj($.userInfo) || []);  // 用户信息
 $.Messages = [];

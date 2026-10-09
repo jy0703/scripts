@@ -34,7 +34,7 @@ cron "0 9 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/m
  */
 
 const $ = new Env('海底捞');
-$.is_debug = getEnv('is_debug') || 'false';  // 调试模式
+$.is_debug = getEnv('hdl_debug', 'is_debug') || 'false';  // 调试模式(boxjs 开关 hdl_debug)
 $.Messages = [];
 
 // ---- 业务常量 (照 py 源码搬运, 登录链路按 HAR 抓包补全) ----

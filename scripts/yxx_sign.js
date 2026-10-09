@@ -30,7 +30,7 @@ cron "0 9 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/m
  */
 
 const $ = new Env('印享星');
-$.is_debug = getEnv('is_debug') || 'false';  // 调试模式
+$.is_debug = getEnv('yxx_debug', 'is_debug') || 'false';  // 调试模式(boxjs 开关 yxx_debug)
 $.Messages = [];
 
 const APP_NAME = '印享星会员小程序';

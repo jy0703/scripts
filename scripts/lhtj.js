@@ -2,7 +2,7 @@
  * 脚本名称：龙湖天街签到 - 签到、抽奖
  * 活动规则：每日签到获得积分、珑珠奖励，可参与抽奖
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。
- * 环境变量：lhtj_data
+ * 环境变量：lhtj_data、lhtj_debug
  * 更新时间：2026-01-15 优化结构
 
 ------------------ Surge 配置 ------------------
@@ -39,7 +39,7 @@ hostname = gw2c-hw-open.longfor.com
  */
 
 const $ = new Env('龙湖天街');
-$.is_debug = getEnv('is_debug') || 'false';  // 调试模式
+$.is_debug = getEnv('lhtj_debug', 'is_debug') || 'false';  // 调试模式
 $.userInfo = getEnv('lhtj_data') || '';  // 获取账号
 $.userArr = $.toObj($.userInfo) || [];  // 用户信息
 $.Messages = [];

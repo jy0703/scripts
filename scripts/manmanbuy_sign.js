@@ -2,7 +2,7 @@
  * 脚本名称：慢慢买签到
  * 活动规则：每日签到领积分与金币，幸运日可开启幸运礼盒
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。签到接口只认 username + 应用级 token，账号由响应侧抓取（首页 index_json.ashx 返回的 u_name）写入 manmanbuy_data（形如 [{"username":"wx_xxxx","nickName":"昵称"}]，昵称仅用于通知显示），也可在 manmanbuy_users 里直接填用户名
- * 环境变量：manmanbuy_data、manmanbuy_users、manmanbuy_token(可选，token 轮换时覆盖)
+ * 环境变量：manmanbuy_data、manmanbuy_users、manmanbuy_token(可选，token 轮换时覆盖)、manmanbuy_debug
  * 更新时间：2026-10-09
 
 ------------------ Surge 配置 ------------------
@@ -39,7 +39,7 @@ hostname = apapia.manmanbuy.com
  */
 
 const $ = new Env('慢慢买');
-$.is_debug = getEnv('is_debug') || 'false';  // 调试模式
+$.is_debug = getEnv('manmanbuy_debug', 'is_debug') || 'false';  // 调试模式(boxjs 开关 manmanbuy_debug)
 $.userInfo = getEnv('manmanbuy_data') || '';  // 获取账号
 // 存储格式为 [{"username":"wx_xxxx","nickName":"昵称"}]，nickName 仅用于通知显示
 $.userArr = parseUsers($.userInfo);
@@ -171,9 +171,12 @@ function GetCookie() {
 
         if (isResp) {
             if (!RESP_CAPTURE_REGEX.test(url)) return;
-            const acc = findInBody(respBodyText());
+            const body = respBodyText();
+            const acc = findInBody(body);
             if (!acc) {
-                debug(`响应未带 u_name: ${url.split('?')[0]} (${respBodyText().length} 字节)`, '抓取');
+                // 同一个 index_json.ashx 靠 action 区分，只有 getuserinfo 那条带账号
+                const action = ((($request && $request.body) || '').match(/(?:^|&)action=([^&]*)/) || [])[1] || '?';
+                debug(`未命中 action=${action}，响应 ${body.length} 字节: ${body.slice(0, 80) || '(空)'}`, '抓取');
                 return;
             }
             saveAccount(acc.username, acc.nickName);
@@ -220,7 +223,7 @@ function isUserName(v) {
     return !!v && /^[A-Za-z0-9_\-\+@.]{2,60}$/.test(v);
 }
 
-// 写入账号数组：已存在则不重复推送（昵称变了只更新显示名）
+// 写入账号数组：数据有变化就推送（新账号 / 昵称新增或改动），完全没变化才静默
 function saveAccount(username, nickName) {
     username = String(username).trim();
     nickName = String(nickName || '').trim();
@@ -233,9 +236,10 @@ function saveAccount(username, nickName) {
         if (nickName && exist.nickName !== nickName) {
             exist.nickName = nickName;
             persistUsers();
+            $.Messages.push(`🎉慢慢买昵称已更新: ${username} → ${nickName}`);
             $.log(`慢慢买账号 ${username} 昵称已更新: ${nickName}`);
         } else {
-            $.log(`慢慢买账号 ${username} 已存在，无需更新`);
+            $.log(`慢慢买账号 ${username} 已存在且无变化，不重复写入`);
         }
         return;
     }

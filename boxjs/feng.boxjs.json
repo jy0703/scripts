@@ -18,7 +18,8 @@
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/aikebang.png"
       ],
       "keys": [
-        "AIKEBANG_TOKEN"
+        "AIKEBANG_TOKEN",
+        "aikebang_debug"
       ],
       "settings": [
         {
@@ -30,6 +31,13 @@
           "rows": 3,
           "placeholder": "",
           "desc": ""
+        },
+        {
+          "id": "aikebang_debug",
+          "name": "调试模式",
+          "val": false,
+          "type": "boolean",
+          "desc": "逐条打印请求/响应明细，排查问题用；日志可能含 Cookie、token 等敏感信息，看完记得关掉"
         }
       ]
     },
@@ -46,7 +54,8 @@
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/quanshui.png"
       ],
       "keys": [
-        "QUANSHUI_TOKEN"
+        "QUANSHUI_TOKEN",
+        "quanshui_debug"
       ],
       "settings": [
         {
@@ -58,6 +67,13 @@
           "rows": 3,
           "placeholder": "",
           "desc": ""
+        },
+        {
+          "id": "quanshui_debug",
+          "name": "调试模式",
+          "val": false,
+          "type": "boolean",
+          "desc": "逐条打印请求/响应明细，排查问题用；日志可能含 Cookie、token 等敏感信息，看完记得关掉"
         }
       ]
     },
@@ -77,7 +93,8 @@
       ],
       "keys": [
         "WPS_REF",
-        "WPS_COOKIE"
+        "WPS_COOKIE",
+        "wps_debug"
       ],
       "settings": [
         {
@@ -99,6 +116,13 @@
           "rows": 5,
           "placeholder": "",
           "desc": ""
+        },
+        {
+          "id": "wps_debug",
+          "name": "调试模式",
+          "val": false,
+          "type": "boolean",
+          "desc": "逐条打印请求/响应明细，排查问题用；日志可能含 Cookie、token 等敏感信息，看完记得关掉"
         }
       ]
     },
@@ -119,7 +143,8 @@
       "keys": [
         "ydyp_data",
         "ydyp_device_id",
-        "ydyp_cache"
+        "ydyp_cache",
+        "ydyp_debug"
       ],
       "settings": [
         {
@@ -151,6 +176,13 @@
           "rows": 4,
           "placeholder": "",
           "desc": "脚本自维护(对应 py 的 ydyp_device_ids.json)，清空即可让账号重新生成 deviceId 与刷新 Token"
+        },
+        {
+          "id": "ydyp_debug",
+          "name": "调试模式",
+          "val": false,
+          "type": "boolean",
+          "desc": "逐条打印请求/响应明细，排查问题用；日志可能含 Cookie、token 等敏感信息，看完记得关掉"
         }
       ]
     },
@@ -167,7 +199,8 @@
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/zt.png"
       ],
       "keys": [
-        "ZTO_TOKEN"
+        "ZTO_TOKEN",
+        "zt_debug"
       ],
       "settings": [
         {
@@ -179,6 +212,13 @@
           "rows": 3,
           "placeholder": "",
           "desc": ""
+        },
+        {
+          "id": "zt_debug",
+          "name": "调试模式",
+          "val": false,
+          "type": "boolean",
+          "desc": "逐条打印请求/响应明细，排查问题用；日志可能含 Cookie、token 等敏感信息，看完记得关掉"
         }
       ]
     },
@@ -195,7 +235,8 @@
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/lhtj.png"
       ],
       "keys": [
-        "lhtj_data"
+        "lhtj_data",
+        "lhtj_debug"
       ],
       "settings": [
         {
@@ -207,6 +248,13 @@
           "rows": 5,
           "placeholder": "",
           "desc": ""
+        },
+        {
+          "id": "lhtj_debug",
+          "name": "调试模式",
+          "val": false,
+          "type": "boolean",
+          "desc": "逐条打印请求/响应明细，排查问题用；日志可能含 Cookie、token 等敏感信息，看完记得关掉"
         }
       ]
     },
@@ -223,7 +271,8 @@
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/cll.png"
       ],
       "keys": [
-        "cll_data"
+        "cll_data",
+        "cll_debug"
       ],
       "settings": [
         {
@@ -235,6 +284,13 @@
           "rows": 5,
           "placeholder": "",
           "desc": ""
+        },
+        {
+          "id": "cll_debug",
+          "name": "调试模式",
+          "val": false,
+          "type": "boolean",
+          "desc": "逐条打印请求/响应明细，排查问题用；日志可能含 Cookie、token 等敏感信息，看完记得关掉"
         }
       ]
     },
@@ -297,7 +353,8 @@
       ],
       "keys": [
         "YXX_REF",
-        "YXX_PLAZA_CODE"
+        "YXX_PLAZA_CODE",
+        "yxx_debug"
       ],
       "settings": [
         {
@@ -319,6 +376,13 @@
           "rows": 1,
           "placeholder": "",
           "desc": "plazaCode, 默认 G001Z003C0018, 按抓包改"
+        },
+        {
+          "id": "yxx_debug",
+          "name": "调试模式",
+          "val": false,
+          "type": "boolean",
+          "desc": "逐条打印请求/响应明细，排查问题用；日志可能含 Cookie、token 等敏感信息，看完记得关掉"
         }
       ]
     },
@@ -336,7 +400,8 @@
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/thyc.png"
       ],
       "keys": [
-        "THYC_REF"
+        "THYC_REF",
+        "thyc_debug"
       ],
       "settings": [
         {
@@ -348,6 +413,13 @@
           "rows": 1,
           "placeholder": "",
           "desc": "code 服务的账号 ID/UIN/openid, 多个以英文逗号隔开, 一个 ref 一个微信身份"
+        },
+        {
+          "id": "thyc_debug",
+          "name": "调试模式",
+          "val": false,
+          "type": "boolean",
+          "desc": "逐条打印请求/响应明细，排查问题用；日志可能含 Cookie、token 等敏感信息，看完记得关掉"
         }
       ]
     },
@@ -366,7 +438,8 @@
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/ydyp.png"
       ],
       "keys": [
-        "ydyp_exchange_prizes"
+        "ydyp_exchange_prizes",
+        "ydyp_exchange_debug"
       ],
       "settings": [
         {
@@ -378,6 +451,13 @@
           "rows": 1,
           "placeholder": "",
           "desc": "exchangeList 返回的 prizeId，多个以英文逗号分隔；留空则只查询不兑换"
+        },
+        {
+          "id": "ydyp_exchange_debug",
+          "name": "调试模式",
+          "val": false,
+          "type": "boolean",
+          "desc": "逐条打印请求/响应明细，排查问题用；日志可能含 Cookie、token 等敏感信息，看完记得关掉"
         }
       ]
     },
@@ -511,7 +591,8 @@
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/mixc.png"
       ],
       "keys": [
-        "mixc_data"
+        "mixc_data",
+        "mixc_debug"
       ],
       "settings": [
         {
@@ -523,6 +604,13 @@
           "rows": 5,
           "placeholder": "",
           "desc": "由 rewrite 抓取自动写入，勿手填；含 token/mallNo/imei/deviceParams/appVersion/osVersion"
+        },
+        {
+          "id": "mixc_debug",
+          "name": "调试模式",
+          "val": false,
+          "type": "boolean",
+          "desc": "逐条打印请求/响应明细，排查问题用；日志可能含 Cookie、token 等敏感信息，看完记得关掉"
         }
       ]
     },
@@ -542,7 +630,8 @@
       ],
       "keys": [
         "HDL_REF",
-        "HDL"
+        "HDL",
+        "hdl_debug"
       ],
       "settings": [
         {
@@ -564,6 +653,13 @@
           "rows": 2,
           "placeholder": "",
           "desc": "可选抓包兜底，留空则走 code 服务；格式 openId&uid / wx#openId&uid / app#TOKEN / TOKEN，多条以换行或 ; 分隔"
+        },
+        {
+          "id": "hdl_debug",
+          "name": "调试模式",
+          "val": false,
+          "type": "boolean",
+          "desc": "逐条打印请求/响应明细，排查问题用；日志可能含 Cookie、token 等敏感信息，看完记得关掉"
         }
       ]
     },
@@ -586,7 +682,8 @@
       "keys": [
         "aeon_ref",
         "aeon_cache",
-        "aeon_store"
+        "aeon_store",
+        "aeon_debug"
       ],
       "settings": [
         {
@@ -618,6 +715,13 @@
           "rows": 1,
           "placeholder": "MYDSC02024",
           "desc": "可选：填写后对所有账号强制生效（统一在该商场签到）；留空则各账号使用登录响应返回的绑定商场"
+        },
+        {
+          "id": "aeon_debug",
+          "name": "调试模式",
+          "val": false,
+          "type": "boolean",
+          "desc": "逐条打印请求/响应明细，排查问题用；日志可能含 Cookie、token 等敏感信息，看完记得关掉"
         }
       ]
     },
@@ -635,7 +739,8 @@
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/pingme.png"
       ],
       "keys": [
-        "pingme_data"
+        "pingme_data",
+        "pingme_debug"
       ],
       "settings": [
         {
@@ -647,6 +752,13 @@
           "rows": 5,
           "placeholder": "",
           "desc": "由 rewrite 抓取自动写入，勿手填；签到请求头与公共参数都存在这里"
+        },
+        {
+          "id": "pingme_debug",
+          "name": "调试模式",
+          "val": false,
+          "type": "boolean",
+          "desc": "逐条打印请求/响应明细，排查问题用；日志可能含 Cookie、token 等敏感信息，看完记得关掉"
         }
       ]
     },
@@ -671,7 +783,8 @@
         "SMZDM_SK",
         "SMZDM_COMMENT",
         "SMZDM_CROWD_SILVER_5",
-        "SMZDM_CROWD_KEYWORD"
+        "SMZDM_CROWD_KEYWORD",
+        "smzdm_debug"
       ],
       "settings": [
         {
@@ -733,6 +846,13 @@
           "rows": 1,
           "placeholder": "",
           "desc": "非免费抽奖时优先匹配的奖品关键词"
+        },
+        {
+          "id": "smzdm_debug",
+          "name": "调试模式",
+          "val": false,
+          "type": "boolean",
+          "desc": "逐条打印请求/响应明细，排查问题用；日志可能含 Cookie、token 等敏感信息，看完记得关掉"
         }
       ]
     },
@@ -755,7 +875,8 @@
       "keys": [
         "manmanbuy_data",
         "manmanbuy_users",
-        "manmanbuy_token"
+        "manmanbuy_token",
+        "manmanbuy_debug"
       ],
       "settings": [
         {
@@ -786,6 +907,13 @@
           "rows": 1,
           "placeholder": "默认 mmb188",
           "desc": "一般留空；服务端轮换后在此填新值"
+        },
+        {
+          "id": "manmanbuy_debug",
+          "name": "调试模式",
+          "val": false,
+          "type": "boolean",
+          "desc": "逐条打印请求/响应明细，排查问题用；日志可能含 Cookie、token 等敏感信息，看完记得关掉"
         }
       ]
     }

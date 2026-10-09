@@ -28,7 +28,7 @@ cron "0 10,16,0 * * *", script-path=https://raw.githubusercontent.com/jy0703/scr
  */
 
 const $ = new Env('移动云盘商品抢兑');
-$.is_debug = getEnv('is_debug') || 'false';  // 调试模式
+$.is_debug = getEnv('ydyp_exchange_debug', 'is_debug') || 'false';  // 调试模式(boxjs 开关 ydyp_exchange_debug)
 $.Messages = [];
 
 // ---- 业务常量 ----

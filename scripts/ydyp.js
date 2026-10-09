@@ -2,7 +2,7 @@
  * 脚本名称：移动云盘自动签到 - 签到
  * 活动规则：每日签到、云朵中心任务、算力大作战、红包派对，领取云朵与奖品
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。Authorization 由本脚本 GetCookie 抓取（打开移动云盘 App 即可命中），deviceId 可选、需自行抓包填写
- * 环境变量：ydyp_data（账号）、ydyp_device_id（可选，全局 deviceId）、ydyp_cache（脚本自维护的 deviceId/Token 缓存）
+ * 环境变量：ydyp_data（账号）、ydyp_device_id（可选，全局 deviceId）、ydyp_cache（脚本自维护的 deviceId/Token 缓存）、ydyp_debug
  * 对应 Python 版本：ydyp.py v5.0.8
  * 更新时间：2026-10-04
 
@@ -64,7 +64,7 @@ script-providers:
  */
 
 const $ = new Env('移动云盘签到');
-$.is_debug = getEnv('is_debug') || 'false';  // 调试模式
+$.is_debug = getEnv('ydyp_debug', 'is_debug') || 'false';  // 调试模式(boxjs 开关 ydyp_debug)
 $.userInfo = getEnv('ydyp_data') || '';  // 获取账号
 $.userArr = $.toObj($.userInfo) || [];  // 用户信息 [{Authorization, phone, deviceId}]
 $.Messages = [];

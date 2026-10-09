@@ -2,7 +2,7 @@
  * 脚本名称：艾克帮签到 - 签到
  * 活动规则：每日签到获得积分奖励
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。
- * 环境变量：AIKEBANG_TOKEN
+ * 环境变量：AIKEBANG_TOKEN、aikebang_debug
  * 更新时间：2026-01-09 更新活动 Code
 
 ------------------ Surge 配置 ------------------
@@ -62,7 +62,7 @@ script-providers:
  */
 
 const $ = new Env('艾克帮签到');
-$.is_debug = getEnv('is_debug') || 'false';  // 调试模式
+$.is_debug = getEnv('aikebang_debug', 'is_debug') || 'false';  // 调试模式
 $.userInfo = getEnv('AIKEBANG_TOKEN') || '';  // 获取账号
 $.userArr = $.toObj($.userInfo) || [];  // 用户信息
 $.Messages = [];
