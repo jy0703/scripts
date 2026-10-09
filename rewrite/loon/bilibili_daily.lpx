@@ -1,8 +1,8 @@
 #!name = BiliBili每日等级任务
 #!desc = B站每日经验/投币等任务，支持 APP 请求头与扫码两种方式获取 Cookie（fork 自 ClydeTime/BiliBili，修复 Loon 扫码通知被丢弃）
 #!author = Fengzzzz
-#!homepage = https://github.com/ClydeTime/BiliBili
-#!icon = https://raw.githubusercontent.com/ClydeTime/BiliBili/main/database/icon_Avatar.png
+#!homepage = https://github.com/jy0703/scripts
+#!icon = https://raw.githubusercontent.com/jy0703/scripts/main/icons/bilibili.png
 #!tag = 签到,自动化
 #!type = normal
 
