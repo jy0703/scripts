@@ -1,5 +1,5 @@
 #!name = 天翼云盘签到
-#!desc = 天翼云盘每日签到领空间+3次抽奖，账号在本插件变量里填「账号;密码」，支持多账号
+#!desc = 天翼云盘每日签到领空间，账号在 boxjs「天翼云盘」里填「账号;密码」，支持多账号
 #!author = Fengzzzz
 #!homepage = https://github.com/jy0703/scripts
 #!icon = https://raw.githubusercontent.com/jy0703/scripts/main/icons/tyyp.png

@@ -1,6 +1,6 @@
 /**
  * 脚本名称：天翼云盘签到
- * 活动规则：每日签到得网盘空间，签到后可抽奖 3 次（空间/权益类奖励）
+ * 活动规则：每日签到得网盘空间（抽奖活动已收尾，ACT_SIGNIN 恒回次数不足，故不做抽奖）
  * 脚本说明：走 189 门户账密登录 —— udb_login.jsp 取 SSO 跳转 → 登录表单页取 j_rsaKey 公钥
  *          → appConf.do 取 lt/paramId/reqId → loginSubmit.do 提交（账密用该公钥做 PKCS#1 v1.5
  *          RSA 加密，密文 base64 再转 36 进制串并加 {RSA} 前缀）。会话 Cookie 由脚本自收自回
@@ -40,10 +40,8 @@ const CACHE_TTL = 6 * 3600 * 1000;
 const LOGIN_ENTRY = 'https://m.cloud.189.cn/udb/udb_login.jsp?pageId=1&pageKey=default&clientType=wap&redirectURL=https://m.cloud.189.cn/zhuanti/2021/shakeLottery/index.html';
 const UA_PAGE = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:74.0) Gecko/20100101 Firefox/76.0';
 const UA_ECLOUD = 'Mozilla/5.0 (Linux; Android 5.1.1; SM-G930K Build/NRD90M; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/74.0.3729.136 Mobile Safari/537.36 Ecloud/8.6.3';
-const UA_SIGN = `${UA_ECLOUD} Android/22 clientId/355325117317828 clientModel/SM-G930K imsi/460071114317824 clientChannelId/qq proVersion/1.0.6`;
 const UA_PC = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 const SIGN_REFERER = 'https://m.cloud.189.cn/zhuanti/2016/sign/index.jsp?albumBackupOpened=1';
-const DRAW_TASKS = ['TASK_SIGNIN', 'TASK_SIGNIN_PHOTOS', 'TASK_2022_FLDFS_KJ'];
 
 // 主函数
 async function main() {
@@ -71,29 +69,20 @@ async function main() {
     $.log(`\n----- 所有账号执行完成 -----\n`);
 }
 
-// 单账号: 登录 + 签到 + 抽奖 + 空间信息
+// 单账号: 登录 + 签到 + 空间信息
 async function runAccount(acc) {
     await $.wait(1000 * (2 + Math.floor(Math.random() * 4)));  // 启动随机延迟
-    const jar = await loginWithCache(acc);
-
-    const signLine = await doSign(jar);
-    $.log(signLine);
-    $.messages.push(signLine);
-
-    // 抽奖: 逐条进日志，通知只留真实中奖项；连发会被判 RequestFrequent，故拉开间隔并各重试一次
-    const prizes = [];
-    for (let i = 0; i < DRAW_TASKS.length; i++) {
-        await $.wait(6000);
-        let r = await doDraw(jar, DRAW_TASKS[i]);
-        if (r.freq) {
-            $.log(`🎁 抽奖${i + 1}: ${r.log}，15 秒后重试`);
-            await $.wait(15000);
-            r = await doDraw(jar, DRAW_TASKS[i]);
-        }
-        $.log(`🎁 抽奖${i + 1}: ${r.log}`);
-        if (r.prize) prizes.push(`第${i + 1}次 ${r.prize}`);
+    let sess = await loginWithCache(acc);
+    let sign = await doSign(sess);
+    // 签到通道把 sessionKey 绑到登录时的出口 IP，运营商换 IP 后旧会话就签不了(判活接口查不出这个)
+    if (sign.retry) {
+        $.log('♻️ 会话出口 IP 已变，作废缓存重新登录');
+        sess = await loginWithCache(acc, true);
+        sign = await doSign(sess);
     }
-    if (prizes.length) $.messages.push(`🎁 抽奖: ${prizes.join(' | ')}`);
+    const jar = sess.jar;
+    $.log(sign.line);
+    $.messages.push(sign.line);
 
     await $.wait(2000);
     const grow = await queryGrow(jar);
@@ -116,23 +105,25 @@ async function runAccount(acc) {
 
 // ---------- 登录链路 ----------
 
-// 优先复用缓存会话，用业务接口(listGrow)判活，失效则重登
-async function loginWithCache(acc) {
+// 优先复用缓存会话。判活直接用签到要用的 getUserBriefInfo(顺带把 sessionKey 取回来)，
+// force=true 则跳过缓存——出口 IP 变了旧会话过不了签名的 IP 绑定
+async function loginWithCache(acc, force = false) {
     const cache = $.getjson(CACHE_KEY, {}) || {};
     const item = cache[acc.username];
-    if (item && item.jar && Date.now() < (item.expireTime || 0)) {
-        const probe = await queryGrow(item.jar);
-        if (probe && probe.res_code === 0) {
+    if (!force && item && item.jar && Date.now() < (item.expireTime || 0)) {
+        try {
+            const sessionKey = await getSessionKey(item.jar);
             $.log(`✅ 命中缓存会话(剩余 ${Math.round(((item.expireTime || 0) - Date.now()) / 60000)} 分钟)，跳过登录`);
-            return item.jar;
+            return { jar: item.jar, sessionKey };
+        } catch (e) {
+            $.log(`⚠️ 缓存会话已失效(${e.message || e})，重新登录`);
         }
-        $.log(`⚠️ 缓存会话已失效(${probe && probe.res_message || '无响应'})，重新登录`);
     }
 
-    let jar = null, lastErr = null;
-    for (let attempt = 1; attempt <= 2 && !jar; attempt++) {
+    let sess = null, lastErr = null;
+    for (let attempt = 1; attempt <= 2 && !sess; attempt++) {
         try {
-            jar = await loginFlow(acc);
+            sess = await loginFlow(acc);
         } catch (e) {
             lastErr = e;
             if (attempt < 2) {
@@ -141,11 +132,11 @@ async function loginWithCache(acc) {
             }
         }
     }
-    if (!jar) throw lastErr || new Error('登录失败');
+    if (!sess) throw lastErr || new Error('登录失败');
 
-    cache[acc.username] = { jar, expireTime: Date.now() + CACHE_TTL, updateTime: new Date().toISOString() };
+    cache[acc.username] = { jar: sess.jar, sessionKey: sess.sessionKey, expireTime: Date.now() + CACHE_TTL, updateTime: new Date().toISOString() };
     $.setdata($.toStr(cache), CACHE_KEY);
-    return jar;
+    return sess;
 }
 
 // udb_login.jsp → SSO(302 下发 LT/STK) → 表单页(j_rsaKey) → appConf → loginSubmit → toUrl
@@ -217,10 +208,8 @@ async function loginFlow(acc) {
     if (!jar.LT) $.log('⚠️ 未取得 LT/STK：当前环境可能自动跟随了重定向，若接口全回未登录请改用 Loon/Surge/Quantumult X');
     $.log(`✅ 登录成功，会话 Cookie: ${Object.keys(jar).join(',')}`);
 
-    // 判活交给业务接口
-    const probe = await queryGrow(jar);
-    if (!probe || probe.res_code !== 0) throw new Error(`登录后会话校验未通过: ${probe && probe.res_message || '无响应'}`);
-    return jar;
+    // 判活交给签到要用的业务接口：换不到 sessionKey 就是会话没成立，抛给外层重试登录
+    return { jar, sessionKey: await getSessionKey(jar) };
 }
 
 // ---------- 业务接口 ----------
@@ -228,8 +217,8 @@ async function loginFlow(acc) {
 // 门户 cookie 换签到用的 sessionKey（getUserBriefInfo 是纯 cookie 通道，不需要 App 签名）
 async function getSessionKey(jar) {
     const resp = await Request({ url: 'https://cloud.189.cn/v2/getUserBriefInfo.action', headers: withCookie(jar, { accept: '*/*', 'user-agent': UA_PC, referer: 'https://cloud.189.cn/web/main/' }), _timeout: 25000 });
-    if (!resp || typeof resp !== 'object' || resp.res_code !== 0) throw new Error(`换取 sessionKey 失败: ${resp && (resp.res_message || resp.errorCode) || '无响应'}`);
-    if (!resp.sessionKey) throw new Error('换取 sessionKey 失败: 响应里没有 sessionKey');
+    if (!resp || typeof resp !== 'object') throw new Error('换取 sessionKey 无响应');
+    if (resp.res_code !== 0 || !resp.sessionKey) throw new Error(`换取 sessionKey 失败: ${resp.res_message || resp.errorCode || '响应里没有 sessionKey'}`);
     return String(resp.sessionKey);
 }
 
@@ -237,34 +226,20 @@ async function getSessionKey(jar) {
 // api.cloud.189.cn/mkt/userSign.action 自 2026-10 起强制 Date/SessionKey/Signature 头，
 // 其 signature = HMAC-SHA1(sessionSecret, "SessionKey=..&Operate=GET&RequestURI=..&Date=..")，
 // 而 sessionSecret 只有 getSessionForPC.action 才下发，门户 Web 会话拿不到，故不走那条。
-async function doSign(jar) {
-    const sessionKey = await getSessionKey(jar);
-    const url = `https://cloud.189.cn/mkt/userSign.action?rand=${Date.now()}&clientType=TELEANDROID&version=9.0.6&model=KB2000&sessionKey=${encodeURIComponent(sessionKey)}`;
-    const page = await getPage(url, jar, { 'user-agent': UA_PC, referer: 'https://cloud.189.cn/web/main/' });
+async function doSign(sess) {
+    const url = `https://cloud.189.cn/mkt/userSign.action?rand=${Date.now()}&clientType=TELEANDROID&version=9.0.6&model=KB2000&sessionKey=${encodeURIComponent(sess.sessionKey)}`;
+    const page = await getPage(url, sess.jar, { 'user-agent': UA_PC, referer: 'https://cloud.189.cn/web/main/' });
     const resp = $.toObj(page && page.body, null);
     if (!resp || typeof resp !== 'object') throw new Error(`签到响应异常: ${String(page && page.body).slice(0, 120)}`);
     debug($.toStr(resp), '[userSign]');
-    // sessionKey 会校验来源 IP，登录与签到不同源时服务端回 check ip error
-    if (resp.errorCode) return `⚠️ 签到: 被拒 ${resp.errorCode}${resp.errorMsg ? ` (${String(resp.errorMsg).slice(0, 60)})` : ''}`;
+    // sessionKey 绑定登录时的出口 IP，跨 IP 复用缓存会话会回 check ip error，交上层作废缓存重登
+    if (resp.errorCode) {
+        const msg = String(resp.errorMsg || '');
+        return { line: `⚠️ 签到: 被拒 ${resp.errorCode}${msg ? ` (${msg.slice(0, 60)})` : ''}`, retry: /check ip error/i.test(msg) };
+    }
     const bonus = resp.netdiskBonus;
     const got = bonus === undefined || bonus === null ? '' : `，获得 ${bonus}M 空间`;
-    return String(resp.isSign) === 'false' ? `✅ 签到: 成功${got}` : `✔️ 签到: 今日已签到${got}`;
-}
-
-// 抽奖：无次数时服务端回 errorCode，按 py 原样判
-async function doDraw(jar, taskId) {
-    const url = `https://m.cloud.189.cn/v2/drawPrizeMarketDetails.action?taskId=${taskId}&activityId=ACT_SIGNIN`;
-    const resp = await Request({ url, headers: apiHeaders(jar, UA_SIGN), _timeout: 25000 });
-    const text = typeof resp === 'string' ? resp : $.toStr(resp);
-    const code = (/"errorCode"\s*:\s*"?([^",}\s]+)/.exec(text || '') || [])[1];
-    if (code) {
-        const freq = /RequestFrequent/i.test(code);
-        return { freq, prize: '', log: `${freq ? '请求过频' : '次数不足'} (${code})` };
-    }
-    if (!resp || typeof resp !== 'object') return { prize: '', log: `无有效响应: ${String(text).slice(0, 80)}` };
-    debug($.toStr(resp), `[draw ${taskId}]`);
-    const prize = resp.description || '';
-    return { prize, log: prize ? `获得 ${prize}` : `未中奖${resp.prizeName ? ` (${resp.prizeName})` : ''}` };
+    return { line: String(resp.isSign) === 'false' ? `✅ 签到: 成功${got}` : `✔️ 签到: 今日已签到${got}` };
 }
 
 // 空间增长记录（同时用作会话判活：res_code===0 才算登录态有效）

@@ -923,11 +923,11 @@
       "author": "@Feng",
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/tyyp_sign.js",
       "descs_html": [
-        "天翼云盘每日签到领空间，签到后抽奖 3 次，支持多账号",
+        "天翼云盘每日签到领空间，支持多账号；抽奖已下线（ACT_SIGNIN 恒回 User_Not_Chance、shakeLottery 活动页 404），脚本不再抽奖",
         "在 tyyp_account 填「账号;密码」，多个账号以 # 或换行分隔，例：18888888888;yourpassword（账号可以是手机号/邮箱/天翼账号）",
         "账号自己登录，不用抓包：登录时现取登录页下发的 RSA 公钥加密账密，密码明文只在本机 boxjs/环境变量里",
-        "tyyp_cache 是脚本自动维护的会话缓存（按账号存 Cookie，6 小时内先用业务接口验活后复用）；换密码或登录异常时清空它即可",
-        "签到走 cloud.189.cn 的 cookie 版通道（api.cloud.189.cn 那条 2026-10 起强制 App 端 HMAC-SHA1 签名，Web 会话没有 sessionSecret）；通知出现「⚠️ 签到: 被拒 InvalidSessionKey (check ip error)」= 登录与签到的出口 IP 不同源，把签到任务和登录放同一台机器/同一网络即可",
+        "tyyp_cache 是脚本自动维护的会话缓存（按账号存 Cookie 与 sessionKey，6 小时内先拿 sessionKey 当判活后复用）；换密码或登录异常时清空它即可",
+        "签到走 cloud.189.cn 的 cookie 版通道(api.cloud.189.cn 那条 2026-10 起强制 App 端 HMAC-SHA1 头签名，Web 会话没有 sessionSecret)。该通道把 sessionKey 绑到登录时的出口 IP：家里/4G 出口 IP 会变，脚本遇到 check ip error 会自动作废缓存、重新登录再签一次，日志里会看到「♻️ 会话出口 IP 已变」；若每次运行都换 IP，等于每次都重新登录，属正常",
         "通知出现「图形验证码错误，请重新输入」＝服务端风控要求验证码，脚本无法代填；先在天翼云盘 APP 或网页登录一次再跑",
         "Stash 等会自动跟随重定向的环境收不到 SSO 302 上的 LT/STK，可能登录失败，建议用 Loon / Surge / Quantumult X / 青龙"
       ],
