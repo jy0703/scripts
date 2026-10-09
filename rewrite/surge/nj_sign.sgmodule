@@ -1,0 +1,5 @@
+#!name=柠季签到
+#!desc=柠季柠檬茶专门店小程序每日签到领积分，账号通过 Code Server 服务获取，支持多账号
+
+[Script]
+柠季签到 = type=cron,cronexp="0 9 * * *",wake-system=1,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/nj_sign.js,script-update-interval=0

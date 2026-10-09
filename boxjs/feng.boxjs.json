@@ -299,9 +299,10 @@
       "name": "获取小程序code",
       "author": "@Feng",
       "descs_html": [
-        "调用 YYB Go 服务 POST /wxapp/getCode 获取小程序 code，供印享星/途虎/海底捞/永旺/WPS 等脚本使用",
+        "调用 YYB Go 服务 POST /wxapp/getCode 获取小程序 code，供印享星/途虎/海底捞/永旺/WPS 等脚本使用；/wxapp/getPhoneNumber 取手机号授权 code，供柠季等按手机号认会员的脚本使用",
         "本处只填服务器地址与 token(请求头 Authorization: Bearer，对应服务端 YYB_PROTOCOL_TOKEN)",
-        "app_id 由各脚本内置，账号 ref 填在各脚本自己的 boxjs 区域，本处不填 ref"
+        "app_id 由各脚本内置，账号 ref 填在各脚本自己的 boxjs 区域，本处不填 ref",
+        "mtgsig 为自建美团签名服务地址(POST /sign)，只给需要 mtgsig 的脚本用，留空则这些脚本不签名；鉴权复用下面的 token"
       ],
       "icons": [
         "https://raw.githubusercontent.com/FoKit/Scripts/main/images/WeChat.png",
@@ -335,6 +336,15 @@
           "autoGrow": true,
           "rows": 1,
           "desc": "接口鉴权 token, 请求头 Authorization: Bearer <token>, 对应服务端环境变量 YYB_PROTOCOL_TOKEN"
+        },
+        {
+          "id": "@wxCode.mtgsig",
+          "name": "签名服务地址",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "desc": "美团 mtgsig 签名服务地址, 不包含/, 如 http://192.168.2.5:8010；留空则不签名"
         }
       ]
     },
@@ -967,6 +977,128 @@
           "val": false,
           "type": "boolean",
           "desc": "逐条打印请求/响应明细，排查问题用；日志可能含 Cookie、token 等敏感信息，看完记得关掉"
+        }
+      ]
+    },
+    {
+      "id": "nj_sign",
+      "name": "柠季签到",
+      "author": "@Feng",
+      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/nj_sign.js",
+      "descs_html": [
+        "柠季柠檬茶专门店(美团 CRM)小程序每日签到得积分，连签若干天额外送优惠券",
+        "依赖「Code Server」分组中「获取小程序code」(@wxCode.address/token)，取号走 /wxapp/getPhoneNumber(会员按手机号认人，账号需已绑手机号)，账号 ref 填本区域 NJ_REF，支持多账号",
+        "登录态 UNI-TOKEN 服务端只给 2 小时，脚本缓存 100 分钟后自动重新取号登录，无需抓包",
+        "活动接口的 mtgsig 调自建签名服务生成(地址填 Code Server 分组的 @wxCode.mtgsig, 鉴权复用 @wxCode.token)，留空或调用失败会自动降级为不签名"
+      ],
+      "icons": [
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/nj.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/nj.png"
+      ],
+      "keys": [
+        "NJ_REF",
+        "NJ_CAMPAIGN_ID",
+        "nj_debug"
+      ],
+      "settings": [
+        {
+          "id": "NJ_REF",
+          "name": "账号 ref",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "",
+          "desc": "code 服务的账号 ID/UIN/openid, 多个以英文逗号隔开, 一个 ref 一个微信身份"
+        },
+        {
+          "id": "NJ_CAMPAIGN_ID",
+          "name": "签到活动 ID",
+          "val": "1010906116",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "",
+          "desc": "默认「26年会员3月起签到活动」(有效至 2026-12-31)；美团换期后从签到页抓包 campaignId 更新"
+        },
+        {
+          "id": "nj_debug",
+          "name": "调试模式",
+          "val": false,
+          "type": "boolean",
+          "desc": "逐条打印请求/响应明细，排查问题用；日志可能含 token 等敏感信息，看完记得关掉"
+        }
+      ]
+    },
+    {
+      "id": "aliyun_sign",
+      "name": "阿里云社区签到",
+      "author": "@Feng",
+      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aliyun_sign.js",
+      "descs_html": [
+        "阿里云开发者社区每日任务：社区签到、达标抽奖、文章点赞/收藏/评论/分享、问答回答点赞、电子书评价，并一键收取待领取积分，支持多账号",
+        "按 aliyun_time 分界(默认 12 点)两段跑，与原版一致：之前做任务(签到/互动/电子书)，之后只领奖+收积分；所以 cron 建议 0 7,13 * * *，一天两次",
+        "抓取：开启「阿里云社区获取Cookie」后，用浏览器打开 https://developer.aliyun.com 并登录，进入 个人中心 或 积分商城 页面即写入，抓完关闭捕获开关",
+        "账号以 Cookie 里的 login_aliyunid_ticket 去重：isg/tfstk 等风控 cookie 每次都变，重复抓取只更新不新增账号",
+        "aliyun_interact 为文章互动轮数(默认 5)，首轮额外做评论与分享；aliyun_cancel 仅在分界后的领奖模式生效，取消站内收藏列表里的点赞与收藏，用于次日重复刷任务",
+        "云起实验室「场景」任务未实现：旧接口 /adc/api/startSceneById 已废弃(实测回\"用户操作异常\")，新链 skillBuilder 需真实开通云资源，抽样 25 个场景 21 个 requirePay、0 个免费，不值得自动做",
+        "通知出现「Cookie已失效」= ticket 过期，重新登录抓取即可"
+      ],
+      "icons": [
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/aliyun.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/aliyun.png"
+      ],
+      "keys": [
+        "aliyun_data",
+        "aliyun_time",
+        "aliyun_interact",
+        "aliyun_cancel",
+        "aliyun_debug"
+      ],
+      "settings": [
+        {
+          "id": "aliyun_data",
+          "name": "阿里云社区数据",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 5,
+          "placeholder": "",
+          "desc": "由 rewrite 抓取自动写入，勿手填；结构 [{cookie,ua,ticket}]"
+        },
+        {
+          "id": "aliyun_time",
+          "name": "任务/领奖分界时刻",
+          "val": "12",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "12",
+          "desc": "该点之前跑任务(签到/互动/电子书)，之后跑领奖(抽奖+一键收积分+可选取消互动)；0 表示任何时候都按领奖模式"
+        },
+        {
+          "id": "aliyun_interact",
+          "name": "文章互动轮数",
+          "val": "5",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "5",
+          "desc": "每轮随机取一篇文章点赞+收藏并问答点赞一次；首轮追加评论与分享。填 0 则跳过文章与问答"
+        },
+        {
+          "id": "aliyun_cancel",
+          "name": "收尾取消互动",
+          "val": false,
+          "type": "boolean",
+          "desc": "打开后在全部任务结束时取消收藏列表里的点赞与收藏（会真实取消已完成的互动任务记录），默认关闭"
+        },
+        {
+          "id": "aliyun_debug",
+          "name": "调试模式",
+          "val": false,
+          "type": "boolean",
+          "desc": "逐条打印请求/响应明细，排查问题用；日志可能含 Cookie 等敏感信息，看完记得关掉"
         }
       ]
     }

@@ -1,0 +1,9 @@
+#!name=阿里云社区获取Cookie
+#!desc=自动抓取阿里云开发者社区 Cookie（定时签到见 Loon 插件 aliyun_sign.lpx）
+#!浏览器登录 developer.aliyun.com，打开 个人中心 或 积分商城 页面即触发抓取。
+
+[Script]
+阿里云社区获取Cookie = type=http-request,pattern=^https?:\/\/developer\.aliyun\.com\/developer\/api\/(my\/user\/getUser|my\/score\/getUserScore|sign\/getSpaceSignInInfo),requires-body=0,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aliyun_sign.js,script-update-interval=0
+
+[MITM]
+hostname = %APPEND% developer.aliyun.com
