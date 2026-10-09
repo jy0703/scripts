@@ -9,33 +9,33 @@
 ------------------ Surge 配置 ------------------
 
 [Script]
-慢慢买获取Cookie = type=http-request,pattern=^https?:\/\/basic\-ucenter\.manmanbuy\.com\/user\/,requires-body=1,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/manmanbuy_sign.js,script-update-interval=0
+慢慢买获取Cookie = type=http-request,pattern=^https?:\/\/(basic\-ucenter\.manmanbuy\.com|apph5\.manmanbuy\.com\/taolijin\/logserver\.aspx),requires-body=1,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/manmanbuy_sign.js,script-update-interval=0
 
 慢慢买签到 = type=cron,cronexp="0 1 * * *",wake-system=1,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/manmanbuy_sign.js,timeout=600,script-update-interval=0
 
 [MITM]
-hostname = basic-ucenter.manmanbuy.com
+hostname = basic-ucenter.manmanbuy.com, apph5.manmanbuy.com
 
 ------------------- Loon 配置 -------------------
 
 [Script]
-http-request ^https?:\/\/basic\-ucenter\.manmanbuy\.com\/user\/ script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/manmanbuy_sign.js, requires-body=true, timeout=600, tag=慢慢买获取Cookie
+http-request ^https?:\/\/(basic\-ucenter\.manmanbuy\.com|apph5\.manmanbuy\.com\/taolijin\/logserver\.aspx) script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/manmanbuy_sign.js, requires-body=true, timeout=600, tag=慢慢买获取Cookie
 
 cron "0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/manmanbuy_sign.js, timeout=600, tag=慢慢买签到
 
 [MITM]
-hostname = basic-ucenter.manmanbuy.com
+hostname = basic-ucenter.manmanbuy.com, apph5.manmanbuy.com
 
 --------------- Quantumult X 配置 ---------------
 
 [rewrite_local]
-^https?:\/\/basic\-ucenter\.manmanbuy\.com\/user\/ url script-request-body https://raw.githubusercontent.com/jy0703/scripts/main/scripts/manmanbuy_sign.js
+^https?:\/\/(basic\-ucenter\.manmanbuy\.com|apph5\.manmanbuy\.com\/taolijin\/logserver\.aspx) url script-request-body https://raw.githubusercontent.com/jy0703/scripts/main/scripts/manmanbuy_sign.js
 
 [task_local]
 "0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/manmanbuy_sign.js, tag=慢慢买签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/manmanbuy.png, enabled=true
 
 [MITM]
-hostname = basic-ucenter.manmanbuy.com
+hostname = basic-ucenter.manmanbuy.com, apph5.manmanbuy.com
 
  */
 
@@ -50,7 +50,7 @@ $.Messages = [];
 
 // 业务常量 (照签到页 activity_check_in H5 抓包搬运)
 const API_HOST = 'https://basic-ucenter.manmanbuy.com';
-const CAPTURE_REGEX = /^https?:\/\/basic\-ucenter\.manmanbuy\.com\/user\//;
+const CAPTURE_REGEX = /^https?:\/\/(basic\-ucenter\.manmanbuy\.com|apph5\.manmanbuy\.com\/taolijin\/logserver\.aspx)/;
 const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 - mmbWebBrowse - ios';
 const DATA_KEY = 'manmanbuy_data';
 const USERS_KEY = 'manmanbuy_users';
@@ -139,9 +139,12 @@ function GetCookie() {
         if (!$request.url || !CAPTURE_REGEX.test($request.url)) return;
 
         const header = ObjectKeys2LowerCase($request.headers || {});
-        const params = pickParams($request.url, $request.body);
-        const username = params.username || header.username;
-        if (!username) throw new Error('获取Cookie错误，未找到 username 参数');
+        const params = pickParams($request);
+        if (!params.username) {
+            dumpRequest($request);
+            throw new Error('未找到 username 参数（脚本日志已打印 [抓取诊断]，或直接在 manmanbuy_users 手填用户名）');
+        }
+        const username = params.username;
 
         const newData = {
             'userName': username,
@@ -159,21 +162,41 @@ function GetCookie() {
         $.log(`🎉获取慢慢买账号成功: ${username}`);
     } catch (e) {
         $.log('❌ Cookie获取失败'), $.log(e);
+        $.Messages.push(`❌ 慢慢买抓取失败: ${e.message || e}`);
     }
 }
 
-// 从 url query / form body / json body 里取账号参数
-function pickParams(url, body) {
+// 账号参数候选字段名 (H5 用 username, 客户端 appInfo 里叫 u_name)
+const NAME_KEYS = ['username', 'u_name', 'uname', 'user_name'];
+
+// 从 url query / form body / json body / 请求头 / cookie 里找账号参数
+function pickParams(req) {
     const out = {};
-    const texts = [(url.split('?')[1] || ''), (typeof body === 'string' ? body : $.toStr(body || ''))];
-    ['username', 'token', 'c_mmbDevId'].forEach(key => {
+    const header = ObjectKeys2LowerCase(req.headers || {});
+    const texts = [(req.url.split('?')[1] || ''), (typeof req.body === 'string' ? req.body : $.toStr(req.body || ''))];
+    NAME_KEYS.forEach(k => { if (header[k]) texts.push(`${k}=${header[k]}`); });
+    if (header.cookie) texts.push(header.cookie);
+
+    ['username', 'token', 'c_mmbDevId'].forEach((key, idx) => {
+        const keys = idx === 0 ? NAME_KEYS : [key];
         for (const t of texts) {
             if (!t) continue;
-            const hit = t.match(new RegExp('(?:^|[&?])' + key + '=([^&]*)')) || t.match(new RegExp('"' + key + '"\\s*:\\s*"([^"]*)"'));
-            if (hit) { out[key] = safeDecode(hit[1]); break; }
+            for (const k of keys) {
+                const hit = t.match(new RegExp('(?:^|[&;?]\\s*)' + k + '=([^&;]+)')) || t.match(new RegExp('"' + k + '"\\s*:\\s*"([^"]*)"'));
+                if (hit) { const v = safeDecode(hit[1]).trim(); if (v && v.length > 1) { out[key] = v; return; } }
+            }
         }
     });
     return out;
+}
+
+// 抓不到 username 时把请求形态打出来，便于定位凭证在哪个字段
+function dumpRequest(req) {
+    const header = ObjectKeys2LowerCase(req.headers || {});
+    const body = typeof req.body === 'string' ? req.body : $.toStr(req.body || '');
+    $.log(`[抓取诊断] ${req.method || '?'} ${req.url}`);
+    $.log(`[抓取诊断] header keys: ${Object.keys(header).join(', ') || '(无)'}`);
+    $.log(`[抓取诊断] content-type: ${header['content-type'] || '(无)'} , body ${body.length} 字节: ${body.slice(0, 300) || '(空)'}`);
 }
 
 function safeDecode(v) {
