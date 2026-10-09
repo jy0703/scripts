@@ -1038,11 +1038,12 @@
       "descs_html": [
         "阿里云开发者社区每日任务：社区签到、达标抽奖、文章点赞/收藏/评论/分享、问答回答点赞、电子书评价，并一键收取待领取积分，支持多账号",
         "按 aliyun_time 分界(默认 12 点)两段跑，与原版一致：之前做任务(签到/互动/电子书)，之后只领奖+收积分；所以 cron 建议 0 7,13 * * *，一天两次",
-        "抓取：开启「阿里云社区获取Cookie」后，用浏览器打开 https://developer.aliyun.com 并登录，进入 个人中心 或 积分商城 页面即写入，抓完关闭捕获开关",
-        "账号以 Cookie 里的 login_aliyunid_ticket 去重：isg/tfstk 等风控 cookie 每次都变，重复抓取只更新不新增账号",
+        "抓取：开启「阿里云社区获取Cookie」后，用浏览器打开 https://developer.aliyun.com 并登录，进入 个人中心 或 积分商城 页面即写入(取自 my/user/getUser 响应里的 nickname 与 avatar)，抓完关闭捕获开关",
+        "账号按昵称去重(与原版一致)：isg/tfstk 等风控 cookie 每次都变，重复抓取只更新 Cookie 不新增账号；通知里的用户名即该昵称，接口未回时取抓取时存的昵称",
         "aliyun_interact 为文章互动轮数(默认 5)，首轮额外做评论与分享；aliyun_cancel 仅在分界后的领奖模式生效，取消站内收藏列表里的点赞与收藏，用于次日重复刷任务",
         "aliyun_video 打开后在任务模式多跑一个直播观看任务(ucc 直播开放接口，进度靠 danmu 的 seek 上报)：默认视频 253842 时长约 74 秒，整轮多花 1~2 分钟；直播会换，可用 aliyun_video_id 指定其它 id",
         "云起实验室「场景」任务未实现：旧接口 /adc/api/startSceneById 已废弃(实测回\"用户操作异常\")，新链 skillBuilder 需真实开通云资源，抽样 25 个场景 21 个 requirePay、0 个免费，不值得自动做",
+        "通知按账号分条推送（与上游一致）：每个账号一条，副标题是一行汇总，附件图用该账号头像；头像取自 getUser 的 data.avatar，拿不到时不传附件图（Loon 图片拉不到会丢整条通知）",
         "通知出现「Cookie已失效」= ticket 过期，重新登录抓取即可"
       ],
       "icons": [
@@ -1067,7 +1068,7 @@
           "autoGrow": true,
           "rows": 5,
           "placeholder": "",
-          "desc": "由 rewrite 抓取自动写入，勿手填；结构 [{cookie,ua,ticket}]"
+          "desc": "由 rewrite 抓取自动写入，勿手填；结构 [{cookie,ua,userName,avatar}]"
         },
         {
           "id": "aliyun_time",

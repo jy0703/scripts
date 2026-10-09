@@ -84,14 +84,9 @@ async function main() {
             // 获取珑珠余额
             await getBalance($.user);
 
-            // 在用户信息后添加该账号的统计信息
-            $.beforeMsgs += `📊 本次运行获得: ${$.user.totalPoints} 积分, ${$.user.totalLZ} 珑珠\n`;
-            
-            // 合并通知
-            $.messages.splice(0, 0, $.beforeMsgs), $.Messages = $.Messages.concat($.messages);
-            
-            // 在每个账号结束后添加额外换行
-            // $.Messages.push(""); // 添加一个空行作为账号间的分隔
+            // 逐账号推送：副标题放本次统计，附件图用该账号头像
+            $.messages.splice(0, 0, $.beforeMsgs.trimEnd());
+            await sendMsg($.messages.join('\n').trimEnd(), $.user.avatar, `本次获得 ${$.user.totalPoints} 积分, ${$.user.totalLZ} 珑珠`);
         }
         
         // // 添加总计信息
@@ -555,7 +550,9 @@ async function getUserInfo(user) {
             const growth_value = userData?.growth_value || 0;
             const level = userData?.level || 0;
             const nick_name = userData?.nick_name || '未知';
-            
+            user.nickName = nick_name;
+            user.avatar = userData?.head_portrait || '';
+
             if ($.beforeMsgs) {
                 $.beforeMsgs += '\n';
             }
@@ -621,7 +618,8 @@ async function getBalance(user) {
 })()
     .catch((e) => $.Messages.push(e.message || e) && $.logErr(e))
     .finally(async () => {
-        await sendMsg($.Messages.join('\n').trimStart().trimEnd());  // 推送通知
+        // 抓取模式与致命错误走这里；定时任务的每账号通知已在 main 内推送
+        if ($.Messages.length) await sendMsg($.Messages.join('\n').trimStart().trimEnd());
         $.done();
     })
 
@@ -667,8 +665,8 @@ async function Request(options) {
     }
 }
 
-// 发送消息
-async function sendMsg(message) {
+// 发送消息（副标题放一行统计，附件图用账号头像；拿不到头像就不传该参数）
+async function sendMsg(message, avatar, title) {
     if (!message) return;
     try {
         if ($.isNode()) {
@@ -677,9 +675,9 @@ async function sendMsg(message) {
             } catch (e) {
                 var notify = require('./utils/sendNotify');
             }
-            await notify.sendNotify($.name, message);
+            await notify.sendNotify($.name, title ? `${title}\n${message}` : message);
         } else {
-            $.msg($.name, '', message);
+            $.msg($.name, title || '', message, avatar ? { 'media-url': avatar } : undefined);
         }
     } catch (e) {
         $.log(`\n\n----- ${$.name} -----\n${message}`);

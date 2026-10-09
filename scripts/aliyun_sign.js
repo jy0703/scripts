@@ -1,7 +1,7 @@
 /**
  * 脚本名称：阿里云开发者社区签到 - 社区签到、积分抽奖、文章互动、问答点赞、电子书评价
  * 活动规则：developer.aliyun.com 各社区板块每日签到得积分，积分商城另有点赞/收藏/评论/分享/问答/电子书等每日任务，完成后可领待领取积分
- * 脚本说明：支持多账号，支持 NE / Node.js 环境。Cookie 由本脚本 GetCookie 抓取后存入 aliyun_data
+ * 脚本说明：支持多账号，支持 NE / Node.js 环境。Cookie 由本脚本在 getUser 响应侧抓取后存入 aliyun_data（含昵称与头像），按昵称去重
  * 环境变量：aliyun_data、aliyun_time、aliyun_interact、aliyun_video、aliyun_video_id、aliyun_cancel、aliyun_debug
  * 备注：Cookie 取自 developer.aliyun.com 站内请求，需在浏览器（或 APP 内嵌页）登录状态下打开"个人中心/积分商城"触发抓取
  * 更新时间：2026-10-10
@@ -9,7 +9,7 @@
 ------------------ Surge 配置 ------------------
 
 [Script]
-阿里云社区获取Cookie = type=http-request,pattern=^https?:\/\/developer\.aliyun\.com\/developer\/api\/(my\/user\/getUser|my\/score\/getUserScore|sign\/getSpaceSignInInfo),requires-body=0,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aliyun_sign.js,script-update-interval=0
+阿里云社区获取Cookie = type=http-response,pattern=^https?:\/\/developer\.aliyun\.com\/developer\/api\/my\/user\/getUser,requires-body=1,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aliyun_sign.js,script-update-interval=0
 
 阿里云社区签到 = type=cron,cronexp="0 7,13 * * *",wake-system=1,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aliyun_sign.js,script-update-interval=0
 
@@ -19,7 +19,7 @@ hostname = developer.aliyun.com
 ------------------- Loon 配置 -------------------
 
 [Script]
-http-request ^https?:\/\/developer\.aliyun\.com\/developer\/api\/(my\/user\/getUser|my\/score\/getUserScore|sign\/getSpaceSignInInfo) script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aliyun_sign.js, timeout=600, tag=阿里云社区获取Cookie
+http-response ^https?:\/\/developer\.aliyun\.com\/developer\/api\/my\/user\/getUser script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aliyun_sign.js, requires-body=true, timeout=600, tag=阿里云社区获取Cookie
 
 cron "0 7,13 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aliyun_sign.js, timeout=600, tag=阿里云社区签到
 
@@ -29,7 +29,7 @@ hostname = developer.aliyun.com
 --------------- Quantumult X 配置 ---------------
 
 [rewrite_local]
-^https?:\/\/developer\.aliyun\.com\/developer\/api\/(my\/user\/getUser|my\/score\/getUserScore|sign\/getSpaceSignInInfo) url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aliyun_sign.js
+^https?:\/\/developer\.aliyun\.com\/developer\/api\/my\/user\/getUser url script-response-body https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aliyun_sign.js
 
 [task_local]
 "0 7,13 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aliyun_sign.js, tag=阿里云社区签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/aliyun.png, enabled=true
@@ -81,16 +81,19 @@ async function main() {
             // 初始化
             $.messages = [];
             $.beforeMsgs = '';
+            $.title = '';
             $.stat = { actCount: 0, acts: [], votes: [], ebooks: [], signs: [], bonuses: [], videos: [], collected: 0, canceled: 0 };
             $.user = normalizeUser($.userArr[i]);
 
+
             if (!await checkLogin($.user)) {
-                $.Messages.push(`⚠️ 账号 ${i + 1}: Cookie已失效，请重新抓取`);
                 $.log(`❌ 账号 ${i + 1}: Cookie已失效，请重新抓取`);
+                await sendMsg(`⚠️ 账号${i + 1}: Cookie已失效，请重新抓取`);
                 continue;
             }
 
-            $.beforeMsgs += `🔹 账号 阿里云社区${i + 1}: ${$.user.userName}`;
+            $.beforeMsgs += `🔹 账号${i + 1}: ${$.user.userName}`;
+
             await getScore($.user, '执行前');
 
             const hour = new Date().getHours();
@@ -155,7 +158,11 @@ async function main() {
             $.log(sum);
             $.messages.push(`当前积分 ${$.user.score}，待领取 ${$.user.pendingScore}`, sum);
             $.messages.splice(0, 0, $.beforeMsgs);
-            $.Messages = $.Messages.concat($.messages);
+            // 副标题放一行汇总，附件图用该账号自己的头像（与上游一致：循环内逐账号推送）
+            $.title = isTaskTime
+                ? `签到 ${$.stat.signs.length}/${COMMUNITIES.length} · 互动 ${$.stat.actCount} 次`
+                : `收取 ${$.stat.collected} 积分`;
+            await sendMsg($.messages.join('\n'), $.user.avatar, $.title);
         }
 
         $.log(`\n----- 所有账号执行完成 -----\n`);
@@ -164,32 +171,34 @@ async function main() {
     }
 }
 
-// 获取Cookie数据 (rewrite 抓取入口, 与头部 http-request 正则配套)
+// 获取Cookie数据 (rewrite 抓取入口: 响应侧, 昵称与 uccId 取自 getUser 的返回体)
 function GetCookie() {
     try {
         if ($request && $request.method === 'OPTIONS') return;
 
         const header = ObjectKeys2LowerCase($request.headers);
-        if (!header.cookie) throw new Error('获取Cookie错误，值为空');
-        if (!/login_aliyunid_ticket=[^;]+/.test(header.cookie)) throw new Error('Cookie 中缺少 login_aliyunid_ticket，请先登录开发者社区');
+        const cookie = header.cookie || '';
+        const { nickname, avatar } = $.toObj($response && $response.body)?.data || {};
+        // 未登录或响应里没有昵称的一律静默跳过，不写不推
+        if (!/login_aliyunid_ticket=[^;]+/.test(cookie) || !nickname) return;
 
         const newData = {
-            'cookie': header.cookie,
+            'cookie': cookie,
             'ua': header['user-agent'] || UA,
-            'ticket': (header.cookie.match(/login_aliyunid_ticket=([^;]+)/) || [])[1] || ''
+            'userName': nickname,
+            'avatar': avatar || ''
         };
 
-        // ticket 唯一标识账号：isg/tfstk 等风控 cookie 每次都会变，不能整串比对
-        const index = $.userArr.findIndex(e => normalizeUser(e).ticket === newData.ticket);
+        const index = $.userArr.findIndex(e => e && e.userName === newData.userName);
         if (index === -1) {
             $.userArr.push(newData);
             $.setdata($.toStr($.userArr), 'aliyun_data');
-            $.Messages.push('🎉获取Cookie成功!');
-            $.log('🎉获取Cookie成功!');
+            $.Messages.push(`🎉${newData.userName}更新token成功!`);
+            $.log(`🎉${newData.userName}更新token成功!`);
         } else {
             $.userArr[index] = newData;
             $.setdata($.toStr($.userArr), 'aliyun_data');
-            $.log('🔄 已更新同名账号的 Cookie');
+            $.log(`🔄 ${newData.userName}: 已更新 Cookie`);
         }
     } catch (e) {
         $.log('❌ Cookie获取失败'), $.log(e);
@@ -201,9 +210,8 @@ function normalizeUser(item) {
     return {
         cookie: item.cookie || '',
         ua: item.ua || UA,
-        ticket: item.ticket || ((item.cookie || '').match(/login_aliyunid_ticket=([^;]+)/) || [])[1] || '',
         userName: item.userName || '',
-        userId: item.userId || '',
+        avatar: item.avatar || '',
         score: 0,
         pendingScore: 0
     };
@@ -213,8 +221,9 @@ function normalizeUser(item) {
 async function checkLogin(user) {
     const result = await api(user, '/my/user/getUser');
     if (!result || result.code === '40001') return false;
-    user.userName = result?.data?.userName || user.userName || '未知用户';
-    user.userId = result?.data?.userId || user.userId || '';
+    // 接口回的是 nickname，没有 userName 字段
+    user.userName = result?.data?.nickname || user.userName || '未知用户';
+    user.avatar = result?.data?.avatar || user.avatar || '';
     $.log(`👤 ${user.userName}`);
     return true;
 }
@@ -673,8 +682,8 @@ async function Request(options) {
     }
 }
 
-// 发送消息
-async function sendMsg(message) {
+// 发送消息（副标题放一行汇总，附件图用账号头像；拿不到头像就不传该参数）
+async function sendMsg(message, avatar, title) {
     if (!message) return;
     try {
         if ($.isNode()) {
@@ -683,9 +692,9 @@ async function sendMsg(message) {
             } catch (e) {
                 var notify = require('./utils/sendNotify');
             }
-            await notify.sendNotify($.name, message);
+            await notify.sendNotify($.name, title ? `${title}\n${message}` : message);
         } else {
-            $.msg($.name, '', message);
+            $.msg($.name, title || '', message, avatar ? { 'media-url': avatar } : undefined);
         }
     } catch (e) {
         $.log(`\n\n----- ${$.name} -----\n${message}`);
@@ -702,7 +711,8 @@ async function sendMsg(message) {
 })()
     .catch((e) => $.Messages.push(e.message || e) && $.logErr(e))
     .finally(async () => {
-        await sendMsg($.Messages.join('\n').trimStart().trimEnd());  // 推送通知
+        // 抓取模式与致命错误走这里；定时任务的每账号通知已在 main 内推送
+        if ($.Messages.length) await sendMsg($.Messages.join('\n').trimStart().trimEnd());
         $.done();
     });
 
