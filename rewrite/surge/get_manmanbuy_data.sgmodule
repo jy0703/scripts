@@ -1,0 +1,9 @@
+#!name=慢慢买获取Cookie
+#!desc=自动抓取慢慢买 APP 签到账号（username）
+#!打开慢慢买 APP，进入「我的 - 签到」页面即触发抓取；换账号后重抓一次可追加。
+
+[Script]
+慢慢买获取Cookie = type=http-request,pattern=^https?:\/\/basic\-ucenter\.manmanbuy\.com\/user\/,requires-body=1,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/manmanbuy_sign.js,script-update-interval=0
+
+[MITM]
+hostname = %APPEND% basic-ucenter.manmanbuy.com

@@ -1,0 +1,18 @@
+#!name = 慢慢买签到
+#!desc = 自动抓取慢慢买 APP 签到账号，并每日定时签到、开幸运礼盒，支持多账号（打开慢慢买 APP：我的 - 签到，进入签到页即触发抓取）
+#!author = Fengzzzz
+#!homepage = https://github.com/jy0703/scripts
+#!icon = https://raw.githubusercontent.com/jy0703/scripts/main/icons/manmanbuy.png
+#!tag = 签到,自动化
+#!type = normal
+
+[Argument]
+capture = switch,false,tag=捕获 Cookie,desc=打开后按说明操作自动抓取签到账号，抓取完成后建议关闭
+cronExpression = input,"0 1 * * *",tag=定时参数,desc=这里需要输入符合 CRON 表达式的参数
+
+[Script]
+http-request ^https?:\/\/basic\-ucenter\.manmanbuy\.com\/user\/ script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/manmanbuy_sign.js,requires-body=true,timeout=600,tag=慢慢买获取Cookie,enable={capture}
+cron {cronExpression} script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/manmanbuy_sign.js,timeout=600,tag=慢慢买签到,enable=true
+
+[Mitm]
+hostname = basic-ucenter.manmanbuy.com
