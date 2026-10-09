@@ -863,7 +863,7 @@
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/manmanbuy_sign.js",
       "descs_html": [
         "慢慢买 APP 每日签到领积分与金币，幸运日自动开启幸运礼盒，支持多账号",
-        "抓取：开启「慢慢买获取Cookie」后回到 慢慢买 APP 首页即写入 manmanbuy_data（账号取自首页接口的 u_name，昵称取自 nickName）；只有拿到新账号才推送，重复抓取不会重复写入，抓到一个就可以关掉开关",
+        "抓取：开启「慢慢买获取Cookie」后回到 慢慢买 APP 首页即写入 manmanbuy_data（账号取自首页接口，u_name 与 nickName 同时命中才写入，只有 u_name 不会落盘）；只有拿到新账号才推送，重复抓取不会重复写入，抓到一个就可以关掉开关",
         "抓不到就手填：在 manmanbuy_users 里填慢慢买用户名，多个用英文逗号隔开（与抓包数据合并去重）",
         "签到接口只认 username + 应用级 token（脚本内置 mmb188），不需要 cookie；APP 请求里的 sign/token 是一次性的，整包重放会过期",
         "通知出现「token校验失败」= 用户名不对或 token 已轮换，重抓一次或在 manmanbuy_token 填新值"

@@ -1,5 +1,5 @@
 #!name = 慢慢买签到
-#!desc = 自动抓取慢慢买 APP 签到账号，并每日定时签到、开幸运礼盒，支持多账号（打开慢慢买 APP 首页即可抓取，账号取自首页接口返回的 u_name）
+#!desc = 自动抓取慢慢买 APP 签到账号，并每日定时签到、开幸运礼盒，支持多账号（打开慢慢买 APP 首页即可抓取，账号需同时拿到 u_name 与 nickName 才写入）
 #!author = Fengzzzz
 #!homepage = https://github.com/jy0703/scripts
 #!icon = https://raw.githubusercontent.com/jy0703/scripts/main/icons/manmanbuy.png

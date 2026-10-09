@@ -1,7 +1,7 @@
 /**
  * 脚本名称：慢慢买签到
  * 活动规则：每日签到领积分与金币，幸运日可开启幸运礼盒
- * 脚本说明：支持多账号，支持 NE / Node.js 环境。签到接口只认 username + 应用级 token，账号由响应侧抓取（首页 index_json.ashx 返回的 u_name）写入 manmanbuy_data（形如 [{"username":"wx_xxxx","nickName":"昵称"}]，昵称仅用于通知显示），也可在 manmanbuy_users 里直接填用户名
+ * 脚本说明：支持多账号，支持 NE / Node.js 环境。签到接口只认 username + 应用级 token，账号由响应侧抓取（首页 index_json.ashx 返回的 u_name + nickName，两者齐全才写入 manmanbuy_data，形如 [{"username":"wx_xxxx","nickName":"昵称"}]，昵称仅用于通知显示），也可在 manmanbuy_users 里直接填用户名
  * 环境变量：manmanbuy_data、manmanbuy_users、manmanbuy_token(可选，token 轮换时覆盖)、manmanbuy_debug
  * 更新时间：2026-10-09
 
@@ -62,9 +62,9 @@ function parseUsers(raw) {
 
 // 业务常量 (照签到页 activity_check_in H5 抓包搬运)
 const API_HOST = 'https://basic-ucenter.manmanbuy.com';
-// 请求侧抓取: APP 内 H5 走原生注入时请求里没有 username, 主要靠下面的响应侧抓取
+// 请求侧: APP 内 H5 走原生注入时请求里没有 username, 即使有也拿不到昵称, 只记日志不落盘
 const REQ_CAPTURE_REGEX = /^https?:\/\/(basic\-ucenter\.manmanbuy\.com|apph5\.manmanbuy\.com\/taolijin\/logserver\.aspx)/;
-// 响应侧抓取: 首页 index_json.ashx 的返回体里带 "u_name":"wx_xxxx"，那才是签到接口要的 username
+// 响应侧抓取: 首页 index_json.ashx 的返回体里带 "u_name":"wx_xxxx" + "nickName"，那才是签到接口要的 username
 const RESP_CAPTURE_REGEX = /^https?:\/\/apapia\.manmanbuy\.com\/index_json\.ashx/;
 // 应用级 token: 签到页 H5 的 web 调试分支里硬编码的常量, 服务端按它放行 (账号靠 username 区分)
 const APP_TOKEN = 'mmb188';
@@ -161,7 +161,7 @@ async function getTodaySignDate(user) {
     return (today && today.signDate) || `${$.time('yyyy-MM-dd')} 00:00:00`;
 }
 
-// 获取账号数据 (rewrite 抓取入口: 响应侧从 index_json.ashx 的 u_name 取, 请求侧作兜底)
+// 获取账号数据 (rewrite 抓取入口: 响应侧从 index_json.ashx 的 u_name + nickName 取, 请求侧只作诊断)
 // 抓不到属于正常不匹配(未登录/别的接口/响应体被压缩)，只记日志不推送，避免刷屏
 function GetCookie() {
     try {
@@ -187,7 +187,8 @@ function GetCookie() {
                 debug(`请求未带 username: ${url.split('?')[0]} (APP 走原生注入时不带，靠响应侧抓取)`, '抓取');
                 return;
             }
-            saveAccount(params.username);
+            // 请求侧只有 username 拿不到昵称，按「有昵称才写入」不落盘，只留日志方便确认抓到过
+            debug(`请求侧命中 username=${params.username}，无昵称不写入`, '抓取');
         }
     } catch (e) {
         $.log('❌ Cookie获取异常'), $.log(e);
@@ -201,7 +202,7 @@ function respBodyText() {
     return '';
 }
 
-// 从响应体里取账号: u_name/userName 作用户名, 同一条里的 nickName 作显示昵称
+// 从响应体里取账号: u_name/userName 作用户名, 同一条里的 nickName 作显示昵称(缺昵称则整条不写入)
 function findInBody(text) {
     if (!text) return null;
     const flat = text.indexOf('\\u') !== -1 ? text.replace(/\\(["\\])/g, '$1') : text;
@@ -223,7 +224,7 @@ function isUserName(v) {
     return !!v && /^[A-Za-z0-9_\-\+@.]{2,60}$/.test(v);
 }
 
-// 写入账号数组：数据有变化就推送（新账号 / 昵称新增或改动），完全没变化才静默
+// 写入账号数组：必须同时抓到昵称才落盘，只有 username 的报文不写（昵称缺失说明抓到的不是 getuserinfo 那条）
 function saveAccount(username, nickName) {
     username = String(username).trim();
     nickName = String(nickName || '').trim();
@@ -231,9 +232,13 @@ function saveAccount(username, nickName) {
         debug(`忽略可疑用户名: ${username}`, '抓取');
         return;
     }
+    if (!nickName) {
+        debug(`账号 ${username} 未带昵称，不写入`, '抓取');
+        return;
+    }
     const exist = $.userArr.find(e => normName(e.username) === normName(username));
     if (exist) {
-        if (nickName && exist.nickName !== nickName) {
+        if (exist.nickName !== nickName) {
             exist.nickName = nickName;
             persistUsers();
             $.Messages.push(`🎉慢慢买昵称已更新: ${username} → ${nickName}`);
@@ -243,10 +248,10 @@ function saveAccount(username, nickName) {
         }
         return;
     }
-    $.userArr.push(nickName ? { username, nickName } : { username });
+    $.userArr.push({ username, nickName });
     persistUsers();
-    $.Messages.push(`🎉获取慢慢买账号成功: ${nickName || username}`);
-    $.log(`🎉获取慢慢买账号成功: ${username}${nickName ? ` (${nickName})` : ''}`);
+    $.Messages.push(`🎉获取慢慢买账号成功: ${nickName}`);
+    $.log(`🎉获取慢慢买账号成功: ${username} (${nickName})`);
 }
 
 // 落盘只保留 username 与可选的 nickName
