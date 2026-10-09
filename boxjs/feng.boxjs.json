@@ -568,6 +568,60 @@
       ]
     },
     {
+      "id": "aeon_sign",
+      "name": "永旺签到",
+      "author": "@Feng",
+      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aeon_sign.js",
+      "descs_html": [
+        "永旺小程序每日签到领积分(活动期 10-01~12-31，连续签到另有阶段奖励)，并查询会员卡等级/积分与本月到期积分",
+        "依赖「Code Server」分组中「获取小程序code」(@wxCode.address/token)，账号 ref 填本区域 aeon_ref",
+        "aeon_store 填了则所有账号强制在该商场签到，留空用各微信绑定的商场；仍报「未配置签到活动」说明该商场没上架",
+        "重要：ref 对应的微信必须已绑定永旺会员，否则会静默注册出一个新会员(表现为积分/等级为 0)",
+        "手机上打开永旺小程序会顶掉脚本缓存的 token，下次运行自动重新登录，属正常现象"
+      ],
+      "icons": [
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/aeon.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/aeon.png"
+      ],
+      "keys": [
+        "aeon_ref",
+        "aeon_cache",
+        "aeon_store"
+      ],
+      "settings": [
+        {
+          "id": "aeon_ref",
+          "name": "账号 ref",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "",
+          "desc": "code 服务的账号 ID/UIN/openid, 多个以英文逗号隔开, 一个 ref 一个微信身份"
+        },
+        {
+          "id": "aeon_cache",
+          "name": "永旺 token 缓存",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 5,
+          "placeholder": "",
+          "desc": "脚本自动维护，勿手填；按 ref 存 token/storeCode/nickname/expireTime/label"
+        },
+        {
+          "id": "aeon_store",
+          "name": "指定商场编码",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "MYDSC02024",
+          "desc": "可选：填写后对所有账号强制生效（统一在该商场签到）；留空则各账号使用登录响应返回的绑定商场"
+        }
+      ]
+    },
+    {
       "id": "pingme_sign",
       "name": "PingMe签到",
       "author": "@Feng",
