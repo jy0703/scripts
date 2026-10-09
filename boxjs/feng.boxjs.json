@@ -743,11 +743,10 @@
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/manmanbuy_sign.js",
       "descs_html": [
         "慢慢买 APP 每日签到领积分与金币，幸运日自动开启幸运礼盒，支持多账号",
-        "抓取：开启「慢慢买获取Cookie」后打开 慢慢买 APP，进入「我的 - 签到」页面即写入 manmanbuy_data，抓完关闭捕获开关",
-        "抓不到就手填：在 manmanbuy_users 里直接填慢慢买用户名，多个用英文逗号隔开（与抓包数据合并去重），接口只认用户名不需要 cookie",
-        "抓取失败时脚本日志会打印 [抓取诊断]（命中请求的 url / 头字段 / body 前 300 字节），据此可定位 username 在哪个字段",
-        "旧版 apph5.manmanbuy.com/renwu/index.aspx 签到接口服务端已下线，本脚本走签到页 H5 的 basic-ucenter 新接口",
-        "通知出现「用户不存在」或「token校验失败」= 用户名不对，重新抓一次或改 manmanbuy_users"
+        "抓取：开启「慢慢买获取Cookie」后回到 慢慢买 APP 首页即写入 manmanbuy_data（账号取自首页接口返回的 u_name，形如 wx_12345678Z）；只有拿到新账号才推送，重复抓取不会重复写入，抓到一个就可以关掉开关",
+        "抓不到就手填：在 manmanbuy_users 里填慢慢买用户名，多个用英文逗号隔开（与抓包数据合并去重）",
+        "签到接口只认 username + 应用级 token（脚本内置 mmb188），不需要 cookie；APP 请求里的 sign/token 是一次性的，整包重放会过期",
+        "通知出现「token校验失败」= 用户名不对或 token 已轮换，重抓一次或在 manmanbuy_token 填新值"
       ],
       "icons": [
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/manmanbuy.png",
@@ -755,7 +754,8 @@
       ],
       "keys": [
         "manmanbuy_data",
-        "manmanbuy_users"
+        "manmanbuy_users",
+        "manmanbuy_token"
       ],
       "settings": [
         {
@@ -766,7 +766,7 @@
           "autoGrow": true,
           "rows": 5,
           "placeholder": "",
-          "desc": "由 rewrite 抓取自动写入，勿手填；含 username/token/c_mmbDevId"
+          "desc": "由 rewrite 抓取自动写入，勿手填；内容形如 [{\"userName\":\"wx_xxxx\",\"username\":\"wx_xxxx\"}]"
         },
         {
           "id": "manmanbuy_users",
@@ -777,6 +777,15 @@
           "rows": 2,
           "placeholder": "",
           "desc": "抓不到包时手填，多个以英文逗号隔开"
+        },
+        {
+          "id": "manmanbuy_token",
+          "name": "应用级 token",
+          "val": "",
+          "type": "textarea",
+          "rows": 1,
+          "placeholder": "默认 mmb188",
+          "desc": "一般留空；服务端轮换后在此填新值"
         }
       ]
     }

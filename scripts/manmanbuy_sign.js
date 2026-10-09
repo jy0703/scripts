@@ -1,41 +1,40 @@
 /**
  * 脚本名称：慢慢买签到
  * 活动规则：每日签到领积分与金币，幸运日可开启幸运礼盒
- * 脚本说明：支持多账号，支持 NE / Node.js 环境。账号（username）由本脚本 GetCookie 抓取后存入 manmanbuy_data，也可在 manmanbuy_users 里直接填用户名
- * 环境变量：manmanbuy_data、manmanbuy_users
- * 备注：旧版抓包接口 apph5.manmanbuy.com/renwu/index.aspx 服务端已下线（回 "该接口已经弃用，请升级到最新APP版本"），现走 APP 签到页 H5 的 basic-ucenter 接口
+ * 脚本说明：支持多账号，支持 NE / Node.js 环境。签到接口只认 username + 应用级 token，账号由响应侧抓取（首页 index_json.ashx 返回的 u_name）写入 manmanbuy_data，也可在 manmanbuy_users 里直接填用户名
+ * 环境变量：manmanbuy_data、manmanbuy_users、manmanbuy_token(可选，token 轮换时覆盖)
  * 更新时间：2026-10-09
 
 ------------------ Surge 配置 ------------------
 
 [Script]
-慢慢买获取Cookie = type=http-request,pattern=^https?:\/\/(basic\-ucenter\.manmanbuy\.com|apph5\.manmanbuy\.com\/taolijin\/logserver\.aspx),requires-body=1,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/manmanbuy_sign.js,script-update-interval=0
+慢慢买获取Cookie = type=http-response,pattern=^https?:\/\/apapia\.manmanbuy\.com\/index_json\.ashx,requires-body=1,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/manmanbuy_sign.js,script-update-interval=0
 
 慢慢买签到 = type=cron,cronexp="0 1 * * *",wake-system=1,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/manmanbuy_sign.js,timeout=600,script-update-interval=0
 
 [MITM]
-hostname = basic-ucenter.manmanbuy.com, apph5.manmanbuy.com
+hostname = apapia.manmanbuy.com
 
 ------------------- Loon 配置 -------------------
 
 [Script]
-http-request ^https?:\/\/(basic\-ucenter\.manmanbuy\.com|apph5\.manmanbuy\.com\/taolijin\/logserver\.aspx) script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/manmanbuy_sign.js, requires-body=true, timeout=600, tag=慢慢买获取Cookie
+http-response ^https?:\/\/apapia\.manmanbuy\.com\/index_json\.ashx script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/manmanbuy_sign.js, requires-body=true, timeout=600, tag=慢慢买获取Cookie
 
 cron "0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/manmanbuy_sign.js, timeout=600, tag=慢慢买签到
 
 [MITM]
-hostname = basic-ucenter.manmanbuy.com, apph5.manmanbuy.com
+hostname = apapia.manmanbuy.com
 
 --------------- Quantumult X 配置 ---------------
 
 [rewrite_local]
-^https?:\/\/(basic\-ucenter\.manmanbuy\.com|apph5\.manmanbuy\.com\/taolijin\/logserver\.aspx) url script-request-body https://raw.githubusercontent.com/jy0703/scripts/main/scripts/manmanbuy_sign.js
+^https?:\/\/apapia\.manmanbuy\.com\/index_json\.ashx url script-response-body https://raw.githubusercontent.com/jy0703/scripts/main/scripts/manmanbuy_sign.js
 
 [task_local]
 "0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/manmanbuy_sign.js, tag=慢慢买签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/manmanbuy.png, enabled=true
 
 [MITM]
-hostname = basic-ucenter.manmanbuy.com, apph5.manmanbuy.com
+hostname = apapia.manmanbuy.com
 
  */
 
@@ -50,17 +49,31 @@ $.Messages = [];
 
 // 业务常量 (照签到页 activity_check_in H5 抓包搬运)
 const API_HOST = 'https://basic-ucenter.manmanbuy.com';
-const CAPTURE_REGEX = /^https?:\/\/(basic\-ucenter\.manmanbuy\.com|apph5\.manmanbuy\.com\/taolijin\/logserver\.aspx)/;
+// 请求侧抓取: APP 内 H5 走原生注入时请求里没有 username, 主要靠下面的响应侧抓取
+const REQ_CAPTURE_REGEX = /^https?:\/\/(basic\-ucenter\.manmanbuy\.com|apph5\.manmanbuy\.com\/taolijin\/logserver\.aspx)/;
+// 响应侧抓取: 首页 index_json.ashx 的返回体里带 "u_name":"wx_xxxx"，那才是签到接口要的 username
+const RESP_CAPTURE_REGEX = /^https?:\/\/apapia\.manmanbuy\.com\/index_json\.ashx/;
+// 应用级 token: 签到页 H5 的 web 调试分支里硬编码的常量, 服务端按它放行 (账号靠 username 区分)
+const APP_TOKEN = 'mmb188';
 const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 - mmbWebBrowse - ios';
 const DATA_KEY = 'manmanbuy_data';
 const USERS_KEY = 'manmanbuy_users';
+const TOKEN_KEY = 'manmanbuy_token';
 
 
 // 主函数
 async function main() {
-    // manmanbuy_users 里手填的用户名并入账号列表（可免抓包）
+    // manmanbuy_users 里手填的用户名并入账号列表（与抓包数据按用户名去重）
     (getEnv(USERS_KEY) || '').split(/[,，;；\s]+/).filter(Boolean).forEach(name => {
-        if (!$.userArr.some(e => e.username === name)) $.userArr.push({ userName: name, username: name });
+        if (!$.userArr.some(e => normName(e.username) === normName(name))) $.userArr.push({ userName: name, username: name });
+    });
+    // 抓包数据自身也可能有重复，按用户名收敛
+    const seen = {};
+    $.userArr = $.userArr.filter(e => {
+        const key = normName(e.username);
+        if (!key || seen[key]) return false;
+        seen[key] = 1;
+        return true;
     });
 
     if ($.userArr.length) {
@@ -104,11 +117,22 @@ async function runAccount(user) {
         $.messages.push('📝 签到: 今日已签到');
     } else {
         const signDate = await getTodaySignDate(user);
-        const res = await api('/user/sign', user, { signDate, isReSign: false });
-        const point = res && res.point;
-        $.messages.push(`✅ 签到: 成功${point ? `，获得 ${point} 积分` : ''}${res && res.description ? `（${res.description}）` : ''}`);
-        $.log(`✅ 签到返回: ${$.toStr(res)}`);
-        info = await api('/user/sign/info', user);
+        let res;
+        try {
+            res = await api('/user/sign', user, { signDate, isReSign: false });
+        } catch (e) {
+            // 5000 您当天已经签到 = 状态已被手机端消耗掉，按已签到处理
+            if (/已经签到|已签到/.test(e.msg || '')) {
+                $.messages.push('📝 签到: 今日已签到');
+                res = null;
+            } else throw e;
+        }
+        if (res) {
+            const point = res && res.point;
+            $.messages.push(`✅ 签到: 成功${point ? `，获得 ${point} 积分` : ''}${res && res.description ? `（${res.description}）` : ''}`);
+            $.log(`✅ 签到返回: ${$.toStr(res)}`);
+            info = await api('/user/sign/info', user);
+        }
     }
 
     // 幸运礼盒：luckBox 回 true 才开，失败不影响签到结果
@@ -132,42 +156,85 @@ async function getTodaySignDate(user) {
     return (today && today.signDate) || `${$.time('yyyy-MM-dd')} 00:00:00`;
 }
 
-// 获取Cookie数据 (rewrite 抓取入口, 与头部 http-request 正则配套)
+// 获取账号数据 (rewrite 抓取入口: 响应侧从 index_json.ashx 的 u_name 取, 请求侧作兜底)
+// 抓不到属于正常不匹配(未登录/别的接口/响应体被压缩)，只记日志不推送，避免刷屏
 function GetCookie() {
     try {
+        const isResp = typeof $response !== 'undefined';
+        const url = ($request && $request.url) || '';
         if ($request && $request.method === 'OPTIONS') return;
-        if (!$request.url || !CAPTURE_REGEX.test($request.url)) return;
 
-        const header = ObjectKeys2LowerCase($request.headers || {});
-        const params = pickParams($request);
-        if (!params.username) {
-            dumpRequest($request);
-            throw new Error('未找到 username 参数（脚本日志已打印 [抓取诊断]，或直接在 manmanbuy_users 手填用户名）');
+        if (isResp) {
+            if (!RESP_CAPTURE_REGEX.test(url)) return;
+            const username = findInBody(respBodyText());
+            if (!username) {
+                $.log(`[抓取诊断] 响应未带 u_name: ${url.split('?')[0]} (${respBodyText().length} 字节)`);
+                return;
+            }
+            saveAccount(username);
+        } else {
+            if (!url || !REQ_CAPTURE_REGEX.test(url)) return;
+            const params = pickParams($request);
+            if (!params.username) {
+                $.log(`[抓取诊断] 请求未带 username: ${url.split('?')[0]} (APP 走原生注入时不带，靠响应侧抓取)`);
+                return;
+            }
+            saveAccount(params.username);
         }
-        const username = params.username;
-
-        const newData = {
-            'userName': username,
-            'username': username,
-            'token': params.token || header.token || '',
-            'c_mmbDevId': params.c_mmbDevId || header['c_mmbdevid'] || '',
-            'cookie': header.cookie || ''
-        };
-
-        // 同一 username 覆盖旧记录
-        const index = $.userArr.findIndex(e => e.username == newData.username);
-        index !== -1 ? $.userArr[index] = newData : $.userArr.push(newData);
-        $.setdata($.toStr($.userArr), DATA_KEY);
-        $.Messages.push(`🎉获取慢慢买账号成功: ${username}`);
-        $.log(`🎉获取慢慢买账号成功: ${username}`);
     } catch (e) {
-        $.log('❌ Cookie获取失败'), $.log(e);
-        $.Messages.push(`❌ 慢慢买抓取失败: ${e.message || e}`);
+        $.log('❌ Cookie获取异常'), $.log(e);
     }
 }
 
+function respBodyText() {
+    const b = $response && $response.body;
+    if (typeof b === 'string') return b;
+    if (b && typeof b === 'object') return $.toStr(b) || '';
+    return '';
+}
+
+// 从响应体里取用户名: 兼容 "u_name":"x" 与被转义的 \"u_name\":\"x\" 与 JSONP 包裹
+function findInBody(text) {
+    if (!text) return '';
+    const flat = text.indexOf('\\u') !== -1 ? text.replace(/\\(["\\])/g, '$1') : text;
+    for (const t of [text, flat]) {
+        for (const k of NAME_KEYS) {
+            const m = t.match(new RegExp('"' + k + '"\\s*:\\s*"([^"]{2,60})"'));
+            if (m) { const v = safeDecode(m[1]).trim(); if (isUserName(v)) return v; }
+        }
+    }
+    return '';
+}
+
+// 用户名形态: 慢慢买是 wx_xxxxxxxx / 手机号 / 字母数字下划线，排除纯中文昵称等误取
+function isUserName(v) {
+    return !!v && /^[A-Za-z0-9_\-\+@.]{2,60}$/.test(v);
+}
+
+// 写入账号数组：已存在且内容相同则不写不推送
+function saveAccount(username) {
+    username = String(username).trim();
+    if (!isUserName(username)) {
+        $.log(`[抓取诊断] 忽略可疑用户名: ${username}`);
+        return;
+    }
+    const index = $.userArr.findIndex(e => normName(e.username) === normName(username));
+    if (index !== -1 && normName($.userArr[index].userName) === normName(username)) {
+        $.log(`慢慢买账号 ${username} 已存在，无需更新`);
+        return;
+    }
+    index !== -1 ? $.userArr[index] = { userName: username, username } : $.userArr.push({ userName: username, username });
+    $.setdata($.toStr($.userArr), DATA_KEY);
+    $.Messages.push(`🎉获取慢慢买账号成功: ${username}`);
+    $.log(`🎉获取慢慢买账号成功: ${username}`);
+}
+
+function normName(v) {
+    return String(v || '').trim().toLowerCase();
+}
+
 // 账号参数候选字段名 (H5 用 username, 客户端 appInfo 里叫 u_name)
-const NAME_KEYS = ['username', 'u_name', 'uname', 'user_name'];
+const NAME_KEYS = ['username', 'u_name', 'userName', 'uname', 'user_name'];
 
 // 从 url query / form body / json body / 请求头 / cookie 里找账号参数
 function pickParams(req) {
@@ -207,9 +274,8 @@ function safeDecode(v) {
 
 // 接口统一 POST form-urlencoded，成功码 2000，数据在 result
 async function api(path, user, extra = {}) {
-    const body = { username: user.username };
-    if (user.token) body.token = user.token;
-    if (user.c_mmbDevId) body.c_mmbDevId = user.c_mmbDevId;
+    // token 用签到页 H5 里的应用级常量，账号只靠 username 区分；抓包里的 token 是一次性随机数，不能复用
+    const body = { username: user.username, token: getEnv(TOKEN_KEY) || APP_TOKEN };
     Object.assign(body, extra);
 
     const resp = await Request({
@@ -227,7 +293,10 @@ async function api(path, user, extra = {}) {
     });
 
     if (!resp || resp.code !== 2000) {
-        throw new Error(`${(resp && resp.msg) || '接口响应不合法'}(code:${resp && resp.code}) ${path}`);
+        const err = new Error(`${(resp && resp.msg) || '接口响应不合法'}(code:${resp && resp.code}) ${path}`);
+        err.code = resp && resp.code;
+        err.msg = (resp && resp.msg) || '';
+        throw err;
     }
     return resp.result !== undefined ? resp.result : resp.data;
 }
