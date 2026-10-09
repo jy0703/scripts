@@ -41,6 +41,7 @@ const LOGIN_ENTRY = 'https://m.cloud.189.cn/udb/udb_login.jsp?pageId=1&pageKey=d
 const UA_PAGE = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:74.0) Gecko/20100101 Firefox/76.0';
 const UA_ECLOUD = 'Mozilla/5.0 (Linux; Android 5.1.1; SM-G930K Build/NRD90M; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/74.0.3729.136 Mobile Safari/537.36 Ecloud/8.6.3';
 const UA_SIGN = `${UA_ECLOUD} Android/22 clientId/355325117317828 clientModel/SM-G930K imsi/460071114317824 clientChannelId/qq proVersion/1.0.6`;
+const UA_PC = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 const SIGN_REFERER = 'https://m.cloud.189.cn/zhuanti/2016/sign/index.jsp?albumBackupOpened=1';
 const DRAW_TASKS = ['TASK_SIGNIN', 'TASK_SIGNIN_PHOTOS', 'TASK_2022_FLDFS_KJ'];
 
@@ -224,12 +225,28 @@ async function loginFlow(acc) {
 
 // ---------- 业务接口 ----------
 
+// 门户 cookie 换签到用的 sessionKey（getUserBriefInfo 是纯 cookie 通道，不需要 App 签名）
+async function getSessionKey(jar) {
+    const resp = await Request({ url: 'https://cloud.189.cn/v2/getUserBriefInfo.action', headers: withCookie(jar, { accept: '*/*', 'user-agent': UA_PC, referer: 'https://cloud.189.cn/web/main/' }), _timeout: 25000 });
+    if (!resp || typeof resp !== 'object' || resp.res_code !== 0) throw new Error(`换取 sessionKey 失败: ${resp && (resp.res_message || resp.errorCode) || '无响应'}`);
+    if (!resp.sessionKey) throw new Error('换取 sessionKey 失败: 响应里没有 sessionKey');
+    return String(resp.sessionKey);
+}
+
+// 签到走 cloud.189.cn 的 cookie 版旁路（302 到 /api/portal/mkt/...）：
+// api.cloud.189.cn/mkt/userSign.action 自 2026-10 起强制 Date/SessionKey/Signature 头，
+// 其 signature = HMAC-SHA1(sessionSecret, "SessionKey=..&Operate=GET&RequestURI=..&Date=..")，
+// 而 sessionSecret 只有 getSessionForPC.action 才下发，门户 Web 会话拿不到，故不走那条。
 async function doSign(jar) {
-    const url = `https://api.cloud.189.cn/mkt/userSign.action?rand=${Date.now()}&clientType=TELEANDROID&version=8.6.3&model=SM-G930K`;
-    const resp = await Request({ url, headers: apiHeaders(jar, UA_SIGN), _timeout: 25000 });
-    if (!resp || typeof resp !== 'object') throw new Error(`签到无有效响应: ${String(resp).slice(0, 120)}`);
-    const bonus = resp.netdiskBonus;
+    const sessionKey = await getSessionKey(jar);
+    const url = `https://cloud.189.cn/mkt/userSign.action?rand=${Date.now()}&clientType=TELEANDROID&version=9.0.6&model=KB2000&sessionKey=${encodeURIComponent(sessionKey)}`;
+    const page = await getPage(url, jar, { 'user-agent': UA_PC, referer: 'https://cloud.189.cn/web/main/' });
+    const resp = $.toObj(page && page.body, null);
+    if (!resp || typeof resp !== 'object') throw new Error(`签到响应异常: ${String(page && page.body).slice(0, 120)}`);
     debug($.toStr(resp), '[userSign]');
+    // sessionKey 会校验来源 IP，登录与签到不同源时服务端回 check ip error
+    if (resp.errorCode) return `⚠️ 签到: 被拒 ${resp.errorCode}${resp.errorMsg ? ` (${String(resp.errorMsg).slice(0, 60)})` : ''}`;
+    const bonus = resp.netdiskBonus;
     const got = bonus === undefined || bonus === null ? '' : `，获得 ${bonus}M 空间`;
     return String(resp.isSign) === 'false' ? `✅ 签到: 成功${got}` : `✔️ 签到: 今日已签到${got}`;
 }
