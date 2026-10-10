@@ -1,16 +1,19 @@
 /**
  * 脚本名称：印享星签到
- * 活动规则：印象城会员小程序每日签到领积分
+ * 活动规则：印象城会员小程序每日签到领星贝
  * 脚本说明：通过 code 服务(YYB Go)获取微信 code，
  *          login/wxCode 换 token → login/wx/autoLogin 取会员信息(HMAC-SHA256 签名 + AES-128-CBC 请求体加密)，
- *          token 本地缓存自动复用/失效刷新。支持 Node.js / Quantumult X / Loon / Surge / Stash。
+ *          token 本地缓存自动复用/失效刷新。
+ *          签到按广场配置分流：首页模板里挂着 24H5「签到得星贝」小游戏的广场走游戏签到
+ *          (game24/games 取授权参数 → thirdLogin → register → commitScore → registerPrizeDraw)，
+ *          否则回退 crm signDay/sign。支持 Node.js / Quantumult X / Loon / Surge / Stash。
  * 配置说明：boxjs 订阅「Code Server」分组中填写「获取小程序code」配置项(@wxCode.*):
  *          - @wxCode.open    开启code模式(true)
  *          - @wxCode.address 服务器地址, 如 http://192.168.2.5:8000
  *          - @wxCode.token   接口鉴权 token (请求头 Authorization: Bearer <token>)
  *          账号 ref 配在本脚本的 boxjs 区域 YXX_REF 中, 多个以英文逗号隔开
  *          Node 环境变量同名可用: WX_CODE_ADDRESS / WX_CODE_TOKEN / YXX_REF
- * 更新时间：2026-10-04
+ * 更新时间：2026-10-10
 
 ------------------ Surge 配置 ------------------
 
@@ -35,17 +38,27 @@ $.Messages = [];
 
 const APP_NAME = '印享星会员小程序';
 const APPID = 'wxeee2a26f00bc7701';
-const VERSION = '20260818150900';
+const VERSION = '20260916001706';
 const SIGN_SECRET = 'RLgF0BiQDcHfGhQeGrJMH66MCin6jD2q9+yiP9+/wC8=';
 const AES_KEY = 'inpl' + 'usCloud@!@#$';
 const BASE_URL = 'https://crm.scpgroup.com.cn/yinli-minapp/api/v1';
 const LOGIN_URL = `${BASE_URL}/login/wxCode`;
 const AUTO_LOGIN_URL = `${BASE_URL}/login/wx/autoLogin`;
+const TEMPLATE_URL = `${BASE_URL}/index/template`;
+const PLAZA_INFO_URL = `${BASE_URL}/square/plazaInfo`;
+const GAME_LINK_URL = `${BASE_URL}/game24/games`;
 const SIGN_RULES_URL = `${BASE_URL}/signDay/rules`;
 const SIGN_URL = `${BASE_URL}/signDay/sign`;
 const CACHE_KEY = 'YXX_TOKEN_CACHE';
 
+// 24H5 游戏签到(签到得星贝)
+const GAME_HOST = 'https://u168292.ssl.minihaowan.com';
+const GEO_URL = 'https://open-api.24haowan.com/open/tools/geo/decode';
+const GAME_SIGN_SALT = '24haowan';
+const DEVICE_TYPE = 'apple';
+
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36 MicroMessenger/7.0.20.1781(0x6700143B) NetType/WIFI MiniProgramEnv/Windows WindowsWechat/WMPF WindowsWechat(0x63090a13) UnifiedPCWindowsWechat(0xf2541923) XWEB/19823';
+const GAME_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 27_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.79(0x18004f26) NetType/WIFI Language/zh_CN miniProgram/wxeee2a26f00bc7701';
 
 
 // 主函数
@@ -53,7 +66,7 @@ async function main() {
     $.codeServer = (getEnv('WX_CODE_ADDRESS', '@wxCode.address') || '').replace(/\/+$/, '');
     $.refStr = getEnv('YXX_REF') || '';
     $.yybToken = getEnv('WX_CODE_TOKEN', '@wxCode.token') || '';
-    $.plazaCode = getEnv('YXX_PLAZA_CODE') || 'G001Z003C0018';
+    $.plazaCode = getEnv('YXX_PLAZA_CODE') || 'G001Z002C0064';
 
     const openRaw = getEnv('WX_CODE_OPEN', '@wxCode.open');
     const refs = $.refStr.split(/[,，\s\n]+/).filter(Boolean);
@@ -157,8 +170,97 @@ async function loginByCodeFlow(ref) {
     return { token: loginToken, memberId, phoneNumber };
 }
 
-// 签到流程: 查状态 → 签到
+// 签到流程: 广场首页挂 24H5 签到小游戏则走游戏签到, 否则走 crm signDay
 async function doSign(account) {
+    const gameId = await findSignInGame(account);
+    return gameId ? await gameSignIn(account, gameId) : await crmSignIn(account);
+}
+
+// 首页模板中「签到得星贝」的小游戏入口, 取 game_id
+async function findSignInGame(account) {
+    const resp = await apiGet(TEMPLATE_URL, account);
+    const functions = (resp?.data?.functionEntry?.functions) || [];
+    for (const f of functions) {
+        const url = decodeURIComponent(String(f.url || ''));
+        const m = url.match(/minihaowan\.com\/web\/game\/game_id\/(\d+)/);
+        if (m) {
+            $.log(`✅ [签到] 广场活动: ${f.mainTitle || '签到'} game_id=${m[1]}`);
+            return m[1];
+        }
+    }
+    return '';
+}
+
+// 游戏签到: 授权 → 定位放行 → 打卡 → 提交成绩发奖 → 达标抽奖
+async function gameSignIn(account, gameId) {
+    const link = await apiGet(`${GAME_LINK_URL}/${gameId}?memberId=${encodeURIComponent(account.memberId)}`, account);
+    const creds = parseForm(link?.data);
+    if (!creds?.appid || !creds?.uid) return [`签到活动参数获取失败: ${$.toStr(link)}`, false];
+
+    const g = { gameId };
+    const login = await gamePost(g, '/game/v2/thirdLogin', creds);
+    if (String(login?.code) !== '0' || !login?.jwt) return [`签到授权失败: ${$.toStr(login)}`, false];
+    g.jwt = login.jwt;
+    $.log('✅ [签到] 游戏授权成功');
+
+    const plaza = await apiGet(`${PLAZA_INFO_URL}?plazaCode=${encodeURIComponent($.plazaCode)}&appType=0`, account);
+    const lng = plaza?.data?.longitude, lat = plaza?.data?.latitude;
+    if (lng && lat) {
+        const geo = await Request({ url: `${GEO_URL}?lng=${lng}&lat=${lat}&user_id=${account.memberId}&game_id=${gameId}`, headers: { 'User-Agent': GAME_UA, 'Referer': `${GAME_HOST}/gametpl/game52.html?game_id=${gameId}` }, _timeout: 30000 });
+        if (String(geo?.code) === '0') {
+            const pos = await gamePost(g, '/node_w/game/v1/checkPosition', {
+                game_id: gameId,
+                province: String(geo?.data?.province || '').replace(/市/g, '').replace(/省/g, ''),
+                city: String(geo?.data?.city || '').replace(/市/g, ''),
+                county: geo?.data?.district || ''
+            });
+            if (pos?.data?.allow === false) return ['签到地区校验未通过(需广场所在城市定位)', false];
+            $.log(`✅ [签到] 定位放行: ${geo.data.province}${geo.data.city}${geo.data.district}`);
+        } else {
+            $.log(`⚠️ [签到] 逆地理编码失败, 跳过定位校验: ${$.toStr(geo)}`);
+        }
+    }
+
+    const reg = await gamePost(g, '/node_w/game/v1/register', { game_id: gameId });
+    $.log(`ℹ️ [签到] register: code=${reg?.code} msg=${reg?.msg || ''}`);
+    if (String(reg?.code) === '-12') {
+        const drawn = await gameLottery(g);
+        return [`今日已签到${drawn ? '，' + drawn : ''}`, true];
+    }
+    if (String(reg?.code) !== '0' && String(reg?.code) !== '99') return [`签到失败: ${reg?.msg || $.toStr(reg)}`, false];
+
+    const hist = await gameGet(g, '/node_w/game/v1/registerHistory', { game_id: gameId });
+    const days = Number(hist?.data?.sum_times || 0);
+    const cont = Number(hist?.data?.max_continue_times || 0);
+    $.log(`ℹ️ [签到] 累计 ${days} 天, 连续 ${cont} 天`);
+
+    const score = await gamePost(g, '/node_w/game/gameAjax/commitScore', buildScoreForm(gameId, days));
+    if (String(score?.code) !== '0') return [`签到奖励提交失败: ${score?.msg || $.toStr(score)}`, false];
+    const gift = score?.data?.gift || {};
+    let msg = `第 ${days} 天(连续 ${cont} 天)`;
+    if (gift.name) msg += `，${gift.name}${gift.point ? `(+${gift.point})` : ''}`;
+    const drawn = await gameLottery(g);
+    if (drawn) msg += `，${drawn}`;
+    return [msg, true];
+}
+
+// 连续/累计达标奖抽奖(日历上 status>0 且未抽过的日期)
+async function gameLottery(g) {
+    const hist = await gameGet(g, '/node_w/game/v1/registerHistory', { game_id: g.gameId });
+    const pending = ((hist?.data?.history) || []).filter(h => Number(h.status) > 0 && String(h.prize_draw) === '0');
+    if (!pending.length) return '';
+    const got = [];
+    for (const h of pending) {
+        const r = await gamePost(g, '/node_w/game/v1/registerPrizeDraw', { game_id: g.gameId, date: h.register_time });
+        $.log(`ℹ️ [抽奖] ${h.register_time}: code=${r?.code} msg=${r?.msg || ''}`);
+        if (String(r?.code) === '0') got.push(`${r?.prize?.name || r?.prize?.gift_name || '奖品'}(${h.register_time})`);
+        await $.wait(1000);
+    }
+    return got.length ? `抽中 ${got.join('、')}` : '';
+}
+
+// 老广场: crm 每日签到
+async function crmSignIn(account) {
     const rules = await apiGet(`${SIGN_RULES_URL}?memberId=${encodeURIComponent(account.memberId)}&phoneNumber=${encodeURIComponent(account.phoneNumber)}`, account);
     if (!isRespOk(rules)) {
         const m = rules?.message || rules?.msg || $.toStr(rules);
@@ -225,7 +327,7 @@ function commonHeaders(o = {}) {
     if (o.openId) h.openId = o.openId;
     if (o.security !== false) {
         h['Accept-Language'] = 'zh-CN,zh;q=0.9';
-        h['Referer'] = `https://servicewechat.com/${APPID}/686/page-frame.html`;
+        h['Referer'] = `https://servicewechat.com/${APPID}/689/page-frame.html`;
     }
     return h;
 }
@@ -248,6 +350,60 @@ async function apiPost(url, account, params) {
     Object.assign(headers, signHeaders);
     const body = encryptBody(params, signHeaders.timestamp);
     return await Request({ url, headers, body, _timeout: 30000 });
+}
+
+// ---------- 24H5 游戏签到请求 ----------
+
+function gameHeaders(g) {
+    return {
+        'User-Agent': GAME_UA,
+        'Accept': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'X-Requested-With': 'XMLHttpRequest',
+        'Origin': GAME_HOST,
+        'Referer': `${GAME_HOST}/gametpl/game52.html?game_id=${g.gameId}`,
+        'Authorization': `Bearer ${g.jwt}`
+    };
+}
+
+function gameForm(obj) {
+    return Object.keys(obj)
+        .filter(k => obj[k] !== undefined && obj[k] !== null)
+        .map(k => `${k}=${encodeURIComponent(obj[k])}`)
+        .join('&');
+}
+
+function parseForm(str) {
+    const o = {};
+    String(str || '').split('&').forEach(p => {
+        if (!p) return;
+        const i = p.indexOf('=');
+        if (i < 0) return;
+        o[p.slice(0, i)] = decodeURIComponent(p.slice(i + 1));
+    });
+    return o;
+}
+
+async function gamePost(g, path, params) {
+    const resp = await Request({ url: `${GAME_HOST}${path}`, method: 'post', headers: gameHeaders(g), body: gameForm(params), _timeout: 30000 });
+    if (resp?.jwt) g.jwt = resp.jwt;
+    return resp;
+}
+
+async function gameGet(g, path, params) {
+    const resp = await Request({ url: `${GAME_HOST}${path}?${gameForm(params)}`, headers: gameHeaders(g), _timeout: 30000 });
+    if (resp?.jwt) g.jwt = resp.jwt;
+    return resp;
+}
+
+// 成绩参数: game_score 由真实天数与时间戳派生, sign = md5(盐 + 参与签名的参数串)
+function buildScoreForm(gameId, score) {
+    const timestamp = String(Date.now());
+    const shift = [...timestamp].map(c => String((Number(c) + 2) % 10)).join('');
+    const pick = [...shift.slice(-3)].map(i => shift[i]).join('');
+    const game_score = Number((Number(score) + Number(pick)).toFixed(4));
+    const raw = `${GAME_SIGN_SALT}game_id=${gameId}&game_score=${game_score}&device_type=${DEVICE_TYPE}&timestamp=${timestamp}`;
+    return { game_id: gameId, game_score, device_type: DEVICE_TYPE, timestamp, ext_info: 'null', sign: Crypt('md5', raw) };
 }
 
 // 签名头: URL query 与 body 参数合并排序, HMAC-SHA256 hex

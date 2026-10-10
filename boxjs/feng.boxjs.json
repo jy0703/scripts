@@ -354,8 +354,9 @@
       "author": "@Feng",
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/yxx_sign.js",
       "descs_html": [
-        "印享星会员小程序(印力集团)每日签到领积分，支持多账号",
-        "依赖「Code Server」分组中「获取小程序code」(@wxCode.address/token)，账号 ref 填本区域 YXX_REF"
+        "印享星会员小程序(印力集团)每日签到领星贝，支持多账号",
+        "依赖「Code Server」分组中「获取小程序code」(@wxCode.address/token)，账号 ref 填本区域 YXX_REF",
+        "签到按广场分流：广场首页挂 24H5「签到得星贝」小游戏的走游戏签到(打卡+提交成绩+达标抽奖)，否则走 crm signDay 签到"
       ],
       "icons": [
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/yxx.png",
@@ -380,12 +381,12 @@
         {
           "id": "YXX_PLAZA_CODE",
           "name": "广场编码",
-          "val": "G001Z003C0018",
+          "val": "G001Z002C0064",
           "type": "textarea",
           "autoGrow": true,
           "rows": 1,
           "placeholder": "",
-          "desc": "plazaCode, 默认 G001Z003C0018, 按抓包改"
+          "desc": "plazaCode, 默认 G001Z002C0064(印力汇德隆杭州奥体印象城), 按抓包改"
         },
         {
           "id": "yxx_debug",
