@@ -221,6 +221,7 @@ async function gameSignIn(account, gameId) {
         }
     }
 
+    const st = String(Date.now());
     const reg = await gamePost(g, '/node_w/game/v1/register', { game_id: gameId });
     $.log(`ℹ️ [签到] register: code=${reg?.code} msg=${reg?.msg || ''}`);
     if (String(reg?.code) === '-12') {
@@ -231,6 +232,8 @@ async function gameSignIn(account, gameId) {
         return [/no allow/i.test(String(reg?.msg)) ? '平台未记录该微信的 openid, 需在手机微信里打开一次「签到得星贝」页面(关注公众号)后才能签到' : `签到被平台拒绝: ${reg?.msg}`, false];
     }
     if (String(reg?.code) !== '0' && String(reg?.code) !== '99') return [`签到失败: ${reg?.msg || $.toStr(reg)}`, false];
+
+    await $.wait(1000 + Math.floor(Math.random() * 1000));  // 打卡与发奖之间留个人手间隔
 
     const hist = await gameGet(g, '/node_w/game/v1/registerHistory', { game_id: gameId });
     const days = Number(hist?.data?.sum_times || 0);
@@ -400,13 +403,14 @@ async function gameGet(g, path, params) {
 }
 
 // 成绩参数: game_score 由真实天数与时间戳派生, sign = md5(盐 + 参与签名的参数串)
-function buildScoreForm(gameId, score) {
+// st = 页面上「开始/结算」展示时刻(window.startGameTMP), 服务端按它查 play 记录, 缺失会报错
+function buildScoreForm(gameId, score, st) {
     const timestamp = String(Date.now());
     const shift = [...timestamp].map(c => String((Number(c) + 2) % 10)).join('');
     const pick = [...shift.slice(-3)].map(i => shift[i]).join('');
     const game_score = Number((Number(score) + Number(pick)).toFixed(4));
     const raw = `${GAME_SIGN_SALT}game_id=${gameId}&game_score=${game_score}&device_type=${DEVICE_TYPE}&timestamp=${timestamp}`;
-    return { game_id: gameId, game_score, device_type: DEVICE_TYPE, timestamp, ext_info: 'null', sign: Crypt('md5', raw) };
+    return { game_id: gameId, game_score, device_type: DEVICE_TYPE, timestamp, ext_info: 'null', st, sign: Crypt('md5', raw) };
 }
 
 // 签名头: URL query 与 body 参数合并排序, HMAC-SHA256 hex
