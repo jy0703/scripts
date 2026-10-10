@@ -5,7 +5,7 @@
  *          login/wxCode 换 token → login/wx/autoLogin 取会员信息(HMAC-SHA256 签名 + AES-128-CBC 请求体加密)，
  *          token 本地缓存自动复用/失效刷新。
  *          签到按广场配置分流：首页模板里挂着 24H5「签到得星贝」小游戏的广场走游戏签到
- *          (game24/games 取授权参数 → thirdLogin → register → commitScore → registerPrizeDraw)，
+ *          (game24/games 取授权参数 → thirdLogin → getGameBasicInfo 入场 → checkPosition → register → commitScore → registerPrizeDraw)，
  *          否则回退 crm signDay/sign。支持 Node.js / Quantumult X / Loon / Surge / Stash。
  * 配置说明：boxjs 订阅「Code Server」分组中填写「获取小程序code」配置项(@wxCode.*):
  *          - @wxCode.open    开启code模式(true)
@@ -197,16 +197,20 @@ async function gameSignIn(account, gameId) {
     const creds = parseForm(link?.data);
     if (!creds?.appid || !creds?.uid) return [`签到活动参数获取失败: ${$.toStr(link)}`, false];
 
-    const g = { gameId };
+    const g = { gameId, page: `${GAME_HOST}/gametpl/game52.html?game_id=${gameId}` };
     const login = await gamePost(g, '/game/v2/thirdLogin', creds);
     if (String(login?.code) !== '0' || !login?.jwt) return [`签到授权失败: ${$.toStr(login)}`, false];
     g.jwt = login.jwt;
     $.log('✅ [签到] 游戏授权成功');
 
+    // 平台把"页面入场"当 register 的前置条件: 只有 getGameBasicInfo 会刷新进入时间, 缺了 register 回 -302 need refresh
+    await gamePost(g, '/node_w/game/v2/getGameBasicInfo', { redirect_url: g.page, game_id: gameId });
+    $.log('✅ [签到] 活动入场完成');
+
     const plaza = await apiGet(`${PLAZA_INFO_URL}?plazaCode=${encodeURIComponent($.plazaCode)}&appType=0`, account);
     const lng = plaza?.data?.longitude, lat = plaza?.data?.latitude;
     if (lng && lat) {
-        const geo = await Request({ url: `${GEO_URL}?lng=${lng}&lat=${lat}&user_id=${account.memberId}&game_id=${gameId}`, headers: { 'User-Agent': GAME_UA, 'Referer': `${GAME_HOST}/gametpl/game52.html?game_id=${gameId}` }, _timeout: 30000 });
+        const geo = await Request({ url: `${GEO_URL}?lng=${lng}&lat=${lat}&user_id=${account.memberId}&game_id=${gameId}`, headers: { 'User-Agent': GAME_UA, 'Referer': g.page }, _timeout: 30000 });
         if (String(geo?.code) === '0') {
             const pos = await gamePost(g, '/node_w/game/v1/checkPosition', {
                 game_id: gameId,
@@ -225,13 +229,22 @@ async function gameSignIn(account, gameId) {
     const reg = await gamePost(g, '/node_w/game/v1/register', { game_id: gameId });
     $.log(`ℹ️ [签到] register: code=${reg?.code} msg=${reg?.msg || ''}`);
     if (String(reg?.code) === '-12') {
-        const drawn = await gameLottery(g);
-        return [`今日已签到${drawn ? '，' + drawn : ''}`, true];
+        if (await giftReceivedToday(g)) {
+            const drawn = await gameLottery(g);
+            return [`今日已签到${drawn ? '，' + drawn : ''}`, true];
+        }
+        $.log('⚠️ [签到] 今日已打卡但没查到当日奖励, 补提交成绩');
+    } else if (String(reg?.code) === '-9') {
+        return /openid/i.test(String(reg?.msg))
+            ? ['平台未记录该微信的 openid, 需在手机微信里打开一次「签到得星贝」页面后才能签到', false]
+            : ['签到被平台判定异常(风控/黑名单), 暂停一天再试', false];
+    } else if (String(reg?.code) === '-302') {
+        return ['平台仍要求重新进入活动(入场链未生效), 请在手机微信里打开一次「签到得星贝」页面', false];
+    } else if (String(reg?.code) === '-3') {
+        return ['签到记录异常, 平台需人工审核(今日停止自动签到)', false];
+    } else if (String(reg?.code) !== '0' && String(reg?.code) !== '99') {
+        return [`签到失败: ${reg?.msg || $.toStr(reg)}`, false];
     }
-    if (String(reg?.code) === '-9') {
-        return [/no allow/i.test(String(reg?.msg)) ? '平台未记录该微信的 openid, 需在手机微信里打开一次「签到得星贝」页面(关注公众号)后才能签到' : `签到被平台拒绝: ${reg?.msg}`, false];
-    }
-    if (String(reg?.code) !== '0' && String(reg?.code) !== '99') return [`签到失败: ${reg?.msg || $.toStr(reg)}`, false];
 
     await $.wait(1000 + Math.floor(Math.random() * 1000));  // 打卡与发奖之间留个人手间隔
 
@@ -248,6 +261,13 @@ async function gameSignIn(account, gameId) {
     const drawn = await gameLottery(g);
     if (drawn) msg += `，${drawn}`;
     return [msg, true];
+}
+
+// 当日是否已拿到奖品(register 成功但 commitScore 失败过时为 false, 需要补提交)
+async function giftReceivedToday(g) {
+    const resp = await gamePost(g, '/node_w/game/gameAjax/getGiftList', { game_id: g.gameId });
+    const today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+    return ((resp?.data) || []).some(x => String(x.create_time || '').slice(0, 10) === today);
 }
 
 // 连续/累计达标奖抽奖(日历上 status>0 且未抽过的日期)
