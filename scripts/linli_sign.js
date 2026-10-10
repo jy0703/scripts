@@ -59,7 +59,7 @@ async function main() {
         }
 
         // 账号信息作为该账号通知的开头
-        $.Messages = $.Messages.concat([`🔹 账号 林里${i + 1}: ${user?.userName || ref}`, ...$.messages]);
+        $.Messages = $.Messages.concat([`🔹 林里 ${user?.userName || ref}`, ...$.messages]);
         if (i < refs.length - 1) await $.wait(2000);
     }
     $.log(`\n----- 所有账号执行完成 -----\n`);
@@ -140,23 +140,23 @@ async function discoverActivity(user) {
     return hit[1];
 }
 
-// 任务: 验活 → 查活动与签到状态 → 签到 → 复查连签与积分
+// 任务: 验活 → 查活动与签到状态 → 签到 → 复查累计与积分
 async function doSign(user) {
     let msg = '';
     try {
         const me = parseOk(await qmGet(user, '/web/catering/crm/personal-info'));
-        if (me.code !== 0 || !me.data) throw new Error(`凭证失效(${me.code}): ${me.message || '无数据'}，请重新抓取`);
+        if (me.code !== 0 || !me.data) throw new Error(`凭证失效(${me.code}): ${me.message || '无数据'}，请清空 ${CACHE_KEY} 重跑`);
         if (!user.userName) user.userName = me.data.name || maskPhone(me.data.mobilePhone) || '';
 
         const act = parseOk(await qmPost(user, '/web/cmk-center/sign/activityInfo', { activityId: user.activityId, bizScene: 1 }));
-        if (act.code !== 0) throw new Error(`活动不可用(${act.code}): ${act.message}，请重新进签到页抓取`);
+        if (act.code !== 0) throw new Error(`活动不可用(${act.code}): ${act.message}`);
         $.log(`📋 活动: ${(act.data && act.data.activityTitle) || '未命名签到活动'}`);
 
         const st = await signStatistics(user);
-        $.log(`📋 连签 ${st.signDays} 天, 积分 ${st.points}`);
+        $.log(`📋 ${statLine(st)}`);
 
         if (st.signStatus === 1) {
-            msg = `📝 今日已签 · 连签 ${st.signDays} 天 · 积分 ${st.points}`;
+            msg = `📝 今日已签 · ${statLine(st)}`;
         } else {
             const timestamp = String(Date.now());
             const body = {
@@ -170,14 +170,14 @@ async function doSign(user) {
             const res = parseOk(await qmPost(user, '/web/cmk-center/sign/takePartInSign', body));
             if (res.code !== 0) {
                 // 状态查询偶发不准，服务端说已签就当已签，不报失败
-                if (/已签到/.test(res.message || '')) msg = `📝 今日已签 · 连签 ${st.signDays} 天 · 积分 ${st.points}`;
+                if (/已签到/.test(res.message || '')) msg = `📝 今日已签 · ${statLine(st)}`;
                 else throw new Error(res.message || $.toStr(res).slice(0, 200));
             } else {
                 const rewards = ((res.data && res.data.rewardDetailList) || []).map(e => e.rewardType === 2 ? `+${e.sendNum} 积分` : e.rewardName).filter(Boolean);
                 $.log(`✅ 签到成功 ${rewards.join(', ')}`);
 
                 const after = await signStatistics(user);
-                msg = `✅ 签到成功 ${rewards.join(' / ') || '+积分'} · 连签 ${after.signDays} 天 · 积分 ${after.points}`;
+                msg = `✅ 签到成功 ${rewards.join(' / ') || '+积分'} · ${statLine(after)}`;
             }
         }
     } catch (e) {
@@ -187,15 +187,36 @@ async function doSign(user) {
     $.messages.push(msg);
 }
 
-// 签到状态: signStatus 2=今日未签, 1=已签; 积分另查 getCrmAvailablePoints
+// 签到状态: signStatus 2=今日未签, 1=已签; rewardList[].attain 1=该阶段已达成; 积分另查 getCrmAvailablePoints
 async function signStatistics(user) {
     const res = parseOk(await qmPost(user, '/web/cmk-center/sign/userSignStatistics', { activityId: user.activityId }));
     const points = parseOk(await qmGet(user, '/web/cmk-center/common/getCrmAvailablePoints'));
+    const d = (res && res.data) || {};
+    const list = d.rewardList || [];
+    const next = (d.nextRewardList || [])[0];
     return {
-        signStatus: res && res.data ? res.data.signStatus : undefined,
-        signDays: res && res.data ? res.data.signDays : '?',
+        signStatus: d.signStatus,
+        signDays: d.signDays != null ? d.signDays : '?',
         points: points && points.data != null ? points.data : '?',
+        milestone: list.length ? {
+            reached: list.filter(m => m.attain === 1).length,
+            total: list.length,
+            nextDays: next && next.signNum,
+            nextName: next ? (next.rewardList || []).map(x => x.rewardType === 2 ? `+${x.sendNum}积分` : x.rewardName).join(' ') : '',
+            needDays: d.nextSignDays,
+        } : null,
     };
+}
+
+// 汇总一行: 累计 N 天 · 积分 X · 阶段奖 1/5（下个 5 天「第二杯半价券」还需 3 天）
+function statLine(st) {
+    let s = `累计 ${st.signDays} 天 · 积分 ${st.points}`;
+    const m = st.milestone;
+    if (m) {
+        s += ` · 阶段奖 ${m.reached}/${m.total}`;
+        if (m.reached < m.total) s += `（下个 ${m.nextDays} 天「${m.nextName}」还需 ${m.needDays} 天）`;
+    }
+    return s;
 }
 
 // 企迈 v2 风控签名: 参数字典序拼接 + 反转 activityId 作 key 后 md5 取大写
