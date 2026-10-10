@@ -1,0 +1,5 @@
+#!name=林里签到
+#!desc=LINLEE 手打柠檬茶小程序每日签到领积分，账号通过 Code Server 服务获取，支持多账号（token 失效自动重新登录）
+
+[Script]
+林里签到 = type=cron,cronexp="0 1 * * *",wake-system=1,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/linli_sign.js,script-update-interval=0

@@ -1246,6 +1246,57 @@
           "desc": "逐条打印请求/响应明细，排查问题用；日志可能含 Cookie、skey 等敏感信息，看完记得关掉"
         }
       ]
+    },
+    {
+      "id": "linli_sign",
+      "name": "林里签到",
+      "author": "@Feng",
+      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/linli_sign.js",
+      "descs_html": [
+        "LINLEE 手打柠檬茶小程序每日签到领积分，连签 2/5/7/15/22 天得饮品券，支持多账号",
+        "依赖「Code Server」分组中「获取小程序code」(@wxCode.address/token)，账号 ref 填本区域 LINLI_REF，一个 ref 一个微信身份，且该微信需已是林里会员",
+        "脚本每次静默登录取 token（缓存在 linli_cache，先验活再复用，失效自动重登），并从会员中心装修配置自动发现当期签到活动，无需抓包",
+        "实测服务端不校验企迈 v2 的 data 风控字段（它只能由微信 getLatestUserKey 生成），签名脚本本地算即可；脚本登录不会顶掉手机端会话",
+        "通知出现「凭证失效」或「数据不完整」先清空 linli_cache 强制重登；出现「活动不可用」= 签到活动换了"
+      ],
+      "icons": [
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/linli.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/linli.png"
+      ],
+      "keys": [
+        "LINLI_REF",
+        "linli_cache",
+        "linli_debug"
+      ],
+      "settings": [
+        {
+          "id": "LINLI_REF",
+          "name": "账号 ref",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "",
+          "desc": "code 服务的账号 ID/UIN/openid, 多个以英文逗号隔开, 一个 ref 一个微信身份；该微信需已是林里会员"
+        },
+        {
+          "id": "linli_cache",
+          "name": "ref 账号 token 缓存",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 3,
+          "placeholder": "",
+          "desc": "脚本自动写入（按 ref 存 token/userId/storeId），下次跑先验活复用；换 code 服务或想强制重登就清空它"
+        },
+        {
+          "id": "linli_debug",
+          "name": "调试模式",
+          "val": false,
+          "type": "boolean",
+          "desc": "逐条打印请求/响应明细，排查问题用；日志可能含 token 等敏感信息，看完记得关掉"
+        }
+      ]
     }
   ]
 }

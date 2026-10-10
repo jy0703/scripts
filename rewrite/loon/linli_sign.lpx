@@ -1,0 +1,13 @@
+#!name = 林里签到
+#!desc = LINLEE 手打柠檬茶小程序每日签到领积分，连签得饮品券，账号通过 Code Server 服务获取，支持多账号（token 失效自动重新登录）
+#!author = Fengzzzz
+#!homepage = https://github.com/jy0703/scripts
+#!icon = https://raw.githubusercontent.com/jy0703/scripts/main/icons/linli.png
+#!tag = 签到,自动化
+#!type = normal
+
+[Argument]
+cronExpression = input,"0 1 * * *",tag=定时参数,desc=这里需要输入符合 CRON 表达式的参数
+
+[Script]
+cron {cronExpression} script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/linli_sign.js,timeout=600,tag=林里签到,enable=true
