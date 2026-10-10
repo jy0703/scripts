@@ -1124,6 +1124,128 @@
           "desc": "逐条打印请求/响应明细，排查问题用；日志可能含 Cookie 等敏感信息，看完记得关掉"
         }
       ]
+    },
+    {
+      "id": "weread_sign",
+      "name": "微信读书任务",
+      "author": "@Feng",
+      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/weread_sign.js",
+      "descs_html": [
+        "微信读书每周奖励自动化：阅读达标兑换书币/体验卡、每周翻牌抽奖、每周限免好书入架，支持多账号",
+        "抓取：开启「微信读书获取Cookie」后，在微信读书 APP 里退出登录并重登一次即写入 weread_data（vid/skey/accessToken 取自登录响应，refreshToken/deviceId 取自登录请求体，两者齐全才能实现脱机自动换票）；抓到一个账号就可以关掉开关",
+        "抓不到就手填：在 weread_data 里填 [{\"vid\":\"示例VID\",\"skey\":\"示例SKEY\",\"accessToken\":\"示例ACCESSTOKEN\",\"refreshToken\":\"示例REFRESHTOKEN\",\"deviceId\":\"示例DEVICEID\"}]，多个账号依次追加",
+        "凭证里拿到 refreshToken+deviceId 后，skey 过期由脚本自己调 /login 换票（无需再抓包）；只有 vid+skey 的话过期要重抓",
+        "限免领书官方规则：每账号每周 2 本，且必须由好友账号点击分享链接助力。在 weread_helper 里填助力小号（每行一个「VID#SKEY#WR_RT」，或直接粘贴微信里 weread.qq.com 的完整 Cookie），配满 2 个小号才能每周 2 本全自动秒领",
+        "未配助力小号时，通知会给出官方带签名的直达链接，微信点开手动领即可",
+        "阅读时长需真实阅读才会达标，脚本只兑换已达标的档位；weread_award 选 card 则优先体验卡，默认书币",
+        "限免书库每周四更新，翻牌与达标奖励按自然周结算，默认定时为周日 23:00 一次领完"
+      ],
+      "icons": [
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/weread.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/weread.png"
+      ],
+      "keys": [
+        "weread_data",
+        "weread_helper",
+        "weread_claim",
+        "weread_flip",
+        "weread_free",
+        "weread_award",
+        "weread_free_mode",
+        "weread_exclude_keywords",
+        "weread_cache",
+        "weread_debug"
+      ],
+      "settings": [
+        {
+          "id": "weread_data",
+          "name": "微信读书账号",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 5,
+          "placeholder": "",
+          "desc": "由 rewrite 抓取自动写入，形如 [{\"vid\":\"示例VID\",\"skey\":\"示例SKEY\",\"accessToken\":\"示例ACCESSTOKEN\",\"refreshToken\":\"示例REFRESHTOKEN\",\"deviceId\":\"示例DEVICEID\"}]；accessToken 供翻牌用，refreshToken+deviceId 供脱机换票用"
+        },
+        {
+          "id": "weread_helper",
+          "name": "助力小号",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 3,
+          "placeholder": "VID#SKEY#WR_RT，每行一个",
+          "desc": "限免领书需要好友助力，每个小号每周只能助力 1 本；也可直接粘贴微信里 weread.qq.com 的完整 Cookie（含 wr_vid/wr_skey/wr_rt，带 wr_rt 才能自动续期）"
+        },
+        {
+          "id": "weread_claim",
+          "name": "阅读达标领卡",
+          "val": true,
+          "type": "boolean",
+          "desc": "兑换本周已达标的阅读时长/连续阅读天数奖励"
+        },
+        {
+          "id": "weread_flip",
+          "name": "翻牌抽奖",
+          "val": true,
+          "type": "boolean",
+          "desc": "翻完本周可用的翻牌次数"
+        },
+        {
+          "id": "weread_free",
+          "name": "限免好书入架",
+          "val": true,
+          "type": "boolean",
+          "desc": "自动挑选并领取本周限免好书（配了助力小号才全自动）"
+        },
+        {
+          "id": "weread_award",
+          "name": "达标奖励偏好",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "默认 coin",
+          "desc": "coin=优先书币（默认），card=优先体验卡"
+        },
+        {
+          "id": "weread_free_mode",
+          "name": "限免选书偏好",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "默认 balanced",
+          "desc": "balanced=口碑优先(默认)，price=同等口碑挑书币售价最高的，hot=挑在读/评价人数最多的畅销书"
+        },
+        {
+          "id": "weread_exclude_keywords",
+          "name": "限免排除关键词",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "套装,白话版,真题",
+          "desc": "书名包含任一关键词则跳过，多个用逗号或 | 隔开；过滤后不足 2 本会自动回退全量候选"
+        },
+        {
+          "id": "weread_cache",
+          "name": "本周限免锁定结果",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 3,
+          "placeholder": "",
+          "desc": "脚本自动生成（记录本期已领书名，避免整周重复挑选）；想换一本重领就把该项清空"
+        },
+        {
+          "id": "weread_debug",
+          "name": "调试模式",
+          "val": false,
+          "type": "boolean",
+          "desc": "逐条打印请求/响应明细，排查问题用；日志可能含 Cookie、skey 等敏感信息，看完记得关掉"
+        }
+      ]
     }
   ]
 }

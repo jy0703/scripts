@@ -1,0 +1,5 @@
+#!name=微信读书任务
+#!desc=每周领取微信读书阅读达标奖励、翻牌抽奖与限免好书，支持多账号（账号来自「微信读书获取Cookie」模块抓取或 BoxJS 手填）
+
+[Script]
+微信读书任务 = type=cron,cronexp="0 23 * * 0",wake-system=1,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/weread_sign.js,script-update-interval=0

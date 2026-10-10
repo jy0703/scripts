@@ -1,0 +1,9 @@
+#!name=微信读书获取Cookie
+#!desc=自动抓取微信读书登录凭证（vid/skey/accessToken + refreshToken/deviceId）
+#!在微信读书 APP 里「我 - 设置 - 退出登录」后重新登录一次即触发抓取：登录响应给 vid/skey/accessToken，登录请求体给 refreshToken/deviceId，两者齐全才能脱机自动换票。定时任务在「微信读书任务」模块。
+
+[Script]
+微信读书获取Cookie = type=http-response,pattern=^https?:\/\/i\.weread\.qq\.com\/login(\?|$),requires-body=1,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/weread_sign.js,script-update-interval=0
+
+[MITM]
+hostname = %APPEND% i.weread.qq.com

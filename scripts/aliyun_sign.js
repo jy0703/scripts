@@ -81,7 +81,6 @@ async function main() {
             // 初始化
             $.messages = [];
             $.beforeMsgs = '';
-            $.title = '';
             $.stat = { actCount: 0, acts: [], votes: [], ebooks: [], signs: [], bonuses: [], videos: [], collected: 0, canceled: 0 };
             $.user = normalizeUser($.userArr[i]);
 
@@ -158,11 +157,8 @@ async function main() {
             $.log(sum);
             $.messages.push(`当前积分 ${$.user.score}，待领取 ${$.user.pendingScore}`, sum);
             $.messages.splice(0, 0, $.beforeMsgs);
-            // 副标题放一行汇总，附件图用该账号自己的头像（与上游一致：循环内逐账号推送）
-            $.title = isTaskTime
-                ? `签到 ${$.stat.signs.length}/${COMMUNITIES.length} · 互动 ${$.stat.actCount} 次`
-                : `收取 ${$.stat.collected} 积分`;
-            await sendMsg($.messages.join('\n'), $.user.avatar, $.title);
+            // 逐账号推送，附件图用该账号头像；汇总已在正文末行，不再重复放副标题
+            await sendMsg($.messages.join('\n'), $.user.avatar);
         }
 
         $.log(`\n----- 所有账号执行完成 -----\n`);

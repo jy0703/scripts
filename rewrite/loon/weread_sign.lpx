@@ -1,0 +1,18 @@
+#!name = 微信读书任务
+#!desc = 自动抓取微信读书登录凭证，并按周领取阅读达标奖励、翻牌抽奖与限免好书，支持多账号（打开微信读书 APP：我 - 设置 - 退出登录，再重新登录一次即触发抓取）
+#!author = Fengzzzz
+#!homepage = https://github.com/jy0703/scripts
+#!icon = https://raw.githubusercontent.com/jy0703/scripts/main/icons/weread.png
+#!tag = 签到,自动化
+#!type = normal
+
+[Argument]
+capture = switch,false,tag=捕获Cookie,desc=打开后在微信读书 APP 退出登录并重登一次即抓取（登录响应给 vid/skey/accessToken，登录请求体给 refreshToken/deviceId），抓到一个账号即可关闭
+cronExpression = input,"0 23 * * 0",tag=定时参数,desc=这里需要输入符合 CRON 表达式的参数
+
+[Script]
+http-response ^https?:\/\/i\.weread\.qq\.com\/login(\?|$) script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/weread_sign.js,requires-body=true,timeout=600,tag=微信读书获取Cookie,enable={capture}
+cron {cronExpression} script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/weread_sign.js,timeout=600,tag=微信读书任务,enable=true
+
+[Mitm]
+hostname = i.weread.qq.com
