@@ -407,8 +407,8 @@
         "依赖「Code Server」分组中「获取小程序code」(@wxCode.address/token)，账号 ref 填本区域 THYC_REF"
       ],
       "icons": [
-        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/thyc.png",
-        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/thyc.png"
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/tuhuyangche.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/tuhuyangche.png"
       ],
       "keys": [
         "THYC_REF",
@@ -943,8 +943,8 @@
         "Stash 等会自动跟随重定向的环境收不到 SSO 302 上的 LT/STK，可能登录失败，建议用 Loon / Surge / Quantumult X / 青龙"
       ],
       "icons": [
-        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/tyyp.png",
-        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/tyyp.png"
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/tianyiyunpan.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/tianyiyunpan.png"
       ],
       "keys": [
         "tyyp_account",

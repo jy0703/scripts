@@ -25,7 +25,7 @@ cron "24 8 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/
 --------------- Quantumult X 配置 ---------------
 
 [task_local]
-"24 8 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/thyc_sign.js, tag=途虎养车签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/thyc.png, enabled=true
+"24 8 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/thyc_sign.js, tag=途虎养车签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/tuhuyangche.png, enabled=true
 
  */
 
