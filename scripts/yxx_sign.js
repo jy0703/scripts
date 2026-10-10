@@ -227,6 +227,9 @@ async function gameSignIn(account, gameId) {
         const drawn = await gameLottery(g);
         return [`今日已签到${drawn ? '，' + drawn : ''}`, true];
     }
+    if (String(reg?.code) === '-9') {
+        return [/no allow/i.test(String(reg?.msg)) ? '平台未记录该微信的 openid, 需在手机微信里打开一次「签到得星贝」页面(关注公众号)后才能签到' : `签到被平台拒绝: ${reg?.msg}`, false];
+    }
     if (String(reg?.code) !== '0' && String(reg?.code) !== '99') return [`签到失败: ${reg?.msg || $.toStr(reg)}`, false];
 
     const hist = await gameGet(g, '/node_w/game/v1/registerHistory', { game_id: gameId });

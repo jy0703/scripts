@@ -356,7 +356,8 @@
       "descs_html": [
         "印享星会员小程序(印力集团)每日签到领星贝，支持多账号",
         "依赖「Code Server」分组中「获取小程序code」(@wxCode.address/token)，账号 ref 填本区域 YXX_REF",
-        "签到按广场分流：广场首页挂 24H5「签到得星贝」小游戏的走游戏签到(打卡+提交成绩+达标抽奖)，否则走 crm signDay 签到"
+        "签到按广场分流：广场首页挂 24H5「签到得星贝」小游戏的走游戏签到(打卡+提交成绩+达标抽奖)，否则走 crm signDay 签到",
+        "游戏签到按公众号 openid 记账：新微信需先在手机上打开一次「签到得星贝」页面，否则回 no allow: openid"
       ],
       "icons": [
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/yxx.png",
