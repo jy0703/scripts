@@ -55,6 +55,8 @@ const API = `https://${HOST}/developer/api`;
 const UCC = 'https://ucc.aliyun.com';
 const LIVE_VERSION = '1.1.23';
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+// 原版对 csrfToken / voteAnswer / 电子书评价都用阿里云 APP 内嵌页 UA，任务判定按端来算
+const APP_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 AliApp(Aliyun/6.7.1) WindVane/8.7.2 1170x2532 WK';
 
 // 社区板块：实测只有"我的社区"有签到任务组，其余具名社区对账号回 data=null（白跑 18 次请求），故只留这一个
 const COMMUNITIES = [
@@ -66,8 +68,8 @@ const ACT = { like: 'aliyun-public-like', favorite: 'aliyun-public-favorite', sh
 const ACT_NAME = { [ACT.like]: '点赞', [ACT.favorite]: '收藏', [ACT.share]: '分享' };
 
 // 互动文案
-const COMMENT_TEXT = '写的真好，受益匪浅！';
-const EBOOK_TEXT = '很棒的一本书，收获很多！';
+const COMMENT_TEXT = '很有用的文章，非常受用，感谢博主';
+const EBOOK_TEXT = '很棒的一本书';
 
 
 // 主函数
@@ -321,7 +323,8 @@ async function getSignInTask(user, taskGroupId) {
 
 // 一轮文章互动（点赞+收藏，首轮附加评论与分享）+ 问答点赞
 async function interactRound(user, round) {
-    const articleId = pickOne(await scanIds(user, `https://${HOST}/group/aliware/article_hot`, { pageNum: rand(1, 30) }, /data-id="(\d+)"/g));
+    // 属性顺序是 data-id 在前、class="feed-item" 在后
+    const articleId = pickOne(await scanIds(user, `https://${HOST}/group/aliware/article_hot`, { pageNum: rand(1, 30) }, /data-id="(\d+)"[^>]*class="feed-item"/g));
     if (articleId) {
         const done = [];
         for (const action of [ACT.like, ACT.favorite]) {
@@ -357,12 +360,6 @@ async function interactRound(user, round) {
 
 // 问答：随机问题 → 随机回答 → 点赞
 async function voteAnswer(user) {
-    const csrf = await getCsrf(user, `${HOST}/ask/`);
-    if (!csrf) {
-        $.log('📝 问答点赞: 未取到 p_csrf，跳过');
-        return;
-    }
-
     for (let i = 0; i < 3; i++) {
         const asks = await scanAsks(user);
         if (!asks.length) continue;
@@ -374,10 +371,17 @@ async function voteAnswer(user) {
             continue;
         }
 
+        const csrf = await getCsrf(user, 'ask', ask.id);
+        if (!csrf) {
+            $.log('📝 问答点赞: 未取到 p_csrf，跳过');
+            return;
+        }
+
         const result = await api(user, '/my/ask/voteAnswer', {
             params: { p_csrf: csrf },
             form: { id: answerId, votes: 1 },
-            referer: `https://${HOST}/ask/${ask.id}`
+            referer: `https://${HOST}/ask/${ask.id}`,
+            ua: APP_UA
         });
         if (result?.code === '200' || result?.success) {
             const pair = `${ask.id}-${answerId}`;
@@ -411,17 +415,18 @@ async function scanAsks(user) {
 
 // 电子书评价
 async function doEbook(user) {
-    const ebookId = pickOne(await scanIds(user, `https://${HOST}/ebook/index/__0_0_0_${rand(1, 500)}`, {}, /href="\/ebook\/(\d+)"/g));
+    const ebookId = pickOne((await scanIds(user, `https://${HOST}/ebook/index/__0_0_0_${rand(1, 500)}`, {}, /class="ebook-home-item"[^>]*href="\/ebook\/(\d+)"/g)).filter(x => x.length > 2));
     if (!ebookId) {
         $.log('📝 电子书评价: 未取到电子书id，跳过');
         return;
     }
 
-    const csrf = await getCsrf(user, `${HOST}/ebook/${ebookId}`);
+    const csrf = await getCsrf(user, 'ebook', ebookId);
     const result = await api(user, '/ebook/mark/add', {
         params: { p_csrf: csrf },
         json: { eBookId: ebookId, score: 10, content: EBOOK_TEXT },
-        referer: `https://${HOST}/ebook/${ebookId}`
+        referer: `https://${HOST}/ebook/${ebookId}`,
+        ua: APP_UA
     });
     if (result?.code === '200' || result?.success) {
         if (!$.stat.ebooks.includes(ebookId)) $.stat.ebooks.push(ebookId);
@@ -502,7 +507,7 @@ async function cancelInteractions(user) {
 // 社区 API：GET / POST(form) / POST(json) 三态
 async function api(user, path, opts = {}) {
     const url = path.startsWith('http') ? path : API + path;
-    const options = { url, headers: baseHeaders(user, opts.referer || `https://${HOST}/`) };
+    const options = { url, headers: baseHeaders(user, opts.referer || `https://${HOST}/`, opts.ua) };
 
     if (opts.params) options.url = `${url}?${buildQuery(opts.params)}`;
 
@@ -542,9 +547,9 @@ async function uccComment(user, objectId) {
     const url = `${UCC}/uccPagingComponent/addComment?${$.queryStr({
         content: encodeURIComponent(COMMENT_TEXT),
         objectId,
-        bizCategory: 'developer-ecology',
+        bizCategory: 'yq-comment-type-article',
         commentType: 0,
-        sourceAppCode: 'aliyun',
+        sourceAppCode: 'developer-ecology',
         sourceBizCategory: 'developer-ecology-group',
         uccCsrfToken: token,
         callback: jsonpCallback()
@@ -559,9 +564,9 @@ async function getUccCsrf(user) {
     return result?.uccCsrfToken || result?.data?.uccCsrfToken || '';
 }
 
-// developer 站 p_csrf（挂在 cookie 的 c_csrf 上，需带 Cookie 请求）
-async function getCsrf(user, refererHostPath) {
-    const result = await Request({ url: `https://${HOST}/csrfToken`, headers: baseHeaders(user, `https://${refererHostPath}`) });
+// developer 站 p_csrf（挂在 cookie 的 c_csrf 上）；原版按 type/id 组 Referer 并用 APP UA
+async function getCsrf(user, type, id) {
+    const result = await Request({ url: `https://${HOST}/csrfToken`, headers: baseHeaders(user, `https://${HOST}/${type}/${id}`, APP_UA) });
     return result?.token || '';
 }
 
@@ -592,10 +597,10 @@ function pickOne(ids) {
     return ids.length ? ids[rand(0, ids.length - 1)] : null;
 }
 
-function baseHeaders(user, referer) {
+function baseHeaders(user, referer, ua) {
     return {
         'Cookie': user.cookie,
-        'User-Agent': user.ua || UA,
+        'User-Agent': ua || user.ua || UA,
         'Referer': referer,
         'Accept': 'application/json, text/plain, */*',
         'Accept-Language': 'zh-CN,zh;q=0.9'

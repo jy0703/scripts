@@ -203,8 +203,9 @@ async function gameSignIn(account, gameId) {
     g.jwt = login.jwt;
     $.log('✅ [签到] 游戏授权成功');
 
-    // 平台把"页面入场"当 register 的前置条件: 只有 getGameBasicInfo 会刷新进入时间, 缺了 register 回 -302 need refresh
+    // 平台把"页面入场"当 register 的前置条件: getGameBasicInfo 会刷新进入时间, 缺了 register 回 -302 need refresh
     await gamePost(g, '/node_w/game/v2/getGameBasicInfo', { redirect_url: g.page, game_id: gameId });
+    await gamePost(g, '/node_w/game/v2/getGamePlayInfo', { game_id: gameId });
     $.log('✅ [签到] 活动入场完成');
 
     const plaza = await apiGet(`${PLAZA_INFO_URL}?plazaCode=${encodeURIComponent($.plazaCode)}&appType=0`, account);
