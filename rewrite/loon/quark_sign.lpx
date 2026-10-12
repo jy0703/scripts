@@ -1,0 +1,18 @@
+#!name = 夸克网盘签到
+#!desc = 抓取一次夸克网盘的 kps_wg 并就地解出账号凭证，之后每日定时签到领空间容量，支持多账号（打开夸克 App：我的 - 网盘签到/领空间）
+#!author = Fengzzzz
+#!homepage = https://github.com/jy0703/scripts
+#!icon = https://raw.githubusercontent.com/jy0703/scripts/main/icons/quark.png
+#!tag = 签到,自动化
+#!type = normal
+
+[Argument]
+capture = switch,false,tag=捕获Cookie,desc=打开后进入夸克 App 的网盘签到/领空间页面，抓到一次即可关闭（脚本会解密出长期凭证，之后自己现算签名）
+cronExpression = input,"0 9 * * *",tag=定时参数,desc=这里需要输入符合 CRON 表达式的参数
+
+[Script]
+http-request ^https?:\/\/drive\-m\.quark\.cn\/1\/clouddrive\/ script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/quark_sign.js,requires-body=false,timeout=600,tag=夸克网盘获取Cookie,enable={capture}
+cron {cronExpression} script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/quark_sign.js,timeout=600,tag=夸克网盘签到,enable=true
+
+[Mitm]
+hostname = drive-m.quark.cn

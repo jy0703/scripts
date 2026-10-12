@@ -1,0 +1,9 @@
+#!name=夸克网盘获取Cookie
+#!desc=抓取夸克网盘的 kps_wg 并就地解出长期账号凭证
+#!打开夸克 App，进入「我的 - 网盘签到/领空间」页面触发抓取；抓到一次即可关闭，之后签名由脚本现算。换账号后退出登录重进一次可追加。
+
+[Script]
+夸克网盘获取Cookie = type=http-request,pattern=^https?:\/\/drive\-m\.quark\.cn\/1\/clouddrive\/,requires-body=0,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/quark_sign.js,script-update-interval=0
+
+[MITM]
+hostname = %APPEND% drive-m.quark.cn

@@ -1,9 +1,9 @@
 /**
  * 脚本名称：中国移动签到
- * 活动规则：中国移动「签到领流量/话费」活动(1021122301) 的 App 端 mark31 签到，每天一次；另有 AI豆任务(mark/task) 与秒杀抢券(markSeckill)；开关 cmcc_video 后追加「追剧领福利」页(1126082530) 的每日打卡 + 代币任务 + 周日抽奖
+ * 活动规则：中国移动「签到领流量/话费」活动(1021122301) 的 App 端 mark31 签到，每天一次；另有 AI豆任务(mark/task) 与秒杀抢券(markSeckill)；开关 cmcc_video 后追加「追剧领福利」页(1126082530) 的每日打卡 + 代币任务 + 周日抽奖；开关 cmcc_wed 后追加「周三充值日」(hlwyxhdhub/wedrecharge) 的做任务挣次数 + 抽拼图集话费券，cmcc_wed_sk 再打周三场次秒杀(drawPrize)
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。账号参数（App 票据/省市编码等）由本脚本 GetCookie 抓取后存入 cmcc_data
- * 环境变量：cmcc_data / cmcc_claim / cmcc_task / cmcc_seckill / cmcc_video / cmcc_task_skip_days；cmcc_task_fail 为脚本自动维护的任务黑名单
- * 更新时间：2026-10-08 新增追剧领福利(diy-client 1126082530)：每日打卡 + diyTask 代币任务 + 周日抽奖消耗次数，开关 cmcc_video
+ * 环境变量：cmcc_data / cmcc_claim(默认开，填 false 才关) / cmcc_task / cmcc_seckill / cmcc_video / cmcc_wed / cmcc_wed_sk / cmcc_wed_sk_at / cmcc_task_skip_days；cmcc_task_fail 为脚本自动维护的任务黑名单
+ * 更新时间：2026-10-12 新增周三充值日(hlwyxhdhub wedrecharge)：任务代做 + 抽拼图 + 集齐领取 + 场次秒杀，开关 cmcc_wed / cmcc_wed_sk；AI豆任务同步上游：握手会话整轮复用、taskToken 任务直接握手、外部合作区跳过、status=1 遗留补领、公众号类即弃、停留与间隔提速；连签奖励改为只要开了就查一遍代领（不再要求当天由脚本签到），展示改用响应里的 prizeName/prizeValue
 
 ------------------ Surge 配置 ------------------
 
@@ -50,12 +50,15 @@ const SSO_LOGIN = BASE + '/qwhdsso/login';
 const API_MARK = BASE + '/qwhdhub/api/mark';
 const ACTIVITY_ID = getEnv('cmcc_activity_id') || '1021122301';
 const CHANNEL_ID = getEnv('cmcc_channel_id') || 'P00000109876';
-const CLAIM_AWARD = getEnv('cmcc_claim') === 'true';
+const CLAIM_AWARD = getEnv('cmcc_claim') !== 'false';  // 累计/连签奖励代领：默认开（达标后服务端不自动发放，一直挂着），显式填 false 才不领
 const RUN_TASKS = getEnv('cmcc_task') === 'true';   // 签到页 AI豆任务(小程序端 mark/task 体系)
 const SECKILL = getEnv('cmcc_seckill') === 'true';  // 签到有礼秒杀抢券(同活动 1021122301)
 const TASK_API = API_MARK + '/task';
-// hlwyxhdhub 开放任务入口：finishTask 提示"特殊处理"时到该 hub 换会话做 openFinish 握手
-const OPEN_TASK_ENTRY = BASE + '/hlwyxhdhub/act-wedrecharge/index.html?pageId=1849008675699650560';
+// 周三充值日活动页：既是该活动自己的入口，也是开放任务握手入口（上游 8d3e280 把两者统一到这个地址，落 HLWHD_SESSION_TOKEN）
+const WED_ENTRY = BASE + '/hlwyxhdhub/act-wedrecharge/1024101716?pageId=1849008675699650560&channelId=P00000093619';
+// taskInfo 下发 taskToken 的任务、以及 finishTask 提示"特殊处理"时，到该 hub 换会话做 openFinish 握手
+const OPEN_TASK_ENTRY = WED_ENTRY;
+const OPEN_TASK_API = BASE + '/hlwyxhdhub/api/open/_pub/task';
 // 追剧领福利(diy-client 活动页)：打卡 + 代币任务 + 抽奖，与签到页同一 SSO 通道但要按自己的活动页换票
 const RUN_VIDEO = getEnv('cmcc_video') === 'true';
 const VIDEO_ENTRY = BASE + '/qwhdhub/diy-client/1126082530?A_C_CODE=10hep1ZhkL&channelId=P00000119581';
@@ -65,6 +68,24 @@ const DIY_LOTTERY_API = BASE + '/qwhdhub/diyLottery';
 // 该活动的任务与抽奖共用同一个 componentId：任务 earnOpportunity 加的就是抽奖次数
 const VIDEO_COMPONENT = '4EC96l0-9btuobajC9Yu';
 const VIDEO_DRAW_WEEKDAY = 0;  // 抽奖开放日(北京时间周日)：实测非周日回 FAILED「抽奖时间为周日，请确认~」，且次数过期作废
+// 周三充值日(hlwyxhdhub/wedrecharge)：拼图抽奖主流程 + 场次秒杀，同一 SSO 通道但要按该活动页换票
+const RUN_WED = getEnv('cmcc_wed') === 'true';
+const WED_SECKILL = getEnv('cmcc_wed_sk') === 'true';
+const WED_API = BASE + '/hlwyxhdhub/api/wedrecharge';
+const WED_TIERS = { dp1: '95折话费券', dp2: '9折话费券', dp3: '8折话费券' };
+// 集齐后 receiveNew 的 round 与拼图序号不同源（取自前端映射表）
+const WED_RECEIVE = { 1: 'r6', 2: 'r5', 3: 'r4' };
+const WED_RECEIVE_LABEL = { r6: '95折话费券', r5: '9折话费券', r4: '8折话费券' };
+// 需真人/真实消费的只报状态不代做；dlhd 进页即由服务端登记
+const WED_SKIP = { yqyh: '需邀请真实用户助力', czhf: '需真实充值满10元', llym: '需在 App 内浏览签到页', dlhd: '进页自动完成' };
+const WED_MAX_DRAWS = 30;     // 单次执行最多抽这么多发
+// 周三场次秒杀参数（照 py 默认值）
+const WSK_AT = getEnv('cmcc_wed_sk_at') || '08:00:00';
+const WSK_LEAD = 400;         // 提前开火(ms)
+const WSK_INTERVAL = 350;     // 连发间隔(ms)
+const WSK_MAX_ATTEMPTS = 120;
+const WSK_MAX_WAIT = 300000;  // 距开场超过该时长就不干等，本次跳过(ms)
+const WSK_STOP = { '160002': '无库存' };
 // 秒杀抢券参数 (照 py 默认值)
 const SK_API = API_MARK + '/markSeckill';
 const SK_INTERVAL = 350;      // 重试间隔(ms)
@@ -147,8 +168,8 @@ function GetCookie() {
     }
 }
 
-// 任务: 建会话 → App 端签到 → (可选)连签奖励/AI豆任务/追剧领福利 → (可选)抢券
-// 当天签到完成后(user.signDay)，再次执行本脚本只做抢券，不再跑签到/领奖/任务/追剧
+// 任务: 建会话 → App 端签到 → (可选)连签奖励/AI豆任务/追剧领福利/周三充值日 → (可选)抢券
+// 当天签到完成后(user.signDay)，再次执行本脚本只跑抢券(签到页秒杀/周三场次秒杀)，不再签到/领奖/任务/追剧/拼图
 // 结果边产生边 $.log（say），通知内容仍攒在 lines 里最后一起推送
 async function doSign(user) {
     const lines = [];
@@ -156,10 +177,11 @@ async function doSign(user) {
     const today = $.time('yyyyMMdd');
     try {
         if (user.signDay === today) {
-            if (!SECKILL) {
+            if (!SECKILL && !WED_SECKILL) {
                 say(`今日签到已完成，本次无抢券任务`);
             } else {
-                lines.push(...await doSeckill(await exchangeSession(user)));
+                if (SECKILL) lines.push(...await doSeckill(await exchangeSession(user)));
+                if (WED_SECKILL) lines.push(...await doWedSeckill(user));
             }
         } else {
             const { ctx, statusData } = await openCtx(user);
@@ -182,7 +204,7 @@ async function doSign(user) {
                     say(status === 'HAVE_MARKED'
                         ? markLine('App 端', false, `累计 ${acc} 天`, '', '服务端幂等')
                         : markLine('App 端', true, `累计 ${acc} 天`, prize,
-                            !prize && status === 'PRIZE_NO_CONFIG' ? '今日无单日奖品(按累计门槛发放)' : ''));
+                            !prize && status === 'PRIZE_NO_CONFIG' ? '今日无单日奖品(累计/连签奖励见下方领奖结果)' : ''));
                 } else {
                     throw new Error(`App 端签到失败: ${code} / ${status} / ${respMsg}`);
                 }
@@ -192,10 +214,12 @@ async function doSign(user) {
             user.signDay = today;
             saveUsers();
 
-            if (CLAIM_AWARD && !signedToday) {
+            // 达标奖励不会随签到自动发放（App 是打开签到页弹窗时领），所以只要开了开关就查一遍：
+            // 不能加 !signedToday 条件——当天已在 App 里签过、脚本没替它签的情形，正是奖励滞留不发放的那种
+            if (CLAIM_AWARD) {
                 try {
                     const latest = await queryMarkstatus(ctx);
-                    if (!(latest.taskAwardChance || []).length) $.log('[领奖] 当前无可领取的连签任务');
+                    if (!(latest.taskAwardChance || []).length) $.log('[领奖] 当前无可领取的累计/连签奖励');
                     lines.push(...await claimTaskAwards(ctx, latest));
                 } catch (e) {
                     say(`[领奖] 尝试失败: ${e.message || e}`);
@@ -216,6 +240,23 @@ async function doSign(user) {
                     lines.push(...await doVideoAct(user));
                 } catch (e) {
                     say(`[追剧] 失败: ${e.message || e}`);
+                }
+            }
+
+            // 周三充值日（hlwyxhdhub 的拼图抽奖）同样是独立活动页，自己换票
+            if (RUN_WED) {
+                try {
+                    lines.push(...await doWedAct(user));
+                } catch (e) {
+                    say(`[周三] 失败: ${e.message || e}`);
+                }
+            }
+
+            if (WED_SECKILL) {
+                try {
+                    lines.push(...await doWedSeckill(user));
+                } catch (e) {
+                    say(`[周三·秒杀] 失败: ${e.message || e}`);
                 }
             }
 
@@ -328,9 +369,10 @@ async function doMark(ctx, date) {
     return await Request({ url: `${API_MARK}/mark31/domark`, method: 'post', headers: apiHeaders(ctx), body: { date }, _timeout: 30000 });
 }
 
-// 尝试领取 taskAwardChance 里的连签奖励（热门奖品库存紧张，领不到属正常）
+// 领取 taskAwardChance 里的累计/连签奖励（同步上游 7c2dcdb：热门奖品可能回 PRIZE_NO_STOCK，属正常）
+// 门槛达标后服务端不会自动发放，只把它放进 taskAwardChance；领成功后条目即从清单消失，天然幂等
 async function claimTaskAwards(ctx, statusData) {
-    // 任务ID -> 奖品名（taskAwardChance / accumulateTaskInfo / myTaskInfo 三池取首个非空名称）
+    // 任务ID -> 奖品名（可领清单条目自身 prize 为 null，只能去另外两个池子反查）
     const names = {};
     const pools = [statusData.taskAwardChance || [], statusData.accumulateTaskInfo || [], statusData.myTaskInfo || []];
     for (const pool of pools) {
@@ -347,15 +389,20 @@ async function claimTaskAwards(ctx, statusData) {
     for (const task of statusData.taskAwardChance || []) {
         const tid = task.id;
         if (!tid) continue;
+        const bits = [];
+        if (task.taskType === 'accumulate' && task.num) bits.push(`累计${task.num}签`);
+        if (names[tid]) bits.push(names[tid]);
+        const label = `任务${tid}` + (bits.length ? `（${bits.join('·')}）` : '');
         const resp = await Request({ url: `${API_MARK}/mark31/taskAward/${tid}`, method: 'post', headers: apiHeaders(ctx), body: {}, _timeout: 30000 });
-        // status 为 None 时回落到 code（实测领奖成功响应 status 可能为空）
-        const statusText = (resp && (resp.status || resp.code)) || '?';
-        const label = `任务${tid}` + (names[tid] ? `（${names[tid]}）` : '');
-        // 实际到账内容以响应为准（活动配置里的奖品名只是预告，可能已换档）
         const d = (resp && resp.data) || {};
-        const awardName = d.prizeName || (d.prize || {}).name || d.name || '';
-        const award = [awardName, d.awardNum ? `×${d.awardNum}` : ''].filter(v => v).join(' ');
-        say(`[领奖] ${label}: ${statusText} ${(resp && resp.msg) || ''}${award ? ` → 实发 ${award}` : ''}`);
+        // 成功时奖品名在响应 data 里（清单条目本身不带名字）；status 为空时回落到 code
+        if (d.prizeName) {
+            const unit = { FLOW: 'MB', FEE: '元' }[d.prizeCategory] || '';
+            const amount = d.prizeValue ? `${d.prizeValue}${unit}` : '';
+            say(`[领奖] ${label} 领到: ${d.prizeName}${amount ? `（${amount}）` : ''}`);
+        } else {
+            say(`[领奖] ${label}: ${(resp && (resp.status || resp.code)) || '?'} ${(resp && resp.msg) || ''}`);
+        }
         await $.wait(randomInt(1000, 2000));
     }
     return results;
@@ -381,32 +428,54 @@ function writeTaskFails(user, fails) {
     $.setdata($.toStr(store), TASK_FAIL_KEY);
 }
 
-// 签到页 AI豆任务（小程序端同一套 mark/task 接口，会话通用）
+// 签到页 AI豆任务（与签到页同一套 mark/task 接口，会话通用）
 // 通知里只留成功项与一行汇总，逐条结果实时 $.log
+// 同步上游 8d3e280：外部合作区整区不做；上次遗留的"已完成待领奖"先补领；
+// hlwyxhdhub 握手会话整轮复用（换票最贵，逐任务换会被限频）；任务间隔降到 0.2~0.6s
 async function doMarkTasks(ctx, user) {
     const lines = [];
     const say = t => { lines.push(t); $.log(t); };
+    const t0 = Date.now();
     const tl = await Request({ url: `${TASK_API}/taskList`, method: 'post', headers: apiHeaders(ctx), body: {}, _timeout: 30000 });
     if (!tl || tl.code !== 'SUCCESS') throw new Error(`taskList 失败: ${tl && tl.code} ${tl && tl.msg}`);
     const tasks = (tl.data || {}).tasks || [];
-    const todo = tasks.filter(t => t.status === 0 && t.taskId);
+    const outside = t => t.taskClasifiName === '外部合作区';
+    const todo = tasks.filter(t => t.status === 0 && t.taskId && !outside(t));
+    const ext = tasks.filter(t => t.status === 0 && t.taskId && outside(t));
     const fails = readTaskFails(user);
+    const openCache = {};
+    let done = 0, beans = 0, rejected = 0, errored = 0;
+
+    // status=1 是"已完成待领奖"（上次握手中断或没来得及领），补领即可
+    for (const t of tasks.filter(x => x.status === 1 && x.taskId)) {
+        const label = t.taskName || t.taskId;
+        const r = await taskAward(ctx, t.taskId);
+        if (r.ok) {
+            done++; beans += r.num;
+            delete fails[t.taskId];
+            $.log(`[任务] 补领 ${label}: ✅ ${r.num} AI豆`);
+        } else {
+            $.log(`[任务] 补领 ${label}: ⚠️ ${r.code} ${r.msg}`);
+        }
+        await $.wait(randomInt(200, 500));
+    }
 
     const runnable = [], blocked = [];
     for (const t of todo) {
         (fails[t.taskId] && fails[t.taskId].c >= TASK_FAIL_MAX ? blocked : runnable).push(t);
     }
-    $.log(`AI豆任务共 ${tasks.length} 个，待办 ${todo.length} 个，黑名单跳过 ${blocked.length} 个，本次执行 ${runnable.length} 个`);
+    $.log(`AI豆任务共 ${tasks.length} 个，待办 ${todo.length} 个(另有外部合作区 ${ext.length} 个不做)，黑名单跳过 ${blocked.length} 个，本次执行 ${runnable.length} 个`);
     if (!runnable.length) {
         if (blocked.length) $.log(`[任务] 待办全部在黑名单中，${TASK_FAIL_DAYS} 天内不再尝试`);
+        if (done) say(`[任务] 补领 ${done} 个 +${beans} AI豆，耗时 ${elapsedSec(t0)}s`);
+        writeTaskFails(user, fails);
         return lines;
     }
 
-    let done = 0, beans = 0, rejected = 0, errored = 0;
     for (const t of runnable) {
         const label = `${t.taskName || t.taskId}${t.awardNum ? `(+${t.awardNum}AI豆)` : ''}`;
         try {
-            const r = await finishOneTask(ctx, t, user);
+            const r = await finishOneTask(ctx, t, user, openCache);
             if (r.ok) {
                 done++; beans += r.num;
                 delete fails[t.taskId];
@@ -423,72 +492,117 @@ async function doMarkTasks(ctx, user) {
             errored++;
             $.log(`[任务] ${label}: ❌ ${e.message || e}`);
         }
-        await $.wait(randomInt(800, 1800));
+        await $.wait(randomInt(200, 600));
     }
     writeTaskFails(user, fails);
 
     const quiet = rejected ? `条件不足 ${rejected} 个` : '';
     if (quiet) $.log(`[任务] ${quiet}（逐条见上方日志，连续 ${TASK_FAIL_MAX} 次后不再尝试）`);
-    say(`[任务] 完成 ${done} 个 +${beans} AI豆${quiet ? `；条件不足 ${rejected} 个已折叠` : ''}${errored ? `；异常 ${errored} 个` : ''}${blocked.length ? `；黑名单已过滤 ${blocked.length} 个(${TASK_FAIL_DAYS} 天后重试)` : ''}`);
+    say(`[任务] 完成 ${done} 个 +${beans} AI豆，耗时 ${elapsedSec(t0)}s${quiet ? `；条件不足 ${rejected} 个已折叠` : ''}${errored ? `；异常 ${errored} 个` : ''}${blocked.length ? `；黑名单已过滤 ${blocked.length} 个(${TASK_FAIL_DAYS} 天后重试)` : ''}`);
     return lines;
 }
 
-// 单个任务：taskInfo → 到访目标页并停留 scanTime → (cToken?openFinish : 非浏览类 finishTask) → getTaskAward
-// 三种完成形态按抓包还原：浏览类(taskType=2)到访即完成；跳转类(taskType=5)回 cToken 走 openFinish；其余走 finishTask
-// finishTask 提示"特殊处理"时走 hlwyxhdhub 握手兜底（openHubHandshake）
-// 返回 { ok, num } 或 { ok:false, code, msg }，由调用方决定展示与黑名单计数
-async function finishOneTask(ctx, task, user) {
+function elapsedSec(t0) {
+    return ((Date.now() - t0) / 1000).toFixed(0);
+}
+
+// 单个任务：taskInfo → (开放平台握手 | finishTask 阶梯) → getTaskAward，只有完成才去领奖
+// 顺序照上游 8d3e280：taskInfo 带 taskToken 的视频/浏览类握手即完成；其余先直接上报，
+// 失败才到访目标页(停留 scanTime，封顶 15s)并带该页 Referer 重试；提示"特殊处理"再握手
+// taskType/scanTime 只取 taskInfo —— taskList 里的 taskType 是另一套枚举，混用会被拒
+async function finishOneTask(ctx, task, user, cache) {
     const tid = String(task.taskId);
     const info = await Request({ url: `${TASK_API}/taskInfo`, method: 'post', headers: apiHeaders(ctx), body: { taskId: tid }, _timeout: 30000 });
     const d = (info && info.data) || {};
-    const taskType = String(d.taskType || task.taskType || '');
+    const taskType = String(d.taskType || '');
     const scan = Number(d.scanTime || 0);
     const ju = String(task.jumpUrl || '');
+    const finish = ref => Request({
+        url: `${TASK_API}/finishTask`, method: 'post',
+        headers: ref ? Object.assign(apiHeaders(ctx), { referer: ref }) : apiHeaders(ctx),
+        body: { taskId: tid, taskType }, _timeout: 30000,
+    });
 
-    if (/^https:\/\//i.test(ju)) {
-        await Request({ url: ju, headers: baseHeaders(ctx.jar, ctx.ua), _respType: 'all', _timeout: 20000 });
-        if (scan) await $.wait((scan + 1) * 1000);
-    }
-
+    // ① 开放平台任务：主站直接给 cToken 就在主站 openFinish；给 taskToken 就跨到 hlwyxhdhub 握手
     if (d.cToken) {
-        await Request({ url: `${API_MARK}/_pub/task/openFinish`, method: 'post', headers: apiHeaders(ctx), body: { cToken: d.cToken }, _timeout: 30000 });
-    } else if (taskType !== '2') {
-        // 前端拼的 sign/random 服务端不校验，只发 taskId/taskType 即可
-        let fin = await Request({ url: `${TASK_API}/finishTask`, method: 'post', headers: apiHeaders(ctx), body: { taskId: tid, taskType }, _timeout: 30000 });
-        // 服务端按 Referer 校验到访页：默认 referer 被拒时带目标页 referer 重试一次
-        if (fin && fin.code !== 'SUCCESS' && /未达到/.test(fin.msg || '') && ju.startsWith('https://')) {
-            fin = await Request({ url: `${TASK_API}/finishTask`, method: 'post', headers: Object.assign(apiHeaders(ctx), { referer: ju }), body: { taskId: tid, taskType }, _timeout: 30000 });
-        }
-        // "特殊处理"兜底：服务端要求先在 hlwyxhdhub 完成 openFinish 握手，握手成功再回主站重试
-        if (fin && fin.code !== 'SUCCESS' && /特殊处理|openFinish/.test(fin.msg || '') && /taskToken=/i.test(ju)) {
-            if (await openHubHandshake(user, ju)) {
-                fin = await Request({ url: `${TASK_API}/finishTask`, method: 'post', headers: Object.assign(apiHeaders(ctx), { referer: ju }), body: { taskId: tid, taskType }, _timeout: 30000 });
-            }
-        }
+        const o = await Request({ url: `${API_MARK}/_pub/task/openFinish`, method: 'post', headers: apiHeaders(ctx), body: { cToken: d.cToken }, _timeout: 30000 });
+        if (o && o.code === 'SUCCESS') return await taskAward(ctx, tid);
+    } else if (d.taskToken) {
+        if (await openHubHandshake(user, cache, String(d.taskToken), scan)) return await taskAward(ctx, tid);
     }
 
-    const aw = await Request({ url: `${TASK_API}/getTaskAward`, method: 'post', headers: apiHeaders(ctx), body: { taskId: tid }, _timeout: 30000 });
+    // 浏览类(taskType=2)到访即完成，不上报（前置到访已在上一步省掉，交由领奖判定）
+    if (taskType === '2') return await taskAward(ctx, tid);
+
+    // ② finishTask 阶梯
+    let fin = await finish();
+    let code = (fin && fin.code) || 'NO_RESP', msg = (fin && fin.msg) || '';
+    // 需真实关注公众号，代做不了，立即放弃不浪费重试
+    if (code !== 'SUCCESS' && /公众号/.test(msg)) return { ok: false, code, msg: '需真实关注公众号' };
+    if (code !== 'SUCCESS' && /^https:\/\//i.test(ju)) {
+        await Request({ url: ju, headers: baseHeaders(ctx.jar, ctx.ua), _respType: 'all', _timeout: 20000 });
+        if (scan) await $.wait((Math.min(scan, 15) + 1) * 1000);
+        fin = await finish(ju);
+        code = (fin && fin.code) || 'NO_RESP'; msg = (fin && fin.msg) || '';
+    }
+    // "特殊处理"兜底：jumpUrl 自带 taskToken 时先在 hlwyxhdhub 握手，成功再带目标页 Referer 重试
+    if (code !== 'SUCCESS' && /特殊处理|openFinish/.test(msg) && /taskToken=/i.test(ju)) {
+        const jt = (/taskToken=([^&]+)/i.exec(ju) || [])[1];
+        if (await openHubHandshake(user, cache, jt, scan)) {
+            fin = await finish(ju);
+            code = (fin && fin.code) || 'NO_RESP'; msg = (fin && fin.msg) || '';
+        }
+    }
+    if (code !== 'SUCCESS') return { ok: false, code, msg };
+    return await taskAward(ctx, tid);
+}
+
+// 领奖：AI豆实际到手数以响应 awardNum 为准
+async function taskAward(ctx, tid) {
+    const aw = await Request({ url: `${TASK_API}/getTaskAward`, method: 'post', headers: apiHeaders(ctx), body: { taskId: String(tid) }, _timeout: 30000 });
     if (aw && aw.code === 'SUCCESS') return { ok: true, num: Number((aw.data || {}).awardNum) || 0 };
     return { ok: false, code: (aw && aw.code) || 'NO_RESP', msg: (aw && aw.msg) || '' };
 }
 
-// hlwyxhdhub 握手兜底（参考 yupaiLy/cmcc-auto-checkin 实测链路）：
-// 该 hub 换活动会话 → jumpUrl 里的 taskToken 作 jtToken 调 getOneTaskInfo 取 cToken → 停留 scanTime → openFinish
-// jwt 是账号级凭证，跨 hub 换票不消耗 App 票据，故直接复用 exchangeSession、只换入口页
-async function openHubHandshake(user, ju) {
-    const jt = (/taskToken=([^&]+)/i.exec(ju) || [])[1];
+// hlwyxhdhub 开放平台握手（参考 yupaiLy/cmcc-auto-checkin 实测链路）：
+// getOneTaskInfo 取 cToken → 停留 scanTime → openFinish；成功后由调用方回主站领奖
+async function openHubHandshake(user, cache, jt, scan) {
     if (!jt) return false;
-    const octx = await exchangeSession(user, OPEN_TASK_ENTRY);
-    const info = await Request({ url: `${BASE}/hlwyxhdhub/api/open/_pub/task/getOneTaskInfo`, method: 'post', headers: apiHeaders(octx), body: { jtToken: jt }, _timeout: 30000 });
+    let octx = null;
+    try {
+        octx = await openHubSession(user, cache);
+    } catch (e) {
+        $.log(`[握手] 换票失败: ${e.message || e}`);
+        return false;
+    }
+    const info = await Request({ url: `${OPEN_TASK_API}/getOneTaskInfo`, method: 'post', headers: apiHeaders(octx), body: { jtToken: jt }, _timeout: 30000 });
     const d = (info && info.data) || {};
     if (!d.cToken) {
         $.log(`[握手] getOneTaskInfo 未回 cToken: ${info && info.code} ${info && info.msg || ''}`);
         return false;
     }
-    await $.wait((Number(d.scanTime || 0) + 1) * 1000);
-    const fin = await Request({ url: `${BASE}/hlwyxhdhub/api/open/_pub/task/openFinish`, method: 'post', headers: apiHeaders(octx), body: { cToken: d.cToken }, _timeout: 30000 });
+    await $.wait((Number(d.scanTime || scan || 0) + 1) * 1000);
+    const fin = await Request({ url: `${OPEN_TASK_API}/openFinish`, method: 'post', headers: apiHeaders(octx), body: { cToken: d.cToken }, _timeout: 30000 });
     $.log(`[握手] hlwyxhdhub openFinish: ${fin && fin.code} ${fin && fin.msg || ''}`);
     return !!(fin && fin.code === 'SUCCESS');
+}
+
+// 握手会话整轮复用（cache 传同一个对象）：换一次票要跑完整 SSO 链，逐任务换既慢又容易当日被限频；
+// 换票失败退避重试一次。jwt 是账号级凭证，跨 hub 换票不消耗 App 票据
+async function openHubSession(user, cache) {
+    if (cache.ctx) return cache.ctx;
+    let last = null;
+    for (const w of [0, 3000]) {
+        if (w) await $.wait(w);
+        try {
+            cache.ctx = await exchangeSession(user, OPEN_TASK_ENTRY);
+            $.log('[握手] hlwyxhdhub 会话已建立，本轮复用');
+            return cache.ctx;
+        } catch (e) {
+            last = e;
+        }
+    }
+    throw last;
 }
 
 // ---------- 追剧领福利（diy-client 1126082530，参考 yupaiLy/cmcc-auto-checkin 的 cmcc_extra.py）----------
@@ -587,6 +701,306 @@ async function runDiyLottery(ctx) {
 // 北京时间星期（不依赖设备时区）：周日=0
 function beijingWeekday() {
     return new Date(Date.now() + 8 * 3600000).getUTCDay();
+}
+
+// ---------- 周三充值日（hlwyxhdhub/wedrecharge，参考 yupaiLy/cmcc-auto-checkin 的 cmcc_wed.py）----------
+
+// 该 hub 的成功码是字符串 "0"（区别于 qwhdhub 的 SUCCESS），非 0 一律按失败抛出
+async function wedApi(ctx, path, payload) {
+    const r = await Request({ url: `${WED_API}/${path}`, method: 'post', headers: apiHeaders(ctx), body: payload || {}, _timeout: 30000 });
+    if (!r) throw new Error(`${path} 无响应${hasSessionToken(ctx.jar) ? '' : '（环境未回传活动页 302 的 Set-Cookie，会话无法建立）'}`);
+    if (String(r.code) !== '0') throw new Error(`${path} 失败: ${r.code} ${r.msg || ''}`);
+    return r.data == null ? {} : r.data;
+}
+
+// 主流程：进页登记(服务端顺带完成「每日登录」任务) → 代做任务挣次数 → 抽拼图 → 集齐即领
+async function doWedAct(user) {
+    const lines = [];
+    const say = t => { lines.push(t); $.log(t); };
+    try {
+        const ctx = await exchangeSession(user, WED_ENTRY);
+        await wedApi(ctx, 'queryActivityInfo');
+        let st = await wedApi(ctx, 'queryPictureActInfo');
+        const tasks = await wedApi(ctx, 'taskList');
+        const list = Array.isArray(tasks) ? tasks : [];
+        $.log(`[周三] 剩余抽奖次数 ${st.drawTimes || 0}，当前 ${wedTierName(st.activeIndex)}`);
+        list.forEach(t => $.log(`[周三·任务] ${t.title || t.taskId}: status=${t.status} +${t.addDrawTimes}次 ${wedQuota(t)}${WED_SKIP[t.taskId] ? `，${WED_SKIP[t.taskId]}` : ''}`));
+        lines.push(...await wedFinishTasks(ctx, list, user));
+        lines.push(...await wedDraw(ctx));
+        st = await wedApi(ctx, 'queryPictureActInfo');
+        lines.push(...await wedReceive(ctx, st));
+        say(`[周三] 剩余 ${st.drawTimes || 0} 次；${wedProgress(st).join(' / ')}`);
+    } catch (e) {
+        say(`[周三] 失败: ${e.message || e}`);
+    }
+    return lines;
+}
+
+// 任务代做（黑名单制：除邀请/充值/每日登录外全试，服务端新增任务无需维护清单）
+// 三级自适应：① finishTask 直接上报 ② jt 握手完整链 ③ 到访目标页后再补一次上报
+async function wedFinishTasks(ctx, tasks, user) {
+    const lines = [];
+    const say = t => { lines.push(t); $.log(t); };
+    const todo = tasks.filter(t => t.taskId && !WED_SKIP[t.taskId] && t.status !== 2 && wedQuotaLeft(t) !== 0);
+    if (!todo.length) { $.log('[周三·任务] 无可代做的任务'); return lines; }
+
+    let done = 0, add = 0;
+    const skipped = [];
+    for (const t of todo) {
+        const title = t.title || t.taskId;
+        try {
+            const r = await wedTryFinish(ctx, t, user);
+            if (r.ok) { done++; add += r.add; $.log(`[周三·任务] ${title}: ✅ +${r.add} 次${r.via ? `（${r.via}）` : ''}`); }
+            else { skipped.push(title); $.log(`[周三·任务] ${title}: ⚠️ ${r.why}`); }
+        } catch (e) {
+            skipped.push(title);
+            $.log(`[周三·任务] ${title}: ❌ ${e.message || e}`);
+        }
+        await $.wait(randomInt(1000, 2000));
+    }
+    say(`[周三·任务] 完成 ${done}/${todo.length} 个，+${add} 次${skipped.length ? `；未过 ${skipped.length} 个` : ''}`);
+    return lines;
+}
+
+async function wedTryFinish(ctx, task, user) {
+    const tid = task.taskId, title = task.title || tid;
+    const ju = String(task.jumpUrl || '');
+    // ① 快路径：查询/浏览类任务直接上报即过
+    try {
+        const d = await wedFinishTask(ctx, tid);
+        return { ok: true, add: Number(d.addDrawTimes) || 0 };
+    } catch (e) {
+        $.log(`[周三·任务] ${title} 直接上报未过(${e.message || e})，改走 jt 握手`);
+    }
+
+    // ② jt 握手：getJtToken 签发凭证 → 携凭证换目标页会话 → getOneTaskInfo 取 cToken → 停留 → openFinish
+    let hsOk = false;
+    try {
+        const jtResp = await Request({ url: `${WED_API}/getJtToken`, method: 'post', headers: apiHeaders(ctx), body: { taskId: tid }, _timeout: 30000 });
+        const jt = jtResp && jtResp.data;
+        if (typeof jt === 'string' && jt) {
+            hsOk = await wedHandshake(user, ju, jt);
+            $.log(`[周三·任务] ${title} jt 握手${hsOk ? '完成' : '未通过'}`);
+        }
+    } catch (e) {
+        $.log(`[周三·任务] ${title} jt 握手异常: ${e.message || e}`);
+    }
+    if (hsOk) {
+        await $.wait(1000);
+        try {
+            const cur = (await wedApi(ctx, 'taskList') || []).find(x => x.taskId === tid) || {};
+            if (cur.status === 2) return { ok: true, add: Number(cur.addDrawTimes) || 1, via: 'jt 握手' };
+        } catch (e) { }
+    }
+
+    // ③ 握手可能已登记但状态延迟：到访目标页后再补一次上报
+    if (/^https:\/\/wx\.10086\.cn\//i.test(ju)) {
+        try { await Request({ url: ju, headers: baseHeaders(ctx.jar, ctx.ua), _respType: 'all', _timeout: 20000 }); } catch (e) { }
+    }
+    try {
+        const d = await wedFinishTask(ctx, tid);
+        return { ok: true, add: Number(d.addDrawTimes) || 0 };
+    } catch (e) {
+        return { ok: false, why: String(e.message || e) };
+    }
+}
+
+// 单次上报；160030 是服务端网络抖动，退避重试
+async function wedFinishTask(ctx, tid) {
+    let last = null;
+    for (const w of [0, 3000, 8000]) {
+        if (w) await $.wait(w);
+        try {
+            return await wedApi(ctx, 'finishTask', { taskId: tid });
+        } catch (e) {
+            last = e;
+            if (!/160030/.test(String(e.message || e))) throw e;
+        }
+    }
+    throw last;
+}
+
+// 目标页会话必须是自己换的（签到页落 QWHD、充值日页落 HLWHD），否则 openFinish 回 FAILED
+// 换票偶发限频，退避重试一次
+async function wedHandshake(user, jump, jt) {
+    if (!/^https:\/\//i.test(jump)) return false;
+    const sep = jump.includes('?') ? '&' : '?';
+    let octx = null;
+    for (const w of [0, 3000]) {
+        if (w) await $.wait(w);
+        try {
+            octx = await exchangeSession(user, `${jump}${sep}jtToken=${jt}`);
+            break;
+        } catch (e) {
+            $.log(`[周三·握手] 目标页换票失败: ${e.message || e}`);
+        }
+    }
+    if (!octx) return false;
+    const info = await Request({ url: `${BASE}/hlwyxhdhub/api/open/_pub/task/getOneTaskInfo`, method: 'post', headers: apiHeaders(octx), body: { jtToken: jt }, _timeout: 30000 });
+    const d = (info && info.data) || {};
+    if (!d.cToken) {
+        $.log(`[周三·握手] getOneTaskInfo 未回 cToken: ${info && info.code} ${info && info.msg || ''}`);
+        return false;
+    }
+    await $.wait((Number(d.scanTime || 5) + 1) * 1000);
+    const fin = await Request({ url: `${BASE}/hlwyxhdhub/api/open/_pub/task/openFinish`, method: 'post', headers: apiHeaders(octx), body: { cToken: d.cToken }, _timeout: 30000 });
+    $.log(`[周三·握手] openFinish: ${fin && fin.code} ${fin && fin.msg || ''}`);
+    return !!(fin && fin.code === 'SUCCESS');
+}
+
+// 抽光次数：每抽重查状态；次数用尽、当前拼图集齐(解锁下一档的机制未抓包确认，不浪费次数)或连续异常即停
+async function wedDraw(ctx) {
+    const lines = [];
+    const say = t => { lines.push(t); $.log(t); };
+    let drawn = 0, note = '';
+    for (let i = 0; i < WED_MAX_DRAWS; i++) {
+        const st = await wedApi(ctx, 'queryPictureActInfo');
+        const times = Number(st.drawTimes || 0);
+        if (times <= 0) break;
+        const active = String(st.activeIndex || 1);
+        if (wedComplete((st.pictureList || {})[active] || {})) { note = `拼图${active}已集齐但还剩 ${times} 次，暂存不用`; break; }
+        let d;
+        try {
+            d = await wedApi(ctx, 'drawPicture', { round: `dp${active}` });
+        } catch (e) {
+            note = String(e.message || e);
+            break;
+        }
+        drawn++;
+        const p = d.prize || {};
+        $.log(`[周三·抽奖] ${wedTierName(active)} 第${drawn}抽 → ${p.prizeName || p.prizeId || '?'}`);
+        await $.wait(randomInt(1000, 2000));
+    }
+    if (drawn || note) say(`[周三·抽奖] 本次抽 ${drawn} 次${note ? `；${note}` : ''}`);
+    return lines;
+}
+
+// 集齐的档位自动领取（话费券月底清零，默认代领）；"已领取"是正常状态不算失败
+async function wedReceive(ctx, state) {
+    const lines = [];
+    const say = t => { lines.push(t); $.log(t); };
+    const pics = state.pictureList || {};
+    for (const idx of Object.keys(pics).sort((a, b) => Number(a) - Number(b))) {
+        if (!wedComplete(pics[idx] || {})) continue;
+        const rnd = WED_RECEIVE[Number(idx)];
+        if (!rnd) continue;
+        const label = WED_RECEIVE_LABEL[rnd] || rnd;
+        const r = await Request({ url: `${WED_API}/receiveNew`, method: 'post', headers: apiHeaders(ctx), body: { round: rnd }, _timeout: 30000 });
+        const msg = (r && r.msg) || '';
+        if (r && String(r.code) === '0') {
+            const prizes = ((r.data || {}).actPrizes) || [];
+            const names = prizes.map(p => p.prizeName).filter(Boolean).join('、') || label;
+            const sub = prizes.map(p => p.subTitle).filter(Boolean).join('、');
+            say(`[周三·领取] ${label} 领取成功（${names}${sub ? `，${sub}` : ''}）`);
+        } else if (msg.includes('已领取')) {
+            $.log(`[周三·领取] ${label} 已领取过`);
+        } else {
+            say(`[周三·领取] ${label} 领取失败: ${msg || (r && r.code) || '无响应'}`);
+        }
+        await $.wait(randomInt(1000, 2000));
+    }
+    return lines;
+}
+
+// 周三场次秒杀：校时 → 等到 at(北京时间) → 连发 drawPrize 直到命中/无库存/打完预算
+async function doWedSeckill(user) {
+    const lines = [];
+    const say = t => { lines.push(t); $.log(t); };
+    try {
+        const ctx = await exchangeSession(user, WED_ENTRY);
+        await wedApi(ctx, 'queryActivityInfo');
+        const info = await wedApi(ctx, 'queryDrawPrizeInfo');
+        const srvMs = Number(info.currentTime) || Date.now();
+        const target = beijingAt(WSK_AT);
+        $.log(`[周三·秒杀] 服务器时间 ${fmtCn(srvMs)}，本机偏差 ${(srvMs - Date.now()).toFixed(0)} ms，rdStatus=${info.rdStatus}`);
+        $.log(`[周三·秒杀] 目标场次 ${WSK_AT}（北京时间 ${fmtCn(target)}），提前 ${WSK_LEAD}ms，间隔 ${WSK_INTERVAL}ms，预算 ${WSK_MAX_ATTEMPTS} 发`);
+
+        const waitMs = target - WSK_LEAD - srvMs;
+        if (waitMs > WSK_MAX_WAIT) {
+            say(`[周三·秒杀] 距开场还有 ${(waitMs / 60000).toFixed(1)} 分钟，超过等待上限 ${WSK_MAX_WAIT / 60000} 分钟，本次跳过（定时请设在开场前 1~2 分钟）`);
+            return lines;
+        }
+        // 等到点：每轮重新校时，防本机时钟漂移与会话过期
+        let remainMs = waitMs;
+        while (remainMs > 0) {
+            await $.wait(Math.min(remainMs + WSK_LEAD, 480000));
+            try {
+                const now2 = Number((await wedApi(ctx, 'queryDrawPrizeInfo')).currentTime) || Date.now();
+                remainMs = target - WSK_LEAD - now2;
+                if (remainMs > 60000) $.log(`[周三·秒杀] 会话心跳 ok，距开场 ${(remainMs / 1000).toFixed(0)} 秒`);
+            } catch (e) {
+                $.log(`[周三·秒杀] 校时失败: ${e.message || e}`);
+                remainMs -= 480000;
+            }
+        }
+
+        let code = '', msg = '', fired = 0;
+        for (let i = 1; i <= WSK_MAX_ATTEMPTS; i++) {
+            fired = i;
+            const t0 = Date.now();
+            const r = await Request({ url: `${WED_API}/drawPrize`, method: 'post', headers: apiHeaders(ctx), body: {}, _timeout: 10000 });
+            code = String(r ? r.code : 'NO_RESP');
+            msg = (r && r.msg) || '';
+            $.log(`[周三·秒杀] 第${i}发: code=${code} msg=${msg}`);
+            if (code === '0') {
+                const prizes = ((r.data || {}).actPrizes) || [];
+                const got = prizes.map(p => [p.prizeName || p.shortName || '', p.subTitle ? `（${p.subTitle}）` : ''].join('')).filter(Boolean).join('、');
+                say(`🎉 [周三·秒杀] 抢中${got ? `: ${got}` : ''}（第 ${i} 发）`);
+                return lines;
+            }
+            if (WSK_STOP[code]) { say(`[周三·秒杀] 停止: ${WSK_STOP[code]}（第 ${i} 发）`); return lines; }
+            const gap = WSK_INTERVAL - (Date.now() - t0);
+            if (gap > 0) await $.wait(gap);
+        }
+        say(`[周三·秒杀] ${fired} 发打完未中，最后响应: ${code} ${msg}`);
+    } catch (e) {
+        say(`[周三·秒杀] 失败: ${e.message || e}`);
+    }
+    return lines;
+}
+
+// dpN 档位名
+function wedTierName(idx) {
+    const n = String(idx || 1);
+    return `拼图${n}（${WED_TIERS['dp' + n] || 'dp' + n}）`;
+}
+
+// 碎片值是计数：无="0"，持有="1"，重复抽到会累加，按 >=1 判定持有
+function wedComplete(pieces) {
+    const vals = Object.values(pieces || {});
+    return vals.length > 0 && vals.every(v => /^\d+$/.test(String(v)) && Number(v) >= 1);
+}
+
+function wedProgress(state) {
+    const pics = (state || {}).pictureList || {};
+    return Object.keys(pics).sort((a, b) => Number(a) - Number(b)).map(idx => {
+        const pieces = pics[idx] || {};
+        const nums = Object.values(pieces).map(v => /^\d+$/.test(String(v)) ? Number(v) : 0);
+        const have = nums.filter(n => n >= 1).length;
+        const dup = nums.filter(n => n > 1).reduce((s, n) => s + n - 1, 0);
+        return `拼图${idx} ${have}/${nums.length}${have === nums.length && nums.length ? '✓已集齐' : ''}${dup ? `（重复x${dup}）` : ''}`;
+    });
+}
+
+// 月度配额：requireTimes 由服务端下发，用尽就不空发请求
+function wedQuota(t) {
+    const req = Number(t.requireTimes) || 0;
+    return req > 0 ? `，月度${t.completedTimes || 0}/${req}` : '';
+}
+
+function wedQuotaLeft(t) {
+    const req = Number(t.requireTimes) || 0;
+    if (req > 0) return Math.max(0, req - (Number(t.completedTimes) || 0));
+    return null;
+}
+
+// 北京时间 HH:MM:SS 对应的时间戳；已过 1 小时以上算明天（照 py 的处理）
+function beijingAt(hms) {
+    const parts = String(hms || '08:00:00').split(':').map(Number);
+    const bj = new Date(Date.now() + 8 * 3600000);
+    let t = Date.UTC(bj.getUTCFullYear(), bj.getUTCMonth(), bj.getUTCDate(), parts[0] || 0, parts[1] || 0, parts[2] || 0) - 8 * 3600000;
+    if (t < Date.now() - 3600000) t += 86400000;
+    return t;
 }
 
 // 签到结果统一格式: <端> <状态>（<天数>）[，获得: X][，备注]

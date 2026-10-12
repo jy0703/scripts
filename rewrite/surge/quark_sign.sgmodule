@@ -1,0 +1,5 @@
+#!name=夸克网盘签到
+#!desc=夸克网盘每日签到领空间容量，连签达目标有额外奖励，支持多账号（账号凭证由「夸克网盘获取Cookie」模块抓取解密，或 BoxJS 手填抓包 URL / kps_wg）
+
+[Script]
+夸克网盘签到 = type=cron,cronexp="0 9 * * *",wake-system=1,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/quark_sign.js,script-update-interval=0

@@ -28,7 +28,7 @@ cron "30 7 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/
  */
 
 const $ = new Env('天翼云盘');
-$.is_debug = getEnv('is_debug') || 'false';  // 调试模式
+$.is_debug = getEnv('tyyp_debug', 'is_debug') || 'false';  // 调试模式(boxjs 开关 tyyp_debug)
 $.Messages = [];
 
 // ---- 业务常量 (照 py 源码逐一搬运) ----

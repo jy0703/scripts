@@ -2,8 +2,8 @@
  * 脚本名称：微信读书任务
  * 活动规则：每周兑换阅读达标奖励（书币/体验卡）、每周翻牌抽奖、每周限免好书入架（可配小号自动助力）
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。账号凭证由本脚本 GetCookie 抓取微信读书 APP 的 /login 请求与响应后写入 weread_data（vid/skey/accessToken 取自响应，refreshToken/deviceId 取自请求体）；只要凭证里有 refreshToken+deviceId，此后 skey 过期由脚本自行调用 /login 脱机换票，无需再抓包
- * 环境变量：weread_data、weread_helper、weread_claim、weread_flip、weread_free、weread_award、weread_free_mode、weread_exclude_keywords、weread_cache、weread_debug
- * 更新时间：2026-10-10
+ * 环境变量：weread_data、weread_helper、weread_claim、weread_flip、weread_free、weread_award、weread_free_mode、weread_exclude_keywords、weread_cache、weread_helper_cache、weread_debug
+ * 更新时间：2026-10-12
 
 ------------------ Surge 配置 ------------------
 
@@ -51,6 +51,7 @@ const SHARE_API = 'https://weread.qq.com/book-detail/api/activities'; // 限免�
 const PF = 'weread_wx-2001-iap-2001-iphone';
 const DATA_KEY = 'weread_data';
 const HELPER_KEY = 'weread_helper';
+const HELPER_CACHE_KEY = 'weread_helper_cache';
 const CACHE_KEY = 'weread_cache';
 const CAPTURE_REGEX = /^https?:\/\/i\.weread\.qq\.com\/login(\?|$)/;
 const APP_UA = 'WeRead/8.2.6 (iPhone; iOS 26.6.2; Scale/3.00)';
@@ -79,7 +80,7 @@ async function main() {
             }
 
             // 未配小号但填了多个主账号时，其余账号互为助力小号（照上游行为）
-            const myHelpers = helpers.length ? helpers : $.userArr.filter((_, idx) => idx !== i).map(toHelper);
+            const myHelpers = helpers.length ? helpers : $.userArr.filter((_, idx) => idx !== i);
 
             if (canClaim) await runClaimTask(acc);
             if (canFlip) await runFlipTask(acc);
@@ -517,7 +518,8 @@ async function runFreeTask(acc, helpers) {
     }
 
     let helperIdx = 0;
-    for (const b of targetBooks) {
+    for (let ti = 0; ti < targetBooks.length; ti++) {
+        const b = targetBooks[ti];
         let done = false;
         const link = shareLink(acc.vid, b, currentVol, freeTimestamp);
         const actUrl = `${SHARE_API}?${shareQuery(acc.vid, b, currentVol, freeTimestamp)}`;
@@ -533,26 +535,34 @@ async function runFreeTask(acc, helpers) {
                 added.push(`《${b.title}》`);
                 $.log(`[微信读书] 🎉 小号 [${mask}] 助力成功: 《${b.title}》`);
                 done = true;
-                helperIdx++;    // 该小号本周配额已用掉
             } else {
                 $.log(`[微信读书] ❌ 小号 [${mask}] 助力《${b.title}》失败: ${errMsg || 'HTTP ' + (res && res.statusCode)}`);
                 if (String(errMsg) === '-2057' || data.errCode === -2057) {
-                    // 官方配额保护: 主账号本周已达 2 本上限
-                    if (added.length) writeFreeLock(acc.vid, currentVol, added);
-                    return say(`📚 限免: 本周名额已满（2 本），已领 ${added.join('、') || '无'}`);
+                    // -2057 有两种含义: 主号已满 2 本(熔断)，或该小号自身受限(轮换重试同一本)
+                    if (added.length >= 2) {
+                        writeFreeLock(acc.vid, currentVol, added);
+                        return say(`📚 限免: 本周名额已满（2 本），已领 ${added.join('、')}`);
+                    }
+                    $.log(`[微信读书] ⚠️ 小号 [${mask}] 返回 -2057（该号配额耗尽/受限），轮换备用小号重试《${b.title}》...`);
+                } else {
+                    await sleep(1000);
                 }
-                helperIdx++;
-                await sleep(1000);
+            }
+            helperIdx++;    // 成功用掉配额、失败则该号本次不可用，一律切到下一个小号
+        }
+        if (!done) {
+            unclaimed.push({ title: b.title, url: link });
+            if (helperIdx >= list.length && ti === targetBooks.length - 1 && claimedTitles.length < 2) {
+                $.log('[微信读书] 助力小号已全部用完（每个小号每周只能助力 1 本），在 weread_helper 里再加一个小号即可每周 2 本全自动');
             }
         }
-        if (!done) unclaimed.push({ title: b.title, url: link });
     }
 
     if (added.length > claimedTitles.length) {
         writeFreeLock(acc.vid, currentVol, added);
         await Request({ url: `${API}/shelf/sync?album=1&onlyBookid=1`, headers: appHeaders(acc), _respType: 'all' });
     }
-    return freeSummary(added, unclaimed, '小号助力未完成自动入架');
+    return freeSummary(added, unclaimed, '未能自动入架，请检查助力小号凭证状态');
 }
 
 function freeSummary(added, unclaimed, fallback) {
@@ -665,7 +675,7 @@ function webCookieHeaders(helper, referer) {
     return {
         'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 26_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.78(0x18004e31) NetType/WIFI Language/zh_CN',
         'Referer': referer,
-        'Cookie': helper.cookie
+        'Cookie': helperCookie(helper)
     };
 }
 
@@ -680,19 +690,22 @@ async function authRequest(acc, build) {
     return first;
 }
 
-// 助力小号请求: 先走 wr_rt 续期，再退到 /login 换票
+// 助力小号请求: 先走 wr_rt 续期，再退到 /login 换票；续期结果一律落盘，否则下次运行还拿作废的旧种子
 async function helperRequest(helper, build) {
     let res = await Request(build(helper));
     if (res && res.statusCode === 401) {
+        const isMain = $.userArr.indexOf(helper) !== -1;   // 小号就是别的主账号时按主账号回写 weread_data
         if (helper.rt) {
             $.log(`[微信读书] 小号 [${maskVid(helper.vid)}] skey 过期，正在 /web/login/renewal 续期...`);
             if (await renewWebCookie(helper)) res = await Request(build(helper));
         }
-        if ((!res || res.statusCode === 401) && helper.refreshToken && helper.deviceId && await refreshLogin(helper, false)) {
-            // 换票后要把新的 accessToken 写回 Cookie 串，否则下一次助力仍带旧 skey
-            helper.skey = helper.accessToken || helper.skey;
-            helper.cookie = setCookieValue(helper.cookie, 'wr_skey', helper.skey);
+        if ((!res || res.statusCode === 401) && helper.refreshToken && helper.deviceId && await refreshLogin(helper, isMain)) {
             $.log(`[微信读书] 小号 [${maskVid(helper.vid)}] 改用 /login 换票重试`);
+            if (!isMain) {
+                helper.skey = helper.accessToken || helper.skey;
+                helper.cookie = setCookieValue(helper.cookie, 'wr_skey', helper.skey);
+                saveHelperCreds(helper);
+            }
             res = await Request(build(helper));
         }
     }
@@ -758,6 +771,7 @@ async function renewWebCookie(helper) {
         if (renewed.wr_rt) helper.cookie = setCookieValue(helper.cookie, 'wr_rt', renewed.wr_rt);
         helper.skey = renewed.wr_skey || helper.skey;
         helper.rt = renewed.wr_rt || helper.rt;
+        saveHelperCreds(helper);
         $.log(`[微信读书] 🎉 小号 [${maskVid(helper.vid)}] Web Cookie 续期成功`);
         return helper;
     }
@@ -790,13 +804,31 @@ function parseAccounts(raw) {
     return out;
 }
 
-function toHelper(acc) {
-    const skey = acc.accessToken || acc.skey || '';
-    return {
-        vid: acc.vid, skey, rt: '',
-        cookie: `wr_vid=${acc.vid}; wr_skey=${skey}; wr_loggedIn=1;`,
-        refreshToken: acc.refreshToken || '', deviceId: acc.deviceId || ''
-    };
+// 主账号对象直接充当助力小号(未配 weread_helper 时其余账号顶上)，Cookie 现算，换票结果按主账号回写
+function helperCookie(h) {
+    return h.cookie || `wr_vid=${h.vid}; wr_skey=${h.accessToken || h.skey || ''}; wr_loggedIn=1;`;
+}
+
+// 小号续期出来的新 wr_skey/wr_rt 必须落盘：wr_rt 是一次一种子，下次再拿旧的续期就废了
+// src 记的是落盘时配置里的旧 skey，用户重贴新 Cookie 后旧缓存自动失效，不会反向覆盖新凭证
+function applyHelperCache(h) {
+    if (!h || !h.vid) return h;
+    const one = ($.toObj($.getdata(HELPER_CACHE_KEY), null) || {})[String(h.vid)];
+    if (!one || (one.src && one.src !== h.skey)) return h;
+    if (one.skey) h.skey = one.skey;
+    if (one.rt) h.rt = one.rt;
+    h.cookie = setCookieValue(helperCookie(h), 'wr_skey', h.skey);
+    if (h.rt) h.cookie = setCookieValue(h.cookie, 'wr_rt', h.rt);
+    return h;
+}
+
+function saveHelperCreds(helper) {
+    if (!helper || !helper.vid) return;
+    const cache = $.toObj($.getdata(HELPER_CACHE_KEY), null) || {};
+    const deadline = Date.now() - CACHE_DAYS * 86400 * 1000;
+    for (const k of Object.keys(cache)) if (!cache[k] || (cache[k].time && cache[k].time < deadline)) delete cache[k];
+    cache[String(helper.vid)] = { skey: helper.skey, rt: helper.rt || '', src: helper.src || helper.skey, time: Date.now() };
+    $.setdata($.toStr(cache), HELPER_CACHE_KEY);
 }
 
 // 助力小号: 支持微信里抓到的完整 Cookie / JSON 数组 / 「VID#SKEY#RT」每行一个
@@ -814,8 +846,8 @@ function parseHelpers(raw) {
     }
     const out = [];
     for (const item of list) {
-        const h = parseOneHelper(item);
-        if (h && !out.some(e => e.vid === h.vid)) out.push(h);
+        const h = applyHelperCache(parseOneHelper(item));
+        if (h && h.vid && !out.some(e => e.vid === h.vid)) out.push(h);
     }
     return out;
 }
@@ -849,6 +881,7 @@ function buildHelper(vid, skey, rt, cookie, seed) {
         vid,
         skey,
         rt,
+        src: skey,
         cookie: cookie || `wr_vid=${vid}; wr_skey=${skey};${rt ? ` wr_rt=${rt};` : ''} wr_loggedIn=1;`,
         refreshToken: (seed && seed.refreshToken) || '',
         deviceId: (seed && seed.deviceId) || ''

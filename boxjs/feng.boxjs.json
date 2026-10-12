@@ -309,7 +309,10 @@
         "https://raw.githubusercontent.com/FoKit/Scripts/main/images/WeChat.png"
       ],
       "keys": [
-        "wxCode"
+        "@wxCode.open",
+        "@wxCode.address",
+        "@wxCode.token",
+        "@wxCode.mtgsig"
       ],
       "settings": [
         {
@@ -481,8 +484,9 @@
       "descs_html": [
         "中国移动「签到领流量/话费」(活动 1021122301) App 端签到，每天一次，支持多账号",
         "抓取：开启「中国移动获取Cookie」→ 打开中国移动 App「我」-「签到」进入活动页；cmcc_data 里的长期 jwt 可自续期，jwt 与 App 票据都失效才需重抓",
-        "开关：连签奖励 / AI豆任务 / 秒杀抢券(定时设在开抢前 1~2 分钟) / 追剧领福利(打卡与任务挣抽奖次数，仅周日开放抽奖)",
-        "当天签到完成后再次执行只做抢券，签到、任务、追剧都不再跑"
+        "开关：连签奖励(默认开) / AI豆任务 / 秒杀抢券(定时设在开抢前 1~2 分钟) / 追剧领福利(打卡与任务挣抽奖次数，仅周日开放抽奖) / 周三充值日(做任务挣次数抽拼图集话费券)",
+        "周三充值日的场次秒杀另开 cmcc_wed_sk，场次时间 cmcc_wed_sk_at(北京时间，默认 08:00:00)，定时必须设在开场前 1~2 分钟，否则本次直接跳过不等待。",
+        "当天签到完成后再次执行只跑抢券(签到页秒杀、周三场次秒杀)，签到、任务、追剧、拼图都不再跑"
       ],
       "icons": [
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/cmcc.png",
@@ -494,6 +498,9 @@
         "cmcc_task",
         "cmcc_seckill",
         "cmcc_video",
+        "cmcc_wed",
+        "cmcc_wed_sk",
+        "cmcc_wed_sk_at",
         "cmcc_task_fail",
         "cmcc_task_skip_days",
         "cmcc_activity_id",
@@ -514,9 +521,9 @@
         {
           "id": "cmcc_claim",
           "name": "领取连签奖励",
-          "val": false,
+          "val": true,
           "type": "boolean",
-          "desc": "默认关闭"
+          "desc": "默认开启（关掉才不领）。达标的累计/连签奖励服务端不会自动发放，只挂在可领清单里，开着就每次执行查一遍并代领"
         },
         {
           "id": "cmcc_task",
@@ -538,6 +545,30 @@
           "val": false,
           "type": "boolean",
           "desc": "追剧页每日打卡 + 代币任务挣抽奖次数；抽奖仅周日开放，其余日子只攒不抽"
+        },
+        {
+          "id": "cmcc_wed",
+          "name": "周三充值日拼图",
+          "val": false,
+          "type": "boolean",
+          "desc": "做任务挣抽奖次数 → 抽拼图集齐自动领话费券；跟随当天签到那一次执行"
+        },
+        {
+          "id": "cmcc_wed_sk",
+          "name": "周三场次秒杀",
+          "val": false,
+          "type": "boolean",
+          "desc": "等到场次时间连发 drawPrize；需把定时设在开场前 1~2 分钟"
+        },
+        {
+          "id": "cmcc_wed_sk_at",
+          "name": "秒杀场次时间",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "08:00:00",
+          "desc": "北京时间 HH:MM:SS，留空用 08:00:00"
         },
         {
           "id": "cmcc_task_skip_days",
@@ -1136,6 +1167,7 @@
         "抓不到就手填：在 weread_data 里填 [{\"vid\":\"示例VID\",\"skey\":\"示例SKEY\",\"accessToken\":\"示例ACCESSTOKEN\",\"refreshToken\":\"示例REFRESHTOKEN\",\"deviceId\":\"示例DEVICEID\"}]，多个账号依次追加",
         "凭证里拿到 refreshToken+deviceId 后，skey 过期由脚本自己调 /login 换票（无需再抓包）；只有 vid+skey 的话过期要重抓",
         "限免领书官方规则：每账号每周 2 本，且必须由好友账号点击分享链接助力。在 weread_helper 里填助力小号（每行一个「VID#SKEY#WR_RT」，或直接粘贴微信里 weread.qq.com 的完整 Cookie），配满 2 个小号才能每周 2 本全自动秒领",
+        "小号 wr_skey 到期会自动用 wr_rt 续期（或用 refreshToken 换票），续期出来的新种子写进 weread_helper_cache —— wr_rt 一次一种，不落盘下次续期就废了；重贴新 Cookie 后旧缓存自动作废。某个小号回 -2057 而主号本周还没领满 2 本时，判定为该小号受限并自动轮换下一个",
         "未配助力小号时，通知会给出官方带签名的直达链接，微信点开手动领即可",
         "阅读时长需真实阅读才会达标，脚本只兑换已达标的档位；weread_award 选 card 则优先体验卡，默认书币",
         "限免书库每周四更新，翻牌与达标奖励按自然周结算，默认定时为周日 23:00 一次领完"
@@ -1154,6 +1186,7 @@
         "weread_free_mode",
         "weread_exclude_keywords",
         "weread_cache",
+        "weread_helper_cache",
         "weread_debug"
       ],
       "settings": [
@@ -1239,6 +1272,16 @@
           "desc": "脚本自动生成（记录本期已领书名，避免整周重复挑选）；想换一本重领就把该项清空"
         },
         {
+          "id": "weread_helper_cache",
+          "name": "小号续期结果",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 3,
+          "placeholder": "",
+          "desc": "脚本自动生成：weread_helper 里的小号经 wr_rt 续期或 /login 换票后，新的 wr_skey/wr_rt 存在这里（wr_rt 一次一种，不落盘下次就续期失败）。重贴新的小号 Cookie 后旧缓存会自动作废；小号续期异常时可清空重来"
+        },
+        {
           "id": "weread_debug",
           "name": "调试模式",
           "val": false,
@@ -1295,6 +1338,59 @@
           "val": false,
           "type": "boolean",
           "desc": "逐条打印请求/响应明细，排查问题用；日志可能含 token 等敏感信息，看完记得关掉"
+        }
+      ]
+    },
+    {
+      "id": "quark_sign",
+      "name": "夸克网盘签到",
+      "author": "@Feng",
+      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/quark_sign.js",
+      "descs_html": [
+        "夸克网盘每日签到领空间容量，连签达目标有额外奖励，支持多账号",
+        "抓取只需一次：开启「夸克网盘获取Cookie」后打开夸克 App 的 我的 - 网盘签到/领空间 页面，脚本会把抓到的 kps_wg 就地解密成 service_ticket/uid/nickname 存进 quark_data，之后每次运行自己现算 vcode 与 sign_wg，不再受抓包签名时效影响",
+        "抓不到包就手填：在 quark_users 粘贴抓包 URL（可带 user=昵称; 前缀）或裸 kps_wg，多个账号以换行或 && 分隔；其中的 + = %xx 原样保留即可，脚本按百分号解码且不会把 + 当空格",
+        "签名链路是从 com.quark.browser 10.18.6.1161 反编译还原、并用 Frida 与 App 原生 AccountManager 逐字节对拍过的：kps_wg = base64(BE16(4) ‖ AES-128-CBC(\"token=st&uid=uid&nickname=昵称\"))，sign_wg 同法加密 vcode 前5位+st+uid+昵称+vcode 末位的大写 MD5，密钥与 IV 同值",
+        "因此通知出现「kps_wg 解密失败」＝夸克改版换了内置密钥，需要重新抓一次包并等脚本更新密钥；提示「只支持线上 keyNo=4」＝那份包来自 DEV 构建或开发者项 clouddrive_env=test，请用正式版夸克重抓；出现「凭证已失效或参数不完整」(HTTP 500 + code 15000) ＝ service_ticket 本身已失效，重新抓包即可",
+        "Android 抓夸克的 HTTPS 需要把抓包 CA 装成系统证书：实体机要 Root，或用模拟器 + Root + ProxyPin",
+        "quark_data / quark_users 里的 service_ticket 等同账号登录凭证，不要提交到仓库或截图外传"
+      ],
+      "icons": [
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/quark.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/quark.png"
+      ],
+      "keys": [
+        "quark_data",
+        "quark_users",
+        "quark_debug"
+      ],
+      "settings": [
+        {
+          "id": "quark_data",
+          "name": "夸克数据",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 5,
+          "placeholder": "",
+          "desc": "由 rewrite 抓取自动写入；形如 [{\"st\":\"service_ticket\",\"uid\":\"100500\",\"nick\":\"昵称\",\"user\":\"备注\"}]，user 可手动补上用于通知显示，抓取更新不会覆盖它"
+        },
+        {
+          "id": "quark_users",
+          "name": "夸克账号(手动)",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 3,
+          "placeholder": "user=昵称; url=https://drive-m.quark.cn/1/clouddrive/…  或直接一行 kps_wg",
+          "desc": "抓不到包时手填：粘贴抓包 URL 或裸 kps_wg（脚本会解密出 st/uid/昵称），多个以换行或 && 分隔（与抓取数据按 uid 去重合并）"
+        },
+        {
+          "id": "quark_debug",
+          "name": "调试模式",
+          "val": false,
+          "type": "boolean",
+          "desc": "逐条打印请求/响应与签名原文，排查问题用；日志含 service_ticket 等敏感信息，看完记得关掉"
         }
       ]
     }
