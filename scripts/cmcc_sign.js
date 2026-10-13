@@ -1,6 +1,6 @@
 /**
  * 脚本名称：中国移动签到
- * 活动规则：中国移动「签到领流量/话费」活动(1021122301) 的 App 端 mark31 签到，每天一次；另有 AI豆任务(mark/task) 与秒杀抢券(markSeckill)；开关 cmcc_video 后追加「追剧领福利」页(1126082530) 的每日打卡 + 代币任务 + 周日抽奖；开关 cmcc_wed 后追加「周三充值日」(hlwyxhdhub/wedrecharge) 的做任务挣次数 + 抽拼图集话费券，cmcc_wed_sk 再打周三场次秒杀(drawPrize)
+ * 活动规则：中国移动「签到领流量/话费」活动(1021122301) 的 App 端 mark31 签到，每天一次；另有 AI豆任务(mark/task) 与秒杀抢券(markSeckill)；开关 cmcc_video 后追加「追剧领福利」页(1126082530) 的每日打卡 + 代币任务 + 周日抽奖；开关 cmcc_wed 后追加「周三充值日」(hlwyxhdhub/wedrecharge) 的做任务挣次数 + 抽拼图集话费券（只在北京时间周三执行），cmcc_wed_sk 再打周三场次秒杀(drawPrize)
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。账号参数（App 票据/省市编码等）由本脚本 GetCookie 抓取后存入 cmcc_data
  * 环境变量：cmcc_data / cmcc_claim(默认开，填 false 才关) / cmcc_task / cmcc_seckill / cmcc_video / cmcc_wed / cmcc_wed_sk / cmcc_wed_sk_at / cmcc_task_skip_days；cmcc_task_fail 为脚本自动维护的任务黑名单
  * 更新时间：2026-10-12 新增周三充值日(hlwyxhdhub wedrecharge)：任务代做 + 抽拼图 + 集齐领取 + 场次秒杀，开关 cmcc_wed / cmcc_wed_sk；AI豆任务同步上游：握手会话整轮复用、taskToken 任务直接握手、外部合作区跳过、status=1 遗留补领、公众号类即弃、停留与间隔提速；连签奖励改为只要开了就查一遍代领（不再要求当天由脚本签到），展示改用响应里的 prizeName/prizeValue
@@ -79,6 +79,7 @@ const WED_RECEIVE_LABEL = { r6: '95折话费券', r5: '9折话费券', r4: '8折
 // 需真人/真实消费的只报状态不代做；dlhd 进页即由服务端登记
 const WED_SKIP = { yqyh: '需邀请真实用户助力', czhf: '需真实充值满10元', llym: '需在 App 内浏览签到页', dlhd: '进页自动完成' };
 const WED_MAX_DRAWS = 30;     // 单次执行最多抽这么多发
+const WED_DAY = 3;            // 只在北京时间周三执行（其他日子开关开着也跳过）
 // 周三场次秒杀参数（照 py 默认值）
 const WSK_AT = getEnv('cmcc_wed_sk_at') || '08:00:00';
 const WSK_LEAD = 400;         // 提前开火(ms)
@@ -717,6 +718,7 @@ async function wedApi(ctx, path, payload) {
 async function doWedAct(user) {
     const lines = [];
     const say = t => { lines.push(t); $.log(t); };
+    if (beijingWeekday() !== WED_DAY) { $.log('[周三] 今天(北京时间)不是周三，本次跳过'); return lines; }
     try {
         const ctx = await exchangeSession(user, WED_ENTRY);
         await wedApi(ctx, 'queryActivityInfo');
@@ -906,6 +908,7 @@ async function wedReceive(ctx, state) {
 async function doWedSeckill(user) {
     const lines = [];
     const say = t => { lines.push(t); $.log(t); };
+    if (beijingWeekday() !== WED_DAY) { $.log('[周三·秒杀] 今天(北京时间)不是周三，本次跳过'); return lines; }
     try {
         const ctx = await exchangeSession(user, WED_ENTRY);
         await wedApi(ctx, 'queryActivityInfo');
