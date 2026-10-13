@@ -1,9 +1,9 @@
 /**
  * 脚本名称：中国移动签到
- * 活动规则：中国移动「签到领流量/话费」活动(1021122301) 的 App 端 mark31 签到，每天一次；另有 AI豆任务(mark/task) 与秒杀抢券(markSeckill，只打北京时间 11:00 及以后开抢的场次)；开关 cmcc_video 后追加「追剧领福利」页(1126082530) 的每日打卡 + 代币任务 + 周日抽奖；开关 cmcc_wed 后追加「周三充值日」(hlwyxhdhub/wedrecharge) 的做任务挣次数 + 抽拼图集话费券（每天做，攒碎片），cmcc_wed_sk 再打场次秒杀(drawPrize，仅北京时间周三开火)
+ * 活动规则：中国移动「签到领流量/话费」活动(1021122301) 的 App 端 mark31 签到，每天一次；另有 AI豆任务(mark/task) 与秒杀抢券(markSeckill：触发时刻早于 11:00 不执行，开抢早于 11:00 的场次也不抢)；开关 cmcc_video 后追加「追剧领福利」页(1126082530) 的每日打卡 + 代币任务 + 周日抽奖；开关 cmcc_wed 后追加「周三充值日」(hlwyxhdhub/wedrecharge) 的做任务挣次数 + 抽拼图集话费券（每天做，攒碎片），cmcc_wed_sk 再打场次秒杀(drawPrize，仅北京时间周三开火)
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。账号参数（App 票据/省市编码等）由本脚本 GetCookie 抓取后存入 cmcc_data
- * 环境变量：cmcc_data / cmcc_claim(默认开，填 false 才关) / cmcc_task / cmcc_seckill / cmcc_sk_min(不抢早于该时刻开抢的场次，默认 11:00) / cmcc_video / cmcc_wed / cmcc_wed_sk / cmcc_wed_sk_at / cmcc_task_skip_days；cmcc_task_fail 为脚本自动维护的任务黑名单
- * 更新时间：2026-10-12 新增周三充值日(hlwyxhdhub wedrecharge)：任务代做 + 抽拼图 + 集齐领取 + 场次秒杀，开关 cmcc_wed / cmcc_wed_sk；AI豆任务同步上游：握手会话整轮复用、taskToken 任务直接握手、外部合作区跳过、status=1 遗留补领、公众号类即弃、停留与间隔提速；连签奖励改为只要开了就查一遍代领（不再要求当天由脚本签到），展示改用响应里的 prizeName/prizeValue
+ * 环境变量：cmcc_data / cmcc_claim(默认开，填 false 才关) / cmcc_task / cmcc_seckill / cmcc_sk_min(每日秒杀的北京时间下限，默认 11:00，填 00:00 不受限) / cmcc_video / cmcc_wed / cmcc_wed_sk / cmcc_wed_sk_at / cmcc_task_skip_days；cmcc_task_fail 为脚本自动维护的任务黑名单
+ * 更新时间：2026-10-12 新增周三充值日(hlwyxhdhub wedrecharge)：任务代做 + 抽拼图 + 集齐领取 + 场次秒杀，开关 cmcc_wed / cmcc_wed_sk；AI豆任务同步上游：握手会话整轮复用、taskToken 任务直接握手、外部合作区跳过、status=1 遗留补领、公众号类即弃、停留与间隔提速；连签奖励改为只要开了就查一遍代领（不再要求当天由脚本签到），展示改用响应里的 prizeName/prizeValue。2026-10-13 每日秒杀加 11:00 触发门控(cmcc_sk_min)；邀好友/助力类任务与外部合作区一样常驻跳过
 
 ------------------ Surge 配置 ------------------
 
@@ -93,7 +93,7 @@ const SK_INTERVAL = 350;      // 重试间隔(ms)
 const SK_LEAD = 400;          // 提前开火(ms)，抵消网络延迟
 const SK_MAX_ATTEMPTS = 200;  // 单场最大尝试次数
 const SK_MAX_WAIT = 300000;   // 距开抢超过该时长就不再干等(ms)，本次跳过
-// 早于该时刻开抢的场次默认不抢（cmcc_sk_min 可改，填 00:00 则全打）
+// 每天的秒杀下限（北京时间）：触发时刻早于它整块不执行；开抢时刻早于它的场次也不抢。cmcc_sk_min 可改，填 00:00 则不受限
 const SK_MIN_OPEN_RAW = getEnv('cmcc_sk_min') || '11:00';
 const SK_MIN_OPEN = hmToMinutes(SK_MIN_OPEN_RAW);
 // 触达即终态的 redeem status：不再浪费请求
@@ -181,11 +181,16 @@ async function doSign(user) {
     const today = $.time('yyyyMMdd');
     try {
         if (user.signDay === today) {
-            if (!SECKILL && !WED_SECKILL) {
+            // 抢券前先过时间门控：不在窗口内连换票都不做，避免签到重跑白跑一条 SSO 链
+            const dailySk = SECKILL && skWindowOpen();
+            const wedSk = WED_SECKILL && beijingWeekday() === WED_DAY;
+            if (!dailySk && !wedSk) {
                 say(`今日签到已完成，本次无抢券任务`);
+                if (SECKILL && !skWindowOpen()) $.log(`[秒杀] 触发时刻未到 ${SK_MIN_OPEN_RAW}，本次不执行`);
+                if (WED_SECKILL && !wedSk) $.log('[周三·秒杀] 今天(北京时间)不是周三，本次跳过');
             } else {
-                if (SECKILL) lines.push(...await doSeckill(await exchangeSession(user)));
-                if (WED_SECKILL) lines.push(...await doWedSeckill(user));
+                if (dailySk) lines.push(...await doSeckill(await exchangeSession(user)));
+                if (wedSk) lines.push(...await doWedSeckill(user));
             }
         } else {
             const { ctx, statusData } = await openCtx(user);
@@ -434,7 +439,7 @@ function writeTaskFails(user, fails) {
 
 // 签到页 AI豆任务（与签到页同一套 mark/task 接口，会话通用）
 // 通知里只留成功项与一行汇总，逐条结果实时 $.log
-// 同步上游 8d3e280：外部合作区整区不做；上次遗留的"已完成待领奖"先补领；
+// 同步上游 8d3e280：外部合作区与邀好友/助力类整类不做；上次遗留的"已完成待领奖"先补领；
 // hlwyxhdhub 握手会话整轮复用（换票最贵，逐任务换会被限频）；任务间隔降到 0.2~0.6s
 async function doMarkTasks(ctx, user) {
     const lines = [];
@@ -444,14 +449,19 @@ async function doMarkTasks(ctx, user) {
     if (!tl || tl.code !== 'SUCCESS') throw new Error(`taskList 失败: ${tl && tl.code} ${tl && tl.msg}`);
     const tasks = (tl.data || {}).tasks || [];
     const outside = t => t.taskClasifiName === '外部合作区';
-    const todo = tasks.filter(t => t.status === 0 && t.taskId && !outside(t));
-    const ext = tasks.filter(t => t.status === 0 && t.taskId && outside(t));
+    // 邀好友/助力类：要真实好友点开助力才算达标（whoCanAssist=1、totalTimes=3），补领也只会回
+    // "分享任务发奖失败"，和外部合作区一样常驻跳过，不进黑名单也不发请求
+    const invite = t => String(t.whoCanAssist) === '1' || /邀(请)?好友|助力/.test(t.taskName || '');
+    const skip = t => outside(t) || invite(t);
+    const todo = tasks.filter(t => t.status === 0 && t.taskId && !skip(t));
+    const ext = tasks.filter(t => t.status === 0 && t.taskId && outside(t)).length;
+    const inv = tasks.filter(t => t.taskId && invite(t) && !outside(t)).length;
     const fails = readTaskFails(user);
     const openCache = {};
     let done = 0, beans = 0, rejected = 0, errored = 0;
 
     // status=1 是"已完成待领奖"（上次握手中断或没来得及领），补领即可
-    for (const t of tasks.filter(x => x.status === 1 && x.taskId)) {
+    for (const t of tasks.filter(x => x.status === 1 && x.taskId && !skip(x))) {
         const label = t.taskName || t.taskId;
         const r = await taskAward(ctx, t.taskId);
         if (r.ok) {
@@ -468,7 +478,7 @@ async function doMarkTasks(ctx, user) {
     for (const t of todo) {
         (fails[t.taskId] && fails[t.taskId].c >= TASK_FAIL_MAX ? blocked : runnable).push(t);
     }
-    $.log(`AI豆任务共 ${tasks.length} 个，待办 ${todo.length} 个(另有外部合作区 ${ext.length} 个不做)，黑名单跳过 ${blocked.length} 个，本次执行 ${runnable.length} 个`);
+    $.log(`AI豆任务共 ${tasks.length} 个，待办 ${todo.length} 个(另有外部合作区 ${ext} 个、邀请助力 ${inv} 个不做)，黑名单跳过 ${blocked.length} 个，本次执行 ${runnable.length} 个`);
     if (!runnable.length) {
         if (blocked.length) $.log(`[任务] 待办全部在黑名单中，${TASK_FAIL_DAYS} 天内不再尝试`);
         if (done) say(`[任务] 补领 ${done} 个 +${beans} AI豆，耗时 ${elapsedSec(t0)}s`);
@@ -716,6 +726,11 @@ function beijingMinuteOfDay(ms) {
 function hmToMinutes(s) {
     const p = String(s).split(':');
     return (Number(p[0]) || 0) * 60 + (Number(p[1]) || 0);
+}
+
+// 每天的秒杀是否该执行：触发时刻（北京时间）不早于 cmcc_sk_min
+function skWindowOpen() {
+    return beijingMinuteOfDay(Date.now()) >= SK_MIN_OPEN;
 }
 
 // ---------- 周三充值日（hlwyxhdhub/wedrecharge，参考 yupaiLy/cmcc-auto-checkin 的 cmcc_wed.py）----------
@@ -1024,10 +1039,15 @@ function markLine(who, ok, days, prize, note) {
     return `${who} ${ok ? '签到成功' : '今日已签'}${days ? `（${days}）` : ''}${prize ? `，获得: ${prize}` : ''}${note ? `，${note}` : ''}`;
 }
 
-// 秒杀抢券: 校时 → 场次 → 资格(未签补签) → 等到开抢 → 循环 redeem
+// 秒杀抢券: 触发时刻门控 → 校时 → 场次 → 资格(未签补签) → 等到开抢 → 循环 redeem
 async function doSeckill(ctx) {
     const lines = [];
     const say = t => { lines.push(t); $.log(t); };
+    // 普通签到运行（凌晨/上午）不该碰秒杀：触发时刻早于 cmcc_sk_min 直接收工，一次请求都不发
+    if (!skWindowOpen()) {
+        $.log(`[秒杀] 触发时刻未到 ${SK_MIN_OPEN_RAW}，本次不执行（抢券请另开 11 点后的定时）`);
+        return lines;
+    }
     const srvMs = await serverNowMs(ctx);
     const offsetMs = srvMs - Date.now();
     $.log(`服务器时间 ${fmtCn(srvMs)}，本机时钟偏移 ${offsetMs >= 0 ? '+' : ''}${offsetMs.toFixed(0)} ms`);
