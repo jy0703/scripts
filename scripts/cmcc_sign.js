@@ -1,8 +1,8 @@
 /**
  * 脚本名称：中国移动签到
- * 活动规则：中国移动「签到领流量/话费」活动(1021122301) 的 App 端 mark31 签到，每天一次；另有 AI豆任务(mark/task) 与秒杀抢券(markSeckill)；开关 cmcc_video 后追加「追剧领福利」页(1126082530) 的每日打卡 + 代币任务 + 周日抽奖；开关 cmcc_wed 后追加「周三充值日」(hlwyxhdhub/wedrecharge) 的做任务挣次数 + 抽拼图集话费券（每天做，攒碎片），cmcc_wed_sk 再打场次秒杀(drawPrize，仅北京时间周三开火)
+ * 活动规则：中国移动「签到领流量/话费」活动(1021122301) 的 App 端 mark31 签到，每天一次；另有 AI豆任务(mark/task) 与秒杀抢券(markSeckill，只打北京时间 11:00 及以后开抢的场次)；开关 cmcc_video 后追加「追剧领福利」页(1126082530) 的每日打卡 + 代币任务 + 周日抽奖；开关 cmcc_wed 后追加「周三充值日」(hlwyxhdhub/wedrecharge) 的做任务挣次数 + 抽拼图集话费券（每天做，攒碎片），cmcc_wed_sk 再打场次秒杀(drawPrize，仅北京时间周三开火)
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。账号参数（App 票据/省市编码等）由本脚本 GetCookie 抓取后存入 cmcc_data
- * 环境变量：cmcc_data / cmcc_claim(默认开，填 false 才关) / cmcc_task / cmcc_seckill / cmcc_video / cmcc_wed / cmcc_wed_sk / cmcc_wed_sk_at / cmcc_task_skip_days；cmcc_task_fail 为脚本自动维护的任务黑名单
+ * 环境变量：cmcc_data / cmcc_claim(默认开，填 false 才关) / cmcc_task / cmcc_seckill / cmcc_sk_min(不抢早于该时刻开抢的场次，默认 11:00) / cmcc_video / cmcc_wed / cmcc_wed_sk / cmcc_wed_sk_at / cmcc_task_skip_days；cmcc_task_fail 为脚本自动维护的任务黑名单
  * 更新时间：2026-10-12 新增周三充值日(hlwyxhdhub wedrecharge)：任务代做 + 抽拼图 + 集齐领取 + 场次秒杀，开关 cmcc_wed / cmcc_wed_sk；AI豆任务同步上游：握手会话整轮复用、taskToken 任务直接握手、外部合作区跳过、status=1 遗留补领、公众号类即弃、停留与间隔提速；连签奖励改为只要开了就查一遍代领（不再要求当天由脚本签到），展示改用响应里的 prizeName/prizeValue
 
 ------------------ Surge 配置 ------------------
@@ -84,15 +84,18 @@ const WED_DAY = 3;            // 场次秒杀只在北京时间周三打（任�
 const WSK_AT = getEnv('cmcc_wed_sk_at') || '08:00:00';
 const WSK_LEAD = 400;         // 提前开火(ms)
 const WSK_INTERVAL = 350;     // 连发间隔(ms)
-const WSK_MAX_ATTEMPTS = 120;
+const WSK_MAX_ATTEMPTS = 200;
 const WSK_MAX_WAIT = 300000;  // 距开场超过该时长就不干等，本次跳过(ms)
 const WSK_STOP = { '160002': '无库存' };
 // 秒杀抢券参数 (照 py 默认值)
 const SK_API = API_MARK + '/markSeckill';
 const SK_INTERVAL = 350;      // 重试间隔(ms)
 const SK_LEAD = 400;          // 提前开火(ms)，抵消网络延迟
-const SK_MAX_ATTEMPTS = 120;  // 单场最大尝试次数
+const SK_MAX_ATTEMPTS = 200;  // 单场最大尝试次数
 const SK_MAX_WAIT = 300000;   // 距开抢超过该时长就不再干等(ms)，本次跳过
+// 早于该时刻开抢的场次默认不抢（cmcc_sk_min 可改，填 00:00 则全打）
+const SK_MIN_OPEN_RAW = getEnv('cmcc_sk_min') || '11:00';
+const SK_MIN_OPEN = hmToMinutes(SK_MIN_OPEN_RAW);
 // 触达即终态的 redeem status：不再浪费请求
 const SK_STOP = {
     PRIZE_NO_STOCK: '券已抢完',
@@ -704,6 +707,17 @@ function beijingWeekday() {
     return new Date(Date.now() + 8 * 3600000).getUTCDay();
 }
 
+// 北京时间「当天的第几分钟」，用于按时刻筛场次
+function beijingMinuteOfDay(ms) {
+    const d = new Date(ms + 8 * 3600000);
+    return d.getUTCHours() * 60 + d.getUTCMinutes();
+}
+
+function hmToMinutes(s) {
+    const p = String(s).split(':');
+    return (Number(p[0]) || 0) * 60 + (Number(p[1]) || 0);
+}
+
 // ---------- 周三充值日（hlwyxhdhub/wedrecharge，参考 yupaiLy/cmcc-auto-checkin 的 cmcc_wed.py）----------
 
 // 该 hub 的成功码是字符串 "0"（区别于 qwhdhub 的 SUCCESS），非 0 一律按失败抛出
@@ -1024,15 +1038,19 @@ async function doSeckill(ctx) {
     $.log(`共 ${zones.length} 个场次:`);
     zones.forEach(z => $.log(`  场次${z.id} ${fmtCn(z.startTime)} ~ ${fmtCn(z.endTime)}  ${(z.prize || {}).name} (prizeId=${(z.prize || {}).id})`));
 
-    const eligible = await ensureEligible(ctx);
-    $.log(`秒杀资格（当日签到）: ${eligible ? '已具备' : '未获取！'}`);
-
     const picked = pickZone(zones, srvMs);
     if (!picked.zone) throw new Error('没有可参与的场次（全部已结束）');
     const zone = picked.zone, prizeName = (zone.prize || {}).name || `场次${zone.id}`;
     const startSrv = Number(zone.startTime), endSrv = Number(zone.endTime);
     $.log(`选定场次${zone.id}：${fmtCn(startSrv)} 开抢（${picked.active ? '进行中' : `距开始 ${((startSrv - srvMs) / 1000).toFixed(0)} 秒`}）`);
+    // 早场默认不打：开抢时刻早于 cmcc_sk_min（默认 11:00）直接收工
+    if (beijingMinuteOfDay(startSrv) < SK_MIN_OPEN) {
+        $.log(`[秒杀] 场次${zone.id} ${fmtCn(startSrv)} 开抢，早于下限 ${SK_MIN_OPEN_RAW}，本次不抢`);
+        return lines;
+    }
 
+    const eligible = await ensureEligible(ctx);
+    $.log(`秒杀资格（当日签到）: ${eligible ? '已具备' : '未获取！'}`);
     if (!eligible) {
         say('[秒杀] 当日未签到且补签失败，无法参与秒杀');
         return lines;
