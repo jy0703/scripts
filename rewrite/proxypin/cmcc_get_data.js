@@ -124,8 +124,11 @@ var onRequest, onResponse;
             jwt: jwt,
             // jwt 换了就重记凭证链起点，cmcc_sign 日志里的"凭证链已 X 天"才是真值
             jwt_first: (old.jwt && old.jwt === jwt) ? (old.jwt_first || Date.now()) : Date.now(),
-            // 别把当天"已签到"标记冲掉，否则同日会再签一次
+            // 别把当天"已签到/已抢到"标记冲掉，否则同日会再签一次、再打一次秒杀
             signDay: old.signDay || '',
+            skWinDay: old.skWinDay || '',
+            skWinPrize: old.skWinPrize || '',
+            wedSkDay: old.wedSkDay || '',
         };
 
         var idx = indexOfUser(list, body.userCheckId);

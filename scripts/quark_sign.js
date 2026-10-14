@@ -1,40 +1,27 @@
 /**
  * 脚本名称：夸克网盘签到
  * 活动规则：夸克网盘每日签到领空间容量，连签达目标有额外奖励
- * 脚本说明：支持多账号，支持 NE / Node.js 环境。抓一次包取 kps_wg 并本地解密出 service_ticket/uid/nickname，之后每次运行由脚本自己现算 vcode/sign_wg，不再依赖抓到的旧签名
- * 环境变量：quark_data、quark_users、quark_debug
- * 更新时间：2026-10-12
+ * 脚本说明：支持多账号，支持 NE / Node.js 环境。每次运行用缓存里的 service_ticket/uid/昵称现算 vcode/sign_wg，不依赖抓到的旧签名；请求 UA 跟着账号走（quark_data 里的 ua），没写就用内置那条
+ * 环境变量：quark_data、quark_debug、quark_api、quark_api_token
+ * 凭证来源：只有 quark_data 一个入口 —— 用本地取凭证网页 quark-api/（手机验证码登录）点「复制 全部账号（票+UA）」，把 {手机号:{service_ticket,kps_wg,ua}} 整段粘进去；旧的手填数组写法仍能读，回写时统一成按手机号的 map
+ * 换票：配了 quark_api（内网 http://192.168.1.10:8787，公网用 https 隧道地址）时，每次运行先 POST /api/refresh 向那个服务要一张有效票，票或昵称变了就写回 quark_data；服务不通就用缓存里的票继续，票真作废才报错要求重新登录。脚本自身不含账号网关代码，也不抓包
+ * quark_api_token：服务与服务端不在同一内网时必填，作为 X-Quark-Token 送出（服务端非内网来源只放行 /api/refresh 并校验它）
+ * 更新时间：2026-10-14
 
 ------------------ Surge 配置 ------------------
 
 [Script]
-夸克网盘获取Cookie = type=http-request,pattern=^https?:\/\/drive\-m\.quark\.cn\/1\/clouddrive\/,requires-body=0,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/quark_sign.js,script-update-interval=0
-
 夸克网盘签到 = type=cron,cronexp="0 9 * * *",wake-system=1,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/quark_sign.js,timeout=600,script-update-interval=0
-
-[MITM]
-hostname = drive-m.quark.cn
 
 ------------------- Loon 配置 -------------------
 
 [Script]
-http-request ^https?:\/\/drive\-m\.quark\.cn\/1\/clouddrive\/ script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/quark_sign.js, requires-body=false, timeout=600, tag=夸克网盘获取Cookie
-
 cron "0 9 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/quark_sign.js, timeout=600, tag=夸克网盘签到
-
-[MITM]
-hostname = drive-m.quark.cn
 
 --------------- Quantumult X 配置 ---------------
 
-[rewrite_local]
-^https?:\/\/drive\-m\.quark\.cn\/1\/clouddrive\/ url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/quark_sign.js
-
 [task_local]
 "0 9 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/quark_sign.js, tag=夸克网盘签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/quark.png, enabled=true
-
-[MITM]
-hostname = drive-m.quark.cn
 
  */
 
@@ -42,24 +29,23 @@ const $ = new Env('夸克网盘');
 $.is_debug = getEnv('quark_debug', 'is_debug') || 'false';  // 调试模式
 $.Messages = [];
 
-// 业务常量 (链路照 com.quark.browser 10.18.6.1161 反编译 + Frida 对拍还原)
 const APP_NAME = '夸克网盘';
 const DATA_KEY = 'quark_data';
-const USERS_KEY = 'quark_users';
 const INFO_URL = 'https://drive-m.quark.cn/1/clouddrive/capacity/growth/info';
 const SIGN_URL = 'https://drive-m.quark.cn/1/clouddrive/capacity/growth/sign';
-// 抓取正则（与 lpx / sgmodule / 头部注释四处一致）
-const CAPTURE_REGEX = /^https?:\/\/drive\-m\.quark\.cn\/1\/clouddrive\//;
-// 无线保镖(WSG)静态数据加密：AES-128-CBC，IV 与密钥同值，密文前再拼 2 字节大端 keyNo
-// 只认线上 keyNo 4：DEV 构建与开发者项 clouddrive_env=test 会切到 1/2，那种包抓来的 ticket 线上也不认，故直接拒收
 const WSG_KEY_NO = 4;
 const WSG_KEY = '5ee3f2734745f737';
+// 账号没带 ua 时用的默认值（逆向包 10.18.6.1161 那台的）
+const DEFAULT_UA = 'Mozilla/5.0 (Linux; Android 13; SM-G981B Build/TP1A.220624.014; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/116.0.0.0 Mobile Safari/537.36 Quark/10.18.6.1161';
 
 
 // 主函数
 async function main() {
     const accounts = loadAccounts();
-    if (!accounts.length) throw new Error(`未配置账号：开启抓取后打开夸克 App 网盘签到页写入 ${DATA_KEY}，或在 ${USERS_KEY} 粘贴抓包 URL / kps_wg（多个以换行或 && 分隔）❌`);
+    if (!accounts.length) throw new Error(`未配置账号：用取凭证网页（quark-api/）的「复制 全部账号（票+UA）」把 JSON 粘进 ${DATA_KEY} ❌`);
+    const api = (getEnv('quark_api', 'QUARK_API') || '').trim();
+    const apiToken = (getEnv('quark_api_token', 'QUARK_API_TOKEN') || '').trim();
+    if (api) $.log(`🔌 换票服务：${api}${apiToken ? '（带 token）' : ''}`);
     $.log(`\n🌀 找到 ${accounts.length} 个夸克账号`);
 
     let ok = 0, fail = 0;
@@ -68,7 +54,7 @@ async function main() {
         $.log(`\n----- 账号 [${i + 1}/${accounts.length}] 开始执行 -----\n`);
         $.messages = [];
         try {
-            await runAccount(acc);
+            await runAccount(acc, api, apiToken);
             ok++;
         } catch (e) {
             fail++;
@@ -79,17 +65,21 @@ async function main() {
         if (i < accounts.length - 1) await $.wait(2000);
     }
     $.log(`\n----- 所有账号执行完成 -----\n`);
+    const changed = accounts.filter(a => a.changed);
+    if (changed.length && persistAccounts(accounts)) $.log(`💾 已把 ${changed.length} 个账号的新票/资料写回 ${DATA_KEY}`);
     $.Messages.push(`\n📊 ${APP_NAME}: 成功 ${ok} / 失败 ${fail}`);
 }
 
-// 单账号：现算凭证 → 查状态 → 未签到则签到（POST 网络失败先复查再判定）
-async function runAccount(acc) {
-    if (!acc.st || !acc.uid) throw new Error(`账号缺少 service_ticket/uid，请重新抓取（kps_wg 解不出明文时也要重抓）`);
+// 单账号：先向取凭证服务要一张有效的票（没配服务就用手上的），再现算凭证 → 查状态 → 未签到则签到
+async function runAccount(acc, api, apiToken) {
+    if (!acc.st || !acc.uid) throw new Error(`账号缺少 service_ticket/uid，请从取凭证网页重新复制一份 kps_wg`);
+    if (api) await refreshTicket(acc, api, apiToken);
     const vcode = String(Date.now());
     const kps = buildKps(acc.st, acc.uid, acc.nick);
     const sign = buildSign(vcode, acc.st, acc.uid, acc.nick);
+    const ua = acc.ua || DEFAULT_UA;   // UA 跟着账号走：账号里带 ua 就用它，没有才用内置那条
 
-    const info = await growthInfo({ kps, sign, vcode }, '查询签到状态');
+    const info = await growthInfo({ kps, sign, vcode }, '查询签到状态', ua);
     acc.vip = info['88VIP'] ? '88VIP' : '普通用户';
     const capSign = info.cap_sign;
     if (!capSign || typeof capSign !== 'object') throw new Error('成长信息中缺少 cap_sign 字段');
@@ -109,11 +99,11 @@ async function runAccount(acc) {
 
     let line;
     try {
-        line = `✅ 签到成功 +${convertBytes(await growthSign({ kps, sign, vcode }))}，连签进度（${typeof progress === 'number' ? progress + 1 : '?'}/${target}）`;
+        line = `✅ 签到成功 +${convertBytes(await growthSign({ kps, sign, vcode }, ua))}，连签进度（${typeof progress === 'number' ? progress + 1 : '?'}/${target}）`;
     } catch (e) {
         if (!/网络失败/.test(e.message || '')) throw e;
         $.log('⚠️ POST 结果不确定，重新查询签到状态');
-        const verified = (await growthInfo({ kps, sign, vcode }, '复查签到状态')).cap_sign;
+        const verified = (await growthInfo({ kps, sign, vcode }, '复查签到状态', ua)).cap_sign;
         if (!verified || !verified.sign_daily) throw new Error('未确认签到成功，等待定时补签');
         line = `✅ 复查确认今日已签到 +${convertBytes(verified.sign_daily_reward || 0)}，连签进度（${progress}/${target}）`;
     }
@@ -121,6 +111,42 @@ async function runAccount(acc) {
 }
 
 function push(line) { $.log(line); $.messages.push(line); }
+
+// 向本地取凭证服务换票（POST /api/refresh）：账号网关的加密都在服务那边，脚本只发这一个请求
+// 票真作废（50051 系）就直接失败并要求重新登录；服务不通/其它错误就用本地票继续跑
+async function refreshTicket(acc, api, apiToken) {
+    const url = api.replace(/\/+$/, '') + '/api/refresh';
+    const headers = { 'User-Agent': acc.ua || DEFAULT_UA };
+    if (apiToken) headers['X-Quark-Token'] = apiToken;      // 服务不在内网时靠它挡一下
+    let payload;
+    try {
+        const resp = await Request({
+            url, method: 'post', headers, body: { uid: acc.uid }, _respType: 'all', _timeout: 20000,
+        });
+        const status = Number(resp && (resp.statusCode || resp.status)) || 0;
+        if (status === 403) throw new Error(`服务拒绝访问（${$.toObj(resp.body, {}).error || '403'}），检查 quark_api_token 或服务是否只允许内网`);
+        if (status !== 200) throw new Error(`HTTP ${status || '网络失败'}`);
+        payload = $.toObj(resp.body, null);
+        if (!payload) throw new Error('返回不是 JSON');
+        if (payload.error) throw new Error(payload.error);
+        if (!payload.service_ticket) throw new Error('服务没返回 service_ticket');
+    } catch (e) {
+        const msg = String(e.message || e);
+        if (/50051|50052|50055|票无效|Invalid service ticket|作废/.test(msg)) {
+            throw new Error(`票已失效（服务回：${msg}），请到取凭证网页重新登录再复制`);
+        }
+        $.log(`⚠️ 换票服务不可用（${msg}），改用本地票继续`);
+        return;
+    }
+    const before = `${acc.st}|${acc.nick}|${acc.ua}`;
+    acc.st = payload.service_ticket;
+    acc.uid = String(payload.uid || acc.uid);
+    if (payload.nickname) acc.nick = payload.nickname;
+    if (payload.ua) acc.ua = payload.ua;
+    if (`${acc.st}|${acc.nick}|${acc.ua}` !== before) acc.changed = true;
+    debug(`换票返回: rotated=${payload.rotated} uid=${payload.uid}`, 'API');
+    $.log(payload.rotated ? '🎫 服务端已换新票，本次用新票' : '🎫 票仍有效，资料已刷新');
+}
 
 // ---------- 无线保镖(WSG) 本地生成 ----------
 
@@ -133,7 +159,7 @@ function wsgEncrypt(str) {
 function wsgDecrypt(b64) {
     const hex = Crypt('base64-to-hex', b64);
     const keyNo = parseInt(hex.slice(0, 4), 16);
-    if (keyNo !== WSG_KEY_NO) throw new Error(`只支持线上 keyNo=${WSG_KEY_NO}，抓到的是 keyNo=${keyNo}（DEV 包或 clouddrive_env=test），请用正式版夸克重抓`);
+    if (keyNo !== WSG_KEY_NO) throw new Error(`只支持线上 keyNo=${WSG_KEY_NO}，抓到的是 keyNo=${keyNo}（iOS 是 20040、独立网盘 App 是 20030、DEV 包是 1/2，都不通用；请用正式版安卓夸克重抓）`);
     return Crypt('aes-cbc-dec-iv', Crypt('hex-to-base64', hex.slice(4)), WSG_KEY, WSG_KEY);
 }
 
@@ -153,35 +179,35 @@ function buildSign(vcode, st, uid, nick) {
 function parseKps(kpsWg) {
     let plain = '', why = '';
     try { plain = wsgDecrypt(kpsWg); } catch (e) { why = e.message || String(e); }
-    if (!plain || plain.indexOf('token=') !== 0) throw new Error(`kps_wg 解密失败${why ? '（' + why + '）' : ''}，夸克可能改版换密钥，请重新抓取: ${kpsWg.slice(0, 12)}…`);
+    if (!plain || plain.indexOf('token=') !== 0) throw new Error(`kps_wg 解密失败${why ? '（' + why + '）' : ''}，夸克可能改版换密钥: ${kpsWg.slice(0, 12)}…`);
     const uidMark = '&uid=', nickMark = '&nickname=';
     const i = plain.indexOf(uidMark), j = plain.indexOf(nickMark);
-    if (i < 0 || j < 0) throw new Error('kps_wg 明文缺少 uid/nickname 字段，请重新抓取');
+    if (i < 0 || j < 0) throw new Error('kps_wg 明文缺少 uid/nickname 字段');
     return { st: plain.slice(6, i), uid: plain.slice(i + uidMark.length, j), nick: plain.slice(j + nickMark.length) };
 }
 
 // ---------- 接口 ----------
 
-async function growthInfo(cred, stage) {
-    const payload = await requestJson('get', buildUrl(INFO_URL, cred), stage);
+async function growthInfo(cred, stage, ua) {
+    const payload = await requestJson('get', buildUrl(INFO_URL, cred), stage, null, ua);
     if (!payload.data || typeof payload.data !== 'object') throw new Error(apiError(payload, '获取成长信息失败'));
     return payload.data;
 }
 
-async function growthSign(cred) {
-    const payload = await requestJson('post', buildUrl(SIGN_URL, cred), '提交签到', { sign_cyclic: true });
+async function growthSign(cred, ua) {
+    const payload = await requestJson('post', buildUrl(SIGN_URL, cred), '提交签到', { sign_cyclic: true }, ua);
     if (!payload.data || payload.data.sign_daily_reward === undefined) throw new Error(apiError(payload, '签到失败'));
     return payload.data.sign_daily_reward;
 }
 
-async function requestJson(method, url, stage, body) {
+async function requestJson(method, url, stage, body, ua) {
     const attempts = method === 'get' ? 3 : 1;
     for (let attempt = 1; attempt <= attempts; attempt++) {
         const resp = await Request({
             url,
             method,
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Linux; Android 13; SM-G981B Build/TP1A.220624.014; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/116.0.0.0 Mobile Safari/537.36 Quark/10.18.6.1161',
+                'User-Agent': ua || DEFAULT_UA,
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
             },
@@ -230,104 +256,51 @@ function convertBytes(value) {
     return `${size.toFixed(2)} ${units[i]}`;
 }
 
-// ---------- 抓取与账号装载 ----------
+// ---------- 账号装载（quark_data 是唯一入口）----------
 
-function GetCookie() {
-    try {
-        const url = ($request && $request.url) || '';
-        if ($request && $request.method === 'OPTIONS') return;
-        if (!url || !CAPTURE_REGEX.test(url)) return;
-
-        const q = queryParams(url);
-        const kpsWg = q.kps_wg || q.kps;
-        if (!kpsWg) return;
-
-        const acc = parseKps(kpsWg);
-        const exist = $.userArr.find(e => e.uid === acc.uid);
-        if (exist) {
-            if (exist.st === acc.st && exist.nick === acc.nick) {
-                $.log('夸克账号已存在且凭证无变化，不重复写入');
-                return;
-            }
-            Object.assign(exist, acc);
-            persistAccounts();
-            $.Messages.push(`🎉夸克账号已更新: ${acc.nick || acc.uid}`);
-            $.log(`🎉夸克账号已更新: ${acc.uid} (${acc.nick})`);
-            return;
-        }
-        $.userArr.push(acc);
-        persistAccounts();
-        $.Messages.push(`🎉获取夸克账号成功: ${acc.nick || acc.uid}`);
-        $.log(`🎉获取夸克账号成功: ${acc.uid} (${acc.nick})`);
-    } catch (e) {
-        $.log('❌ Cookie获取失败'), $.log(e);
-    }
-}
-
-function persistAccounts() {
-    $.setdata($.toStr($.userArr.map(e => {
-        const item = { st: e.st, uid: e.uid, nick: e.nick };
-        if (e.user) item.user = e.user;
-        return item;
-    })), DATA_KEY);
-}
-
-// 账号来源：quark_data(抓取写入的 st/uid/nick) + quark_users(手填抓包 URL 或裸 kps_wg)
+// 收两种形状：网页导出的 {手机号:{service_ticket,kps_wg,ua}} 与早期/手填的数组 [{st,uid,nick,ua,user}]
 function loadAccounts() {
+    const cache = $.toObj(getEnv(DATA_KEY) || '', null);
     const out = [];
     const push = acc => {
         if (!acc || !acc.st || !acc.uid) return;
-        if (!out.some(e => e.uid === acc.uid)) out.push(acc);
+        const hit = out.find(e => e.uid === acc.uid);
+        if (hit) { hit.st = acc.st; hit.nick = acc.nick || hit.nick; if (acc.ua) hit.ua = acc.ua; if (acc.user) hit.user = acc.user; if (acc.mobile) hit.mobile = acc.mobile; return; }
+        out.push(acc);
     };
+    if (!cache) return out;
 
-    const list = $.toObj(getEnv(DATA_KEY) || '', null);
-    if (Array.isArray(list)) list.forEach(e => {
-        if (!e || typeof e !== 'object') return;
-        push({ st: e.st, uid: String(e.uid || ''), nick: e.nick || '', user: e.user || '' });
-    });
-
-    (getEnv(USERS_KEY) || '').split(/\r?\n|&&/).forEach(entry => {
-        entry = entry.trim();
-        if (!entry) return;
-        let user = '', kps = '';
-        if (entry.indexOf('=') === -1) { kps = entry; }
-        else {
-            const fields = {};
-            entry.split(';').forEach(part => {
-                part = part.trim();
-                if (!part || part.indexOf('=') === -1) return;
-                const i = part.indexOf('=');
-                fields[part.slice(0, i).trim()] = part.slice(i + 1).trim();
-            });
-            user = fields.user || '';
-            kps = fields.kps_wg || fields.kps || (fields.url ? queryParams(fields.url).kps_wg || queryParams(fields.url).kps : '');
-        }
-        if (!kps) return;
+    if (Array.isArray(cache)) cache.forEach(e => e && typeof e === 'object' && push({ st: e.st, uid: String(e.uid || ''), nick: e.nick || '', ua: e.ua || '', user: e.user || '' }));
+    else Object.entries(cache).forEach(([key, e]) => {
+        if (!e || typeof e !== 'object' || !e.kps_wg) return;
+        const isMobile = /^1\d{10}$/.test(key);
         try {
-            const acc = parseKps(kps);
-            acc.user = user;
+            const acc = parseKps(e.kps_wg);
+            if (e.service_ticket) acc.st = e.service_ticket;      // 以显式给的票为准（同一次导出里两者一致）
+            acc.ua = e.ua || '';
+            acc.mobile = isMobile ? key : '';
+            acc.user = e.user || (isMobile ? key : '');
             push(acc);
-        } catch (e) {
-            $.log(`❌ 跳过一条无效账号配置：${e.message || e}`);
+        } catch (err) {
+            $.log(`❌ 跳过 ${key}：${err.message || err}`);
         }
     });
     return out;
 }
 
-// 只按百分号解码，保留字面量 +（夸克凭证里 + 是有效字符，转成空格会让参数失效）
-function queryParams(url) {
-    const query = {};
-    (String(url || '').split('?')[1] || '').split('&').forEach(part => {
-        if (!part) return;
-        const i = part.indexOf('=');
-        const key = safeUnquote(i === -1 ? part : part.slice(0, i));
-        if (query[key] === undefined) query[key] = i === -1 ? '' : safeUnquote(part.slice(i + 1));
+// 换票/改名后回写缓存：统一成按手机号的 map，没变化就不写
+function persistAccounts(list) {
+    const map = {};
+    list.forEach(e => {
+        const key = e.mobile || e.uid;
+        const item = { service_ticket: e.st, kps_wg: buildKps(e.st, e.uid, e.nick), ua: e.ua || '' };
+        if (e.user && e.user !== key) item.user = e.user;
+        map[key] = item;
     });
-    return query;
-}
-
-function safeUnquote(value) {
-    try { return decodeURIComponent(String(value)); } catch (e) { return String(value); }
+    const text = $.toStr(map);
+    if (!text) { $.log('❌ 缓存序列化失败，本次不回写'); return false; }
+    $.setdata(text, DATA_KEY);
+    return true;
 }
 
 // ---------- 工具函数 ----------
@@ -404,15 +377,9 @@ async function sendMsg(message) {
     }
 }
 
-// 脚本执行入口: $request 存在 → 抓取模式, 否则 → 定时任务模式
+// 脚本执行入口: 只有定时任务模式（凭证由 quark-api/ 取凭证网页产出，不再抓包）
 !(async () => {
-    if (typeof $request !== `undefined`) {
-        const saved = $.toObj(getEnv(DATA_KEY) || '', null);
-        $.userArr = Array.isArray(saved) ? saved : [];
-        GetCookie();
-    } else {
-        await main();  // 主函数
-    }
+    await main();
 })()
     .catch((e) => $.Messages.push(e.message || e) && $.logErr(e))
     .finally(async () => {

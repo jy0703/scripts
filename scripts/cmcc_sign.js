@@ -1,9 +1,9 @@
 /**
  * 脚本名称：中国移动签到
- * 活动规则：中国移动「签到领流量/话费」活动(1021122301) 的 App 端 mark31 签到，每天一次；另有 AI豆任务(mark/task) 与秒杀抢券(markSeckill：触发时刻早于 11:00 不执行，开抢早于 11:00 的场次也不抢)；开关 cmcc_video 后追加「追剧领福利」页(1126082530) 的每日打卡 + 代币任务 + 周日抽奖；开关 cmcc_wed 后追加「周三充值日」(hlwyxhdhub/wedrecharge) 的做任务挣次数 + 抽拼图集话费券（每天做，攒碎片），cmcc_wed_sk 再打场次秒杀(drawPrize，仅北京时间周三开火)
+ * 活动规则：中国移动「签到领流量/话费」活动(1021122301) 的 App 端 mark31 签到，每天一次；另有 AI豆任务(mark/task) 与秒杀抢券(markSeckill：触发时刻早于 11:00 不执行，开抢早于 11:00 的场次也不抢，某一期抢中后本周内不再打、下周继续)；开关 cmcc_video 后追加「追剧领福利」页(1126082530) 的每日打卡 + 代币任务 + 周日抽奖；开关 cmcc_wed 后追加「周三充值日」(hlwyxhdhub/wedrecharge) 的做任务挣次数 + 抽拼图集话费券（每天做，攒碎片），cmcc_wed_sk 再打场次秒杀(drawPrize，仅北京时间周三开火，当天打过一次即收工)
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。账号参数（App 票据/省市编码等）由本脚本 GetCookie 抓取后存入 cmcc_data
  * 环境变量：cmcc_data / cmcc_claim(默认开，填 false 才关) / cmcc_task / cmcc_seckill / cmcc_sk_min(每日秒杀的北京时间下限，默认 11:00，填 00:00 不受限) / cmcc_video / cmcc_wed / cmcc_wed_sk / cmcc_wed_sk_at / cmcc_task_skip_days；cmcc_task_fail 为脚本自动维护的任务黑名单
- * 更新时间：2026-10-12 新增周三充值日(hlwyxhdhub wedrecharge)：任务代做 + 抽拼图 + 集齐领取 + 场次秒杀，开关 cmcc_wed / cmcc_wed_sk；AI豆任务同步上游：握手会话整轮复用、taskToken 任务直接握手、外部合作区跳过、status=1 遗留补领、公众号类即弃、停留与间隔提速；连签奖励改为只要开了就查一遍代领（不再要求当天由脚本签到），展示改用响应里的 prizeName/prizeValue。2026-10-13 每日秒杀加 11:00 触发门控(cmcc_sk_min)；邀好友/助力类任务与外部合作区一样常驻跳过
+ * 更新时间：2026-10-12 新增周三充值日(hlwyxhdhub wedrecharge)：任务代做 + 抽拼图 + 集齐领取 + 场次秒杀，开关 cmcc_wed / cmcc_wed_sk；AI豆任务同步上游：握手会话整轮复用、taskToken 任务直接握手、外部合作区跳过、status=1 遗留补领、公众号类即弃、停留与间隔提速；连签奖励改为只要开了就查一遍代领（不再要求当天由脚本签到），展示改用响应里的 prizeName/prizeValue。2026-10-13 每日秒杀加 11:00 触发门控(cmcc_sk_min)与"按周去重"(skWinDay 记抢中那期的日期，比较时换算成该周周一：本周不再打，下周自动恢复)；邀好友/助力类任务与外部合作区一样常驻跳过；周三场次秒杀加"当天打过即收工"(wedSkDay，发过 drawPrize 才记)
 
 ------------------ Surge 配置 ------------------
 
@@ -158,8 +158,11 @@ function GetCookie() {
             // App 端 localStorage 里的 jwt 比旧缓存新，缺失时保留旧值
             'jwt': body.jwtToken || old.jwt || '',
             'jwt_first': old.jwt_first || Date.now(),
-            // 重新抓包不该把当天"已签到"标记清掉，否则同日会再签一次
+            // 重新抓包不该把当天"已签到"标记清掉，否则同日会再签一次；抢中记录同理，否则当天会重复打
             'signDay': old.signDay || '',
+            'skWinDay': old.skWinDay || '',
+            'skWinPrize': old.skWinPrize || '',
+            'wedSkDay': old.wedSkDay || '',
         };
 
         const index = $.userArr.findIndex(e => e.userCheckId == newData.userCheckId);
@@ -173,7 +176,7 @@ function GetCookie() {
 }
 
 // 任务: 建会话 → App 端签到 → (可选)连签奖励/AI豆任务/追剧领福利/周三充值日 → (可选)抢券
-// 当天签到完成后(user.signDay)，再次执行本脚本只跑抢券(签到页秒杀/周三场次秒杀)，不再签到/领奖/任务/追剧/拼图
+// 当天签到完成后(user.signDay)，再次执行本脚本只跑抢券(签到页秒杀/周三场次秒杀)，不再签到/领奖/任务/追剧/拼图；本周已抢中的账号连抢券请求也不发
 // 结果边产生边 $.log（say），通知内容仍攒在 lines 里最后一起推送
 async function doSign(user) {
     const lines = [];
@@ -181,15 +184,19 @@ async function doSign(user) {
     const today = $.time('yyyyMMdd');
     try {
         if (user.signDay === today) {
-            // 抢券前先过时间门控：不在窗口内连换票都不做，避免签到重跑白跑一条 SSO 链
-            const dailySk = SECKILL && skWindowOpen();
-            const wedSk = WED_SECKILL && beijingWeekday() === WED_DAY;
+            // 抢券前先过门控（本周已抢中 / 触发时刻未到）：不在窗口内连换票都不做，避免签到重跑白跑一条 SSO 链
+            const alreadyWon = SECKILL && skWeekDone(user, Date.now());
+            const dailySk = SECKILL && !alreadyWon && skWindowOpen();
+            const wedSk = WED_SECKILL && beijingWeekday() === WED_DAY && user.wedSkDay !== today;
+            const wedSkDone = WED_SECKILL && beijingWeekday() === WED_DAY && user.wedSkDay === today;
             if (!dailySk && !wedSk) {
                 say(`今日签到已完成，本次无抢券任务`);
-                if (SECKILL && !skWindowOpen()) $.log(`[秒杀] 触发时刻未到 ${SK_MIN_OPEN_RAW}，本次不执行`);
-                if (WED_SECKILL && !wedSk) $.log('[周三·秒杀] 今天(北京时间)不是周三，本次跳过');
+                if (alreadyWon) $.log(`[秒杀] 本周已于 ${user.skWinDay.slice(4, 6)}-${user.skWinDay.slice(6, 8)} 抢到${user.skWinPrize ? `「${user.skWinPrize}」` : ''}，本周不再参与`);
+                else if (SECKILL && !skWindowOpen()) $.log(`[秒杀] 触发时刻未到 ${SK_MIN_OPEN_RAW}，本次不执行`);
+                if (wedSkDone) $.log('[周三·秒杀] 今天已执行过，本次不再打');
+                else if (WED_SECKILL && beijingWeekday() !== WED_DAY) $.log('[周三·秒杀] 今天(北京时间)不是周三，本次跳过');
             } else {
-                if (dailySk) lines.push(...await doSeckill(await exchangeSession(user)));
+                if (dailySk) lines.push(...await doSeckill(await exchangeSession(user), user));
                 if (wedSk) lines.push(...await doWedSeckill(user));
             }
         } else {
@@ -271,7 +278,7 @@ async function doSign(user) {
 
             if (SECKILL) {
                 try {
-                    lines.push(...await doSeckill(ctx));
+                    lines.push(...await doSeckill(ctx, user));
                 } catch (e) {
                     say(`[秒杀] 失败: ${e.message || e}`);
                 }
@@ -723,6 +730,31 @@ function beijingMinuteOfDay(ms) {
     return d.getUTCHours() * 60 + d.getUTCMinutes();
 }
 
+// 北京时间日期 yyyyMMdd，用于记抢中那期的日期
+function beijingDate(ms) {
+    const d = new Date(ms + 8 * 3600000), p = n => String(n).padStart(2, '0');
+    return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}`;
+}
+
+// 该时刻所在「周」的键(周一的 yyyyMMdd，北京时间)——秒杀的期是按周算的，一周内多场只算一期
+function beijingWeekKey(ms) {
+    const d = new Date(ms + 8 * 3600000);
+    d.setUTCDate(d.getUTCDate() - (d.getUTCDay() + 6) % 7);
+    const p = n => String(n).padStart(2, '0');
+    return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}`;
+}
+
+function weekKeyOfYmd(ymd) {
+    if (!/^\d{8}$/.test(String(ymd || ''))) return '';
+    return beijingWeekKey(Date.UTC(Number(ymd.slice(0, 4)), Number(ymd.slice(4, 6)) - 1, Number(ymd.slice(6, 8)), 4, 0, 0));
+}
+
+// 抢中的那一周还没过完 → 本周其余场次都不打
+function skWeekDone(user, ms) {
+    const w = weekKeyOfYmd(user.skWinDay);
+    return !!w && w === beijingWeekKey(ms);
+}
+
 function hmToMinutes(s) {
     const p = String(s).split(':');
     return (Number(p[0]) || 0) * 60 + (Number(p[1]) || 0);
@@ -932,11 +964,14 @@ async function wedReceive(ctx, state) {
     return lines;
 }
 
-// 周三场次秒杀：校时 → 等到 at(北京时间) → 连发 drawPrize 直到命中/无库存/打完预算
+// 周三场次秒杀：当天只打一次 → 校时 → 等到 at(北京时间) → 连发 drawPrize 直到命中/无库存/打完预算
 async function doWedSeckill(user) {
     const lines = [];
     const say = t => { lines.push(t); $.log(t); };
     if (beijingWeekday() !== WED_DAY) { $.log('[周三·秒杀] 今天(北京时间)不是周三，本次跳过'); return lines; }
+    // 本周三已经打过（无论中没中）就不再重复：一周就这一场，再打只会白耗会话与库存
+    if (user.wedSkDay === $.time('yyyyMMdd')) { $.log('[周三·秒杀] 今天已执行过，本次不再打'); return lines; }
+    let fired = 0;
     try {
         const ctx = await exchangeSession(user, WED_ENTRY);
         await wedApi(ctx, 'queryActivityInfo');
@@ -965,7 +1000,7 @@ async function doWedSeckill(user) {
             }
         }
 
-        let code = '', msg = '', fired = 0;
+        let code = '', msg = '';
         for (let i = 1; i <= WSK_MAX_ATTEMPTS; i++) {
             fired = i;
             const t0 = Date.now();
@@ -986,6 +1021,9 @@ async function doWedSeckill(user) {
         say(`[周三·秒杀] ${fired} 发打完未中，最后响应: ${code} ${msg}`);
     } catch (e) {
         say(`[周三·秒杀] 失败: ${e.message || e}`);
+    } finally {
+        // 只要真发出过 drawPrize 就算"本周三打过"，之后当天不再打；换票/校时就挂了的不记，留当天重试的机会
+        if (fired) { user.wedSkDay = $.time('yyyyMMdd'); saveUsers(); }
     }
     return lines;
 }
@@ -1039,10 +1077,16 @@ function markLine(who, ok, days, prize, note) {
     return `${who} ${ok ? '签到成功' : '今日已签'}${days ? `（${days}）` : ''}${prize ? `，获得: ${prize}` : ''}${note ? `，${note}` : ''}`;
 }
 
-// 秒杀抢券: 触发时刻门控 → 校时 → 场次 → 资格(未签补签) → 等到开抢 → 循环 redeem
-async function doSeckill(ctx) {
+// 秒杀抢券: 本周已中/触发时刻门控 → 校时 → 场次 → 本周已中(精判) → 资格(未签补签) → 等到开抢 → 循环 redeem
+async function doSeckill(ctx, user) {
     const lines = [];
     const say = t => { lines.push(t); $.log(t); };
+    // 期按周算：本周已抢中过就整块收工。先用"今天是否属于抢中那一周"便宜地拦掉同期重复运行，零请求；
+    // 跨周边界还要在拿到 secConfig 后按场次开抢时间再判一次（见下）
+    if (skWeekDone(user, Date.now())) {
+        $.log(`[秒杀] 本周已于 ${user.skWinDay.slice(4, 6)}-${user.skWinDay.slice(6, 8)} 抢到${user.skWinPrize ? `「${user.skWinPrize}」` : ''}，本周不再参与`);
+        return lines;
+    }
     // 普通签到运行（凌晨/上午）不该碰秒杀：触发时刻早于 cmcc_sk_min 直接收工，一次请求都不发
     if (!skWindowOpen()) {
         $.log(`[秒杀] 触发时刻未到 ${SK_MIN_OPEN_RAW}，本次不执行（抢券请另开 11 点后的定时）`);
@@ -1062,10 +1106,16 @@ async function doSeckill(ctx) {
     if (!picked.zone) throw new Error('没有可参与的场次（全部已结束）');
     const zone = picked.zone, prizeName = (zone.prize || {}).name || `场次${zone.id}`;
     const startSrv = Number(zone.startTime), endSrv = Number(zone.endTime);
+    const zoneDay = beijingDate(startSrv);
     $.log(`选定场次${zone.id}：${fmtCn(startSrv)} 开抢（${picked.active ? '进行中' : `距开始 ${((startSrv - srvMs) / 1000).toFixed(0)} 秒`}）`);
     // 早场默认不打：开抢时刻早于 cmcc_sk_min（默认 11:00）直接收工
     if (beijingMinuteOfDay(startSrv) < SK_MIN_OPEN) {
         $.log(`[秒杀] 场次${zone.id} ${fmtCn(startSrv)} 开抢，早于下限 ${SK_MIN_OPEN_RAW}，本次不抢`);
+        return lines;
+    }
+    // 精判本周：跨周边界或活动把场次排期挪动时，"今天属于抢中那一周"这条快判可能不准，按场次开抢时间再拦一次
+    if (skWeekDone(user, startSrv)) {
+        $.log(`[秒杀] 场次${zone.id}(${fmtCn(startSrv)}) 所属周已于 ${user.skWinDay.slice(4, 6)}-${user.skWinDay.slice(6, 8)} 抢过，本周不再参与`);
         return lines;
     }
 
@@ -1086,6 +1136,9 @@ async function doSeckill(ctx) {
 
     const fired = await fireRedeem(ctx, zone, endSrv, offsetMs);
     if (fired.reason === 'SUCCESS') {
+        user.skWinDay = zoneDay;
+        user.skWinPrize = prizeName;
+        saveUsers();
         say(`🎉 [秒杀] 抢到 ${prizeName}（场次 ${fmtCn(startSrv)}），请去 App「我的奖品」核销`);
     } else {
         const reason = SK_STOP[fired.reason] || fired.reason;

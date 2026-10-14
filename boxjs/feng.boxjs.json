@@ -484,7 +484,7 @@
       "descs_html": [
         "中国移动「签到领流量/话费」(活动 1021122301) App 端签到，每天一次，支持多账号",
         "抓取：开启「中国移动获取Cookie」→ 打开中国移动 App「我」-「签到」进入活动页；cmcc_data 里的长期 jwt 可自续期，jwt 与 App 票据都失效才需重抓",
-        "开关：连签奖励(默认开) / AI豆任务 / 秒杀抢券(11:00 前触发的运行不执行，定时设在开抢前 1~2 分钟) / 追剧领福利(打卡与任务挣抽奖次数，仅周日开放抽奖) / 周三充值日(每天做任务抽拼图集话费券，只有场次秒杀限周三)",
+        "开关：连签奖励(默认开) / AI豆任务 / 秒杀抢券(11:00 前触发的运行不执行，抢中一次本周收工、下周继续，定时设在开抢前 1~2 分钟) / 追剧领福利(打卡与任务挣抽奖次数，仅周日开放抽奖) / 周三充值日(每天做任务抽拼图集话费券，只有场次秒杀限周三)",
         "周三充值日的任务与拼图每天跟签到一起做；场次秒杀另开 cmcc_wed_sk，按北京时间判定、非周三直接跳过，场次时间 cmcc_wed_sk_at(默认 08:00:00)，定时必须设在开场前 1~2 分钟，否则本次不等待直接跳过。",
         "当天签到完成后再次执行只跑抢券(签到页秒杀、周三场次秒杀)，签到、任务、追剧、拼图都不再跑"
       ],
@@ -538,7 +538,7 @@
           "name": "秒杀抢券",
           "val": false,
           "type": "boolean",
-          "desc": "签到后参与同活动秒杀抢券；触发时刻早于 11:00 的运行整块跳过，不查场次不抢券"
+          "desc": "签到后参与同活动秒杀抢券；触发时刻早于 11:00 的运行整块跳过；场次按周分期，抢中一次本周内不再打，下周自动恢复"
         },
         {
           "id": "cmcc_sk_min",
@@ -569,7 +569,7 @@
           "name": "周三场次秒杀",
           "val": false,
           "type": "boolean",
-          "desc": "等到场次时间连发 drawPrize；只在北京时间周三跑，定时需设在开场前 1~2 分钟"
+          "desc": "等到场次时间连发 drawPrize；只在北京时间周三跑，当天打过一次即收工，定时需设在开场前 1~2 分钟"
         },
         {
           "id": "cmcc_wed_sk_at",
@@ -1359,12 +1359,13 @@
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/quark_sign.js",
       "descs_html": [
         "夸克网盘每日签到领空间容量，连签达目标有额外奖励，支持多账号",
-        "抓取只需一次：开启「夸克网盘获取Cookie」后打开夸克 App 的 我的 - 网盘签到/领空间 页面，脚本会把抓到的 kps_wg 就地解密成 service_ticket/uid/nickname 存进 quark_data，之后每次运行自己现算 vcode 与 sign_wg，不再受抓包签名时效影响",
-        "抓不到包就手填：在 quark_users 粘贴抓包 URL（可带 user=昵称; 前缀）或裸 kps_wg，多个账号以换行或 && 分隔；其中的 + = %xx 原样保留即可，脚本按百分号解码且不会把 + 当空格",
-        "签名链路是从 com.quark.browser 10.18.6.1161 反编译还原、并用 Frida 与 App 原生 AccountManager 逐字节对拍过的：kps_wg = base64(BE16(4) ‖ AES-128-CBC(\"token=st&uid=uid&nickname=昵称\"))，sign_wg 同法加密 vcode 前5位+st+uid+昵称+vcode 末位的大写 MD5，密钥与 IV 同值",
-        "因此通知出现「kps_wg 解密失败」＝夸克改版换了内置密钥，需要重新抓一次包并等脚本更新密钥；提示「只支持线上 keyNo=4」＝那份包来自 DEV 构建或开发者项 clouddrive_env=test，请用正式版夸克重抓；出现「凭证已失效或参数不完整」(HTTP 500 + code 15000) ＝ service_ticket 本身已失效，重新抓包即可",
-        "Android 抓夸克的 HTTPS 需要把抓包 CA 装成系统证书：实体机要 Root，或用模拟器 + Root + ProxyPin",
-        "quark_data / quark_users 里的 service_ticket 等同账号登录凭证，不要提交到仓库或截图外传"
+        "每次运行由脚本自己现算 vcode 与 sign_wg（kps_wg = base64(BE16(4) ‖ AES-128-CBC(\"token=st&uid=uid&nickname=昵称\"))，密钥与 IV 同值），所以凭证可以长期复用，不受抓包签名时效影响",
+        "取凭证只有一个入口 quark_data：用本地取凭证网页（quark-api/，手机验证码登录）点「复制 全部账号（票+UA）」，把 {手机号:{service_ticket,kps_wg,ua}} 整段粘进去（uid 与昵称脚本从 kps_wg 里解，手机号当通知备注）。脚本现算的 kps_wg 只认安卓端形态：iOS 是 keyNo=20040、独立网盘 App 是 20030，与安卓夸克不通用",
+        "换票：填了 quark_api（内网 http://192.168.1.10:8787，公网用 https 隧道地址）后，每次运行先 POST /api/refresh 向服务要一张有效票，票或昵称变了会自动写回 quark_data；服务不通就用本地票继续跑，只有票真作废才报错让你重新登录。账号网关的加密留在服务里，脚本不含网关代码也不抓包",
+        "服务默认已绑 0.0.0.0 并解析 CF-Connecting-IP（cloudflared 回源永远是 127.0.0.1，不认头就把公网当内网），换票 token 首启自动生成写进 data/config.json（gitignore）并打在启动日志里，不用设环境变量；要退回只听本机用 QUARK_WEB_HOST=127.0.0.1，前面没反代用 QUARK_WEB_TRUST_PROXY=0。非内网访客只放行 POST /api/refresh（页面、登录、账号列表、签到仍限本机/内网），脚本填 quark_api=https://你的域名 + 启动日志里那个完整 quark_api_token；没 token 的公网请求一律 403，也可再用 Cloudflare Access 在域名层加一道",
+        "请求 UA 跟着账号走：账号里带 ua 就用它（quark_data 的 JSON 支持 ua 字段，导出那份就自带），没有则用脚本内置的那条（安卓夸克 10.18.6.1161）",
+        "报「票已失效」是服务回 50051 系，需去网页重新登录；报 HTTP 500 + code=15000 是凭证已作废或参数不全；报「只支持线上 keyNo=4」说明那份 kps_wg 来自 DEV 构建或开发者项 clouddrive_env=test",
+        "quark_data 里的 service_ticket 等同账号登录凭证，不要提交到仓库或截图外传"
       ],
       "icons": [
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/quark.png",
@@ -1372,7 +1373,8 @@
       ],
       "keys": [
         "quark_data",
-        "quark_users",
+        "quark_api",
+        "quark_api_token",
         "quark_debug"
       ],
       "settings": [
@@ -1384,17 +1386,23 @@
           "autoGrow": true,
           "rows": 5,
           "placeholder": "",
-          "desc": "由 rewrite 抓取自动写入；形如 [{\"st\":\"service_ticket\",\"uid\":\"100500\",\"nick\":\"昵称\",\"user\":\"备注\"}]，user 可手动补上用于通知显示，抓取更新不会覆盖它"
+          "desc": "账号唯一入口，推荐直接粘取凭证网页「复制 全部账号（票+UA）」的 {\"13800000000\":{\"service_ticket\":\"…\",\"kps_wg\":\"…\",\"ua\":\"…\"}}（手机号即通知里的备注，uid/昵称由脚本从 kps_wg 解出）；旧的数组写法 [{st,uid,nick,ua,user}] 仍能读，但一旦换票回写就统一成按手机号的 map；ua 缺省时用脚本内置的那条，删掉某个键即停用该账号"
         },
         {
-          "id": "quark_users",
-          "name": "夸克账号(手动)",
+          "id": "quark_api",
+          "name": "取凭证服务地址",
           "val": "",
-          "type": "textarea",
-          "autoGrow": true,
-          "rows": 3,
-          "placeholder": "user=昵称; url=https://drive-m.quark.cn/1/clouddrive/…  或直接一行 kps_wg",
-          "desc": "抓不到包时手填：粘贴抓包 URL 或裸 kps_wg（脚本会解密出 st/uid/昵称），多个以换行或 && 分隔（与抓取数据按 uid 去重合并）"
+          "type": "text",
+          "placeholder": "http://192.168.1.10:8787",
+          "desc": "选填。填了则每次运行先向那个 quark-api 服务 POST /api/refresh 换一张有效票，票或昵称变了会写回 quark_data；留空就只用 quark_data 里的票，服务不通也只降级不报错"
+        },
+        {
+          "id": "quark_api_token",
+          "name": "换票服务 token",
+          "val": "",
+          "type": "text",
+          "placeholder": "填服务启动日志里那个完整 token",
+          "desc": "非内网访问服务时必填（值在服务启动日志打印，也存 data/config.json），作为 X-Quark-Token 送出；只在家里局域网用可以留空。公网链路请走 https/隧道，别裸 HTTP 转发"
         },
         {
           "id": "quark_debug",
