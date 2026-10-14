@@ -61,7 +61,7 @@ async function main() {
             $.log(`❌ ${e.message || e}`);
             $.messages.push(`❌ ${e.message || e}`);
         }
-        $.Messages = $.Messages.concat([`🔹 ${APP_NAME} ${acc.user || acc.nick || '未命名'}${acc.vip ? ` [${acc.vip}]` : ''}`, ...$.messages]);
+        $.Messages = $.Messages.concat([`🔹 ${APP_NAME} ${acc.nick || maskMobile(acc.user) || '未命名'}${acc.vip ? ` [${acc.vip}]` : ''}`, ...$.messages]);
         if (i < accounts.length - 1) await $.wait(2000);
     }
     $.log(`\n----- 所有账号执行完成 -----\n`);
@@ -111,6 +111,12 @@ async function runAccount(acc, api, apiToken) {
 }
 
 function push(line) { $.log(line); $.messages.push(line); }
+
+// 通知里只能用手机号兜底时打掩码（138****0000），手写的中文备注原样显示
+function maskMobile(value) {
+    const s = String(value || '');
+    return /^1\d{10}$/.test(s) ? `${s.slice(0, 3)}****${s.slice(-4)}` : s;
+}
 
 // 向本地取凭证服务换票（POST /api/refresh）：账号网关的加密都在服务那边，脚本只发这一个请求
 // 票真作废（50051 系）就直接失败并要求重新登录；服务不通/其它错误就用本地票继续跑
