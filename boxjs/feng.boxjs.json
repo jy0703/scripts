@@ -538,7 +538,7 @@
           "name": "秒杀抢券",
           "val": false,
           "type": "boolean",
-          "desc": "签到后参与同活动秒杀抢券；触发时刻早于 11:00 的运行整块跳过；场次按周分期，抢中一次本周内不再打，下周自动恢复"
+          "desc": "签到后参与同活动秒杀抢券；触发时刻早于 11:00 的运行整块跳过；场次按周分期，抢中一次（或服务端回“已领取/限领一次”）本周内不再打，下周自动恢复"
         },
         {
           "id": "cmcc_sk_min",
@@ -1407,6 +1407,77 @@
           "val": false,
           "type": "boolean",
           "desc": "逐条打印请求/响应与签名原文，排查问题用；日志含 service_ticket 等敏感信息，看完记得关掉"
+        }
+      ]
+    },
+    {
+      "id": "milk_tea_sign",
+      "name": "企迈合集签到",
+      "author": "@Feng",
+      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/milk_tea_sign.js",
+      "descs_html": [
+        "企迈 SaaS 多品牌合集签到，默认内置 林里(212501) 与 茉莉奶白(217777)；两家共用 webapi.qmai.cn，只有 storeId 与 appid 不同，其余接口与签名完全一致",
+        "依赖「Code Server」分组中「获取小程序code」(@wxCode.address/token)，账号 ref 填本区域 MILK_TEA_REF，一个 ref 一个微信身份；该微信需已是对应品牌的会员，未入会的品牌只会报登录失败，脚本不会自动入会",
+        "品牌表 MILK_TEA_BRANDS 用 JSON 追加或覆盖：新品牌必须给 id(企迈 storeId)+appid，改内置品牌只写要改的字段（activityId/ua/name）；配好新品牌先开着「探测模式」手动跑一次看报告；新品牌的 storeId/appid 可用签到模块的「捕获品牌」开关自动收录，不必手填",
+        "token 按「storeId:ref」缓存在 milk_tea_cache，先验活再复用、失效自动重登；签到 activityId 每次从会员中心装修配置的签到入口自动发现，活动换期不用改配置",
+        "实测服务端不校验企迈 v2 的 data 风控字段（它只能由微信 getLatestUserKey 生成），签名脚本本地 md5 自算；脚本登录不会顶掉手机端会话",
+        "通知出现「凭证失效」或「数据不完整」先清空 milk_tea_cache 强制重登；出现「活动不可用」= 签到活动换了"
+      ],
+      "icons": [
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/milk_tea.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/milk_tea.png"
+      ],
+      "keys": [
+        "MILK_TEA_REF",
+        "MILK_TEA_BRANDS",
+        "milk_tea_probe",
+        "milk_tea_cache",
+        "milk_tea_debug"
+      ],
+      "settings": [
+        {
+          "id": "MILK_TEA_REF",
+          "name": "账号 ref",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "",
+          "desc": "code 服务的账号 ID/UIN/openid, 多个以英文逗号隔开, 一个 ref 一个微信身份；对每个品牌都会用同一个 ref 取号登录"
+        },
+        {
+          "id": "MILK_TEA_BRANDS",
+          "name": "自定义品牌表(JSON)",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 3,
+          "placeholder": "[{\"id\":\"49006\",\"name\":\"霸王茶姬\",\"appid\":\"wxafec6f8422cb357b\"}]",
+          "desc": "追加/覆盖品牌。新品牌要给 id(企迈 storeId)与 appid；改内置品牌只写要改的字段，如 {\"id\":\"217777\",\"activityId\":\"1256313914410254337\"}。留空=只用内置的 林里+茉莉奶白；不想手填 storeId 可打开签到模块里的「捕获品牌」开关，逛一次任意企迈小程序就自动追加本项"
+        },
+        {
+          "id": "milk_tea_probe",
+          "name": "探测模式(只读)",
+          "val": false,
+          "type": "boolean",
+          "desc": "打开后不签到，逐品牌报告入会日期/等级/当期活动/阶段门槛/本期签到日。加新品牌先跑一次探测确认能登录、能发现活动，再关掉"
+        },
+        {
+          "id": "milk_tea_cache",
+          "name": "品牌+ref token 缓存",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 4,
+          "placeholder": "",
+          "desc": "脚本自动写入（键为 storeId:ref，含 token/userId/storeId/activityId），下次跑先验活复用；换 code 服务或想强制重登就清空它"
+        },
+        {
+          "id": "milk_tea_debug",
+          "name": "调试模式",
+          "val": false,
+          "type": "boolean",
+          "desc": "逐条打印请求/响应明细，排查问题用；日志可能含 token 等敏感信息，看完记得关掉"
         }
       ]
     }

@@ -3,7 +3,7 @@
  * 活动规则：中国移动「签到领流量/话费」活动(1021122301) 的 App 端 mark31 签到，每天一次；另有 AI豆任务(mark/task) 与秒杀抢券(markSeckill：触发时刻早于 11:00 不执行，开抢早于 11:00 的场次也不抢，某一期抢中后本周内不再打、下周继续)；开关 cmcc_video 后追加「追剧领福利」页(1126082530) 的每日打卡 + 代币任务 + 周日抽奖；开关 cmcc_wed 后追加「周三充值日」(hlwyxhdhub/wedrecharge) 的做任务挣次数 + 抽拼图集话费券（每天做，攒碎片），cmcc_wed_sk 再打场次秒杀(drawPrize，仅北京时间周三开火，当天打过一次即收工)
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。账号参数（App 票据/省市编码等）由本脚本 GetCookie 抓取后存入 cmcc_data
  * 环境变量：cmcc_data / cmcc_claim(默认开，填 false 才关) / cmcc_task / cmcc_seckill / cmcc_sk_min(每日秒杀的北京时间下限，默认 11:00，填 00:00 不受限) / cmcc_video / cmcc_wed / cmcc_wed_sk / cmcc_wed_sk_at / cmcc_task_skip_days；cmcc_task_fail 为脚本自动维护的任务黑名单
- * 更新时间：2026-10-12 新增周三充值日(hlwyxhdhub wedrecharge)：任务代做 + 抽拼图 + 集齐领取 + 场次秒杀，开关 cmcc_wed / cmcc_wed_sk；AI豆任务同步上游：握手会话整轮复用、taskToken 任务直接握手、外部合作区跳过、status=1 遗留补领、公众号类即弃、停留与间隔提速；连签奖励改为只要开了就查一遍代领（不再要求当天由脚本签到），展示改用响应里的 prizeName/prizeValue。2026-10-13 每日秒杀加 11:00 触发门控(cmcc_sk_min)与"按周去重"(skWinDay 记抢中那期的日期，比较时换算成该周周一：本周不再打，下周自动恢复)；邀好友/助力类任务与外部合作区一样常驻跳过；周三场次秒杀加"当天打过即收工"(wedSkDay，发过 drawPrize 才记)
+ * 更新时间：2026-10-12 新增周三充值日(hlwyxhdhub wedrecharge)：任务代做 + 抽拼图 + 集齐领取 + 场次秒杀，开关 cmcc_wed / cmcc_wed_sk；AI豆任务同步上游：握手会话整轮复用、taskToken 任务直接握手、外部合作区跳过、status=1 遗留补领、公众号类即弃、停留与间隔提速；连签奖励改为只要开了就查一遍代领（不再要求当天由脚本签到），展示改用响应里的 prizeName/prizeValue。2026-10-13 每日秒杀加 11:00 触发门控(cmcc_sk_min)与"按周去重"(skWinDay 记抢中那期的日期，比较时换算成该周周一：本周不再打，下周自动恢复)；服务端回"已领取/限领"也按同样口径落盘，覆盖在 App 里领过的情况；邀好友/助力类任务与外部合作区一样常驻跳过；周三场次秒杀加"当天打过即收工"(wedSkDay，发过 drawPrize 才记)
 
 ------------------ Surge 配置 ------------------
 
@@ -102,7 +102,7 @@ const SK_STOP = {
     PRIZE_LIMIT_DAY: '当日中奖次数已用完',
     PRIZE_LIMIT_MONTH: '当月中奖次数已用完',
     PRIZE_RESTRIC_LIMIT: '活动期间中奖次数已达上限',
-    WORK_ORDER_RESTRIC_LIMIT: '工单限流（黑名单/风控）',
+    WORK_ORDER_RESTRIC_LIMIT: '工单受限（实测多因"已领取过，限领一次"）',
 };
 // 与抓包完全一致的 App WebView UA（服务端校验 leadeon 标识）
 const USER_AGENT = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148/wkwebview leadeon/12.5.2/CMCCIT';
@@ -1135,13 +1135,21 @@ async function doSeckill(ctx, user) {
     }
 
     const fired = await fireRedeem(ctx, zone, endSrv, offsetMs);
+    const rmsg = ((fired.resp || {}).msg) || '';
     if (fired.reason === 'SUCCESS') {
         user.skWinDay = zoneDay;
         user.skWinPrize = prizeName;
         saveUsers();
         say(`🎉 [秒杀] 抢到 ${prizeName}（场次 ${fmtCn(startSrv)}），请去 App「我的奖品」核销`);
+    } else if (/已领取|限领/.test(rmsg)) {
+        // 服务端自己说"这份奖你已经领过"（含在 App 里领的），状态名却叫 WORK_ORDER_RESTRIC_LIMIT；
+        // 按同样口径记入本周标记，否则本周每天 12:00 都会再白打一场
+        user.skWinDay = zoneDay;
+        user.skWinPrize = prizeName;
+        saveUsers();
+        say(`[秒杀] ${rmsg}｜${prizeName}，已记入本周抢中，本周不再参与`);
     } else {
-        const reason = SK_STOP[fired.reason] || fired.reason;
+        const reason = rmsg || SK_STOP[fired.reason] || fired.reason;
         say(`[秒杀] 未抢到: ${reason}｜${prizeName} 场次 ${fmtCn(startSrv)}`);
     }
     return lines;

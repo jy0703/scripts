@@ -1,0 +1,10 @@
+#!name=企迈合集签到
+#!desc=企迈系列多品牌合集签到，默认内置林里与茉莉奶白、可用 MILK_TEA_BRANDS 追加任意企迈小程序，账号通过 Code Server 服务获取，支持多账号（token 失效自动重新登录）
+
+[Script]
+奶茶品牌收录 = type=http-response,pattern=^https?:\/\/webapi\.qmai\.cn\/web\/account-center\/oauth\/mini-app-login,requires-body=1,max-size=0,timeout=60,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/milk_tea_sign.js,script-update-interval=0
+
+企迈合集签到 = type=cron,cronexp="0 1 * * *",wake-system=1,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/milk_tea_sign.js,script-update-interval=0
+
+[MITM]
+hostname = %APPEND% webapi.qmai.cn
