@@ -84,8 +84,9 @@
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js",
       "descs_html": [
         "WPS 任务中心(签到/任务/抽奖)、天天领福利、挑战计划、超级会员小程序，支持多账号",
-        "抓取：开启插件捕获开关后从 WPS 会员中心横幅进入签到活动页，Cookie 含 uid 即可入库",
-        "小程序浏览任务依赖「获取小程序code」(@wxCode.address/token)，账号 ref 填本区域 WPS_REF，也可在 WPS_COOKIE 账号项里单独指定"
+        "抓取：开启插件捕获开关后从 WPS 会员中心横幅进入签到活动页，Cookie 不含 uid 也会由 islogin 自动补，只要能带上 wps_sid",
+        "小程序浏览任务依赖「获取小程序code」(@wxCode.address/token)，账号 ref 填本区域 WPS_REF，也可在 WPS_COOKIE 账号项里单独指定",
+        "日常要跳过某项任务，把本区域对应的「关闭…」开关置 true(未设置=照常执行)；抓错 Cookie 可用「清空已抓 Cookie」一次性清除"
       ],
       "icons": [
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/wps.png",
@@ -94,7 +95,15 @@
       "keys": [
         "WPS_REF",
         "WPS_COOKIE",
-        "wps_debug"
+        "wps_debug",
+        "wps_off_hot",
+        "wps_off_trial",
+        "wps_off_center",
+        "wps_off_lottery3",
+        "wps_off_fragment",
+        "wps_off_challenge",
+        "wps_off_applet",
+        "wps_clear"
       ],
       "settings": [
         {
@@ -115,7 +124,7 @@
           "autoGrow": true,
           "rows": 5,
           "placeholder": "",
-          "desc": ""
+          "desc": "抓包自动写入，勿手填；结构 [{uid,cookie}]，uid 缺省时由 islogin 补齐后落盘"
         },
         {
           "id": "wps_debug",
@@ -123,6 +132,62 @@
           "val": false,
           "type": "boolean",
           "desc": "逐条打印请求/响应明细，排查问题用；日志可能含 Cookie、token 等敏感信息，看完记得关掉"
+        },
+        {
+          "id": "wps_off_hot",
+          "name": "关闭限量爆款",
+          "val": false,
+          "type": "boolean",
+          "desc": "跳过每天10点的限量爆款任选(默认执行)"
+        },
+        {
+          "id": "wps_off_trial",
+          "name": "关闭会员试用",
+          "val": false,
+          "type": "boolean",
+          "desc": "跳过天天领福利的会员免费试用申领(默认执行)"
+        },
+        {
+          "id": "wps_off_center",
+          "name": "关闭任务中心",
+          "val": false,
+          "type": "boolean",
+          "desc": "跳过签到/任务/抽奖整块(默认执行)"
+        },
+        {
+          "id": "wps_off_lottery3",
+          "name": "关闭天天领福利",
+          "val": false,
+          "type": "boolean",
+          "desc": "跳过福利中心打卡与抽奖(默认执行)"
+        },
+        {
+          "id": "wps_off_fragment",
+          "name": "关闭办公助手",
+          "val": false,
+          "type": "boolean",
+          "desc": "办公助手活动已于 2026.03.16 结束，脚本内默认关闭，此项无需改动"
+        },
+        {
+          "id": "wps_off_challenge",
+          "name": "关闭挑战计划",
+          "val": false,
+          "type": "boolean",
+          "desc": "跳过 WPS 挑战计划任务(默认执行)"
+        },
+        {
+          "id": "wps_off_applet",
+          "name": "关闭超级会员小程序",
+          "val": false,
+          "type": "boolean",
+          "desc": "跳过小程序签到/浏览任务/抽奖(默认执行)"
+        },
+        {
+          "id": "wps_clear",
+          "name": "清空已抓 Cookie",
+          "val": false,
+          "type": "boolean",
+          "desc": "置 true 后运行一次即清空 WPS_COOKIE 并自动复位为 false；仅 NE 生效，Node 环境请改环境变量"
         }
       ]
     },
@@ -483,7 +548,7 @@
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js",
       "descs_html": [
         "中国移动「签到领流量/话费」(活动 1021122301) App 端签到，每天一次，支持多账号",
-        "抓取：开启「中国移动获取Cookie」→ 打开中国移动 App「我」-「签到」进入活动页；cmcc_data 里的长期 jwt 可自续期，jwt 与 App 票据都失效才需重抓",
+        "抓取：开启「中国移动获取Cookie」→ 打开中国移动 App「我」-「签到」进入活动页；开了豆苗的再进一次「AI豆苗养成记」页，phone 头自动入库；cmcc_data 里的长期 jwt 可自续期，jwt 与 App 票据都失效才需重抓",
         "开关：连签奖励(默认开) / AI豆任务 / 秒杀抢券(11:00 前触发的运行不执行，抢中一次本周收工、下周继续，定时设在开抢前 1~2 分钟) / 追剧领福利(打卡与任务挣抽奖次数，仅周日开放抽奖) / 周三充值日(每天做任务抽拼图集话费券，只有场次秒杀限周三)",
         "周三充值日的任务与拼图每天跟签到一起做；场次秒杀另开 cmcc_wed_sk，按北京时间判定、非周三直接跳过，场次时间 cmcc_wed_sk_at(默认 08:00:00)，定时必须设在开场前 1~2 分钟，否则本次不等待直接跳过。",
         "当天签到完成后再次执行只跑抢券(签到页秒杀、周三场次秒杀)，签到、任务、追剧、拼图都不再跑"
@@ -499,6 +564,9 @@
         "cmcc_seckill",
         "cmcc_sk_min",
         "cmcc_video",
+        "cmcc_seed",
+        "cmcc_coc3_phone",
+        "cmcc_seed_channel",
         "cmcc_wed",
         "cmcc_wed_sk",
         "cmcc_wed_sk_at",
@@ -558,6 +626,33 @@
           "desc": "追剧页每日打卡 + 代币任务挣抽奖次数；抽奖仅周日开放，其余日子只攒不抽"
         },
         {
+          "id": "cmcc_seed",
+          "name": "AI豆苗养成记",
+          "val": false,
+          "type": "boolean",
+          "desc": "移动爱购 AI豆苗：每日签到 + 浏览/分享任务 + 领取阳光值；需另配下面的 phone 凭证，未配置则整块跳过并提示"
+        },
+        {
+          "id": "cmcc_coc3_phone",
+          "name": "豆苗 phone 凭证",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "抓 dev.coc.10086.cn 任一请求头 phone 的值",
+          "desc": "dev.coc.10086.cn 请求头 phone，长期有效。开着「中国移动获取Cookie」进一次豆苗活动页会自动写入该账号的 coc3Phone（多账号先留空等它填位），也可手工粘贴"
+        },
+        {
+          "id": "cmcc_seed_channel",
+          "name": "豆苗渠道号",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "P00000011939",
+          "desc": "留空用 P00000011939；仅当服务端按渠道校验且你的入口不同才需要改"
+        },
+        {
           "id": "cmcc_wed",
           "name": "周三充值日拼图",
           "val": false,
@@ -579,7 +674,7 @@
           "autoGrow": true,
           "rows": 1,
           "placeholder": "08:00:00",
-          "desc": "北京时间 HH:MM:SS，留空用 08:00:00"
+          "desc": "北京时间 HH:MM:SS 强制指定场次；留空则读服务端下发的 seckillTime 自动选最近一场（未下发按 08:00）"
         },
         {
           "id": "cmcc_task_skip_days",

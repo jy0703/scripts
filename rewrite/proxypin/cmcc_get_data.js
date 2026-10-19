@@ -37,6 +37,7 @@
  *
  * 其他说明：
  *   - 「环境」功能关闭时读不到 bark_url / bark_key，此时既无法落库也无法推送（只能靠脚本日志）；
+ *   - 豆苗 phone：另建一条生效地址指向 dev.coc.10086.cn（或与签到那条同批 * 匹配），进 App 的「AI豆苗养成记」活动页即自动写入该账号的 coc3Phone；
  *   - jwt 取请求体里 App 自己的缓存值，与 cmcc_sign 的 GetCookie 行为一致，后续由 cmcc_sign 续期回写；
  *   - token 是 App 票据（会过期），jwt 有效时 cmcc_sign 用不到它，仅作兜底。
  */
@@ -52,6 +53,8 @@ var onRequest, onResponse;
 
     onRequest = async function (context, request) {
         var where = String((request && (request.path || request.url)) || '');
+        // 豆苗域（dev.coc.10086.cn）另走一条线：只取请求头 phone，入库成该账号的 coc3Phone
+        if (isCocHost(request)) return grabPhone(context, request);
         if (where.indexOf(API) === -1) return request;    // 生效地址填宽了也不刷屏
         console.log('[cmcc] 命中 ' + String(request.method) + ' ' + where
             + ' | body ' + String(request.body === undefined ? '(未取到)' : request.body).length + ' 字节'
@@ -86,6 +89,33 @@ var onRequest, onResponse;
         }
         return response;
     };
+
+    // 判断是否豆苗域：ProxyPin 的 request.path 不含主机名，所以看 host 头（有 url 时兜底再看一次）
+    function isCocHost(request) {
+        var h = header((request && request.headers) || {}, 'host');
+        var u = String((request && request.url) || '');
+        return /coc\.10086\.cn/i.test(h) || /:\/\/([a-z0-9-]+\.)*coc\.10086\.cn/i.test(u);
+    }
+
+    // 豆苗 phone 抓取：该域请求没有 userCheckId 这类账号标识，只能按"填空位"归号
+    function grabPhone(context, request) {
+        var phone = header((request && request.headers) || {}, 'phone');
+        if (!phone) return request;                    // 静态资源/预检也走这条线，没有 phone 头就安静放行
+        var env = context.env;
+        if (!env) { console.log('[cmcc] 豆苗 phone 已抓到（' + String(phone).length + ' 字符），但 context.env 不可用，未入库'); return request; }
+        var list = readList(env[ENV_KEY]);
+        if (!list.length) { console.log('[cmcc] 豆苗 phone 未入库：' + ENV_KEY + ' 里还没有账号，请先抓一次签到凭证'); return request; }
+        var idx = list.length === 1 ? 0 : -1;
+        if (idx === -1) { for (var i = 0; i < list.length; i++) { if (!list[i].coc3Phone) { idx = i; break; } } }
+        if (idx === -1) { console.log('[cmcc] 豆苗 phone 未入库：所有账号都已有 phone，要更新请先清空对应条目'); return request; }
+        list[idx].coc3Phone = phone;
+        var text = JSON.stringify(list);
+        env[ENV_KEY] = text;
+        console.log('[cmcc] 豆苗 phone 已写入 ' + (list[idx].userName || ('账号' + (idx + 1))) + '，长度 ' + String(phone).length + '，共 ' + list.length + ' 个账号');
+        console.log('[cmcc] ' + ENV_KEY + ' = ' + text);
+        try { pushBark(context, { all: text, one: JSON.stringify([list[idx]]), count: list.length, name: list[idx].userName }); } catch (e) { console.log('[cmcc] Bark 推送失败: ' + e); }
+        return request;
+    }
 
     // 从登录请求体里取凭证，按 userCheckId 合并进 context.env.cmcc_data
     function grab(context, request) {
@@ -129,6 +159,8 @@ var onRequest, onResponse;
             skWinDay: old.skWinDay || '',
             skWinPrize: old.skWinPrize || '',
             wedSkDay: old.wedSkDay || '',
+            // 豆苗 phone 是手工填写的长期凭证，重抓包别冲掉
+            coc3Phone: old.coc3Phone || '',
         };
 
         var idx = indexOfUser(list, body.userCheckId);

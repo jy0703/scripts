@@ -1,12 +1,12 @@
 /**
  * 脚本名称：WPS签到
- * 活动规则：WPS任务中心(签到+任务+抽奖)、天天领福利、WPS挑战计划、WPS超级会员小程序(签到+浏览任务+抽奖)
+ * 活动规则：WPS任务中心(签到+任务+抽奖)、天天领福利(打卡+抽奖+限量爆款+会员试用)、WPS挑战计划、WPS超级会员小程序(签到+浏览任务+抽奖)
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。对齐 wps.py v4.0.0。
- * 环境变量：WPS_COOKIE（自动抓取，JSON数组 [{uid,cookie}]，条目可加 ref 字段用于小程序浏览任务）、wps_debug
+ * 环境变量：WPS_COOKIE（自动抓取，JSON数组 [{uid,cookie}]，条目可加 ref 字段用于小程序浏览任务）、wps_debug、wps_clear、wps_off_hot/trial/center/lottery3/fragment/challenge/applet
  * 小程序浏览任务：依赖 YYB code 服务，boxjs 配置 @wxCode.address / @wxCode.token，账号 ref 填在本脚本区域 WPS_REF
  *          （Node 环境变量 WX_CODE_ADDRESS / WX_CODE_TOKEN / WPS_REF 亦可，多个 ref 逗号分隔按账号顺序对应）
- * 获取 Cookie：在 WPS 内从会员中心横幅进入签到活动页（触发 rubik2/portal 页面请求）即可抓取，Cookie 含 uid 即可入库
- * 更新时间：2026-10-04 天天领福利切福利中心新期(YM2025060910400185)，打卡复用序列/抽奖动态场次，sign_date 改北京日期；签到加密本地化；小程序动态签名+动态盐+领昨日奖励
+ * 获取 Cookie：在 WPS 内从会员中心横幅进入签到活动页（触发 rubik2/portal 页面请求）即可抓取。入库主键是 uid：Cookie 里带 uid 直接取，只有 wps_sid 时由 islogin 现补(会多挂几十~几百毫秒)，两者都拿不到才拒绝入库
+ * 更新时间：2026-10-19 新增限量爆款(每天10点放量，只挑有货档位抢)与会员试用(divide_prize 三档全领，次日开奖)；另加 day_info 签到预检、islogin 登录态校验(区分网络抖动与真失效)、classify 文案归类、任务间 5~10s 随机间隔、BoxJS 逐任务关闭开关，通知行统一为 标记+任务名+状态 且前置失败走 subtitle、多账号加账号分段行；2026-10-04 天天领福利切福利中心新期(YM2025060910400185)，打卡复用序列/抽奖动态场次，sign_date 改北京日期；签到加密本地化；小程序动态签名+动态盐+领昨日奖励
 
 ------------------ Surge 配置 ------------------
 
@@ -16,7 +16,7 @@ hostname = personal-act.wps.cn
 [Script]
 WPS签到获取Cookie = type=http-request,pattern=^https?:\/\/personal-act\.wps\.cn\/rubik2\/portal\/,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js,script-update-interval=0
 
-WPS签到 = type=cron,cronexp="0 8 * * *",timeout=60,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js,script-update-interval=0
+WPS签到 = type=cron,cronexp="0 10 * * *",timeout=120,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js,script-update-interval=0
 
 ------------------- Loon 配置 -------------------
 
@@ -26,7 +26,7 @@ hostname = personal-act.wps.cn
 [Script]
 http-request ^https?:\/\/personal-act\.wps\.cn\/rubik2\/portal\/ tag=WPS签到获取Cookie,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js,requires-body=1
 
-cron "0 8 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js,tag=WPS签到,enable=true
+cron "0 10 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js, timeout=120, tag=WPS签到,enable=true
 
 --------------- Quantumult X 配置 ---------------
 
@@ -37,15 +37,15 @@ hostname = personal-act.wps.cn
 ^https?:\/\/personal-act\.wps\.cn\/rubik2\/portal\/ url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js
 
 [task_local]
-0 8 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js, tag=WPS签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/wps.png, enabled=true
+0 10 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js, tag=WPS签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/wps.png, enabled=true
 
 ------------------ Stash 配置 ------------------
 
 cron:
   script:
     - name: WPS签到
-      cron: '0 8 * * *'
-      timeout: 10
+      cron: '0 10 * * *'
+      timeout: 120
 
 http:
   mitm:
@@ -70,9 +70,12 @@ $.is_debug = getEnv('wps_debug', 'is_debug') || 'false';  // 调试模式
 $.userInfo = getEnv('WPS_COOKIE') || '';  // 获取账号
 $.userArr = $.toObj($.userInfo) || [];  // 用户信息
 $.Messages = [];
+$.alerts = [];  // 前置失败摘要,只用于通知 subtitle
 
 // 功能开关（对齐 py global_config，办公助手活动 2026.03.16 结束默认关闭）
 const GLOBAL_CONFIG = {
+    hot: true,
+    trial: true,
     task_center: true,
     lottery3: true,
     fragment_collect: false,
@@ -98,6 +101,8 @@ const FLZX_PAGE = 'YM2025060910400185';
 const FLZX_FILTER_RAW = '%7B%22cs_from%22:%22xinchao_activity_lottery%22,%22position%22:%22ios_flzx_grzxsdjg3001%22%7D';
 const FLZX_FRAG_COMP = { number: 'ZJ2025061815352884', node: 'FN1769668388sb3w' };
 const FLZX_LOTTERY_COMP = { number: 'ZJ2025092916519174', node: 'FN1779447163CApn', session: 3002 };
+const FLZX_HOT_COMP = { number: 'ZJ2025041115200788', node: 'FN1744358694RbIn', type: 31 };
+const FLZX_TRIAL_COMP = { number: 'ZJ2025041115207603', node: 'FN1744359116PWbV', type: 32 };
 const APPLET_LOTTERY_ACTIVITY = 'HD2024082815116866';
 const APPLET_LOTTERY_PAGE = 'YM2024082815122017';
 const APPLET_LOTTERY_COMPONENT_DEFAULT = 'ZJ2025092916516585';
@@ -107,11 +112,15 @@ const MINI_UA = 'Mozilla/5.0 (Linux; Android 14; 23117RK66C Build/UKQ1.230804.00
 const WIN_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36 Edg/134.0.0.0';
 const SKIP_KEYWORDS = ['邀请', 'PDF转换', 'PDF合并', '语音速记', '关注', '消费', '开通会员', '认证', '上喜马拉雅', '微博', '苏宁易购', '添加'];
 
+const ACTION_GAP = [5, 10];  // 任务之间的随机间隔(秒)，模拟真人操作避风控
+
 
 // 主函数
 async function main() {
     if ($.userArr.length) {
         $.log(`\n🌀 找到 ${$.userArr.length} 个 Cookie 变量`);
+        // 打印各 BoxJS 开关实际读到的值(undefined=未设置，按 GLOBAL_CONFIG 走)
+        $.log(`任务开关: ${['wps_off_hot', 'wps_off_trial', 'wps_off_center', 'wps_off_lottery3', 'wps_off_fragment', 'wps_off_challenge', 'wps_off_applet'].map(k => `${k.slice(8)}=${JSON.stringify(getEnv(k))}`).join(' ')}`);
 
         // 遍历账号
         for (let i = 0; i < $.userArr.length; i++) {
@@ -126,16 +135,56 @@ async function main() {
             // 小程序任务 ref：账号条目自带 > WPS_REF 按序对应 > 单 ref 全局共用
             $.ref = $.userArr[i].ref || $.refList[i] || ($.refList.length === 1 ? $.refList[0] : '');
 
+            // Cookie 里没有 uid(只抓到登录态)时用 islogin 补，同时兼作登录态校验
             if (!$.uid) {
-                $.log(`❌ Cookie 格式不正确，缺少必要参数\n`);
+                const login = await checkLogin();
+                if (login.invalid) {
+                    report('账号状态', `${String(login.msg || 'islogin 非 ok').slice(0, 40)}，需重新抓取`, '🚫');
+                    $.alerts.push('🚫 登录态失效');
+                    $.Messages = $.Messages.concat($.messages);
+                    continue;
+                }
+                if (login.netErr) {
+                    report('账号状态', 'islogin 超时(非 Cookie 失效)，本轮跳过', '⚠️');
+                    $.alerts.push('⚠️ 网络异常');
+                    $.Messages = $.Messages.concat($.messages);
+                    continue;
+                }
+                $.uid = login.uid;
+                // 补到的 uid 落盘，这个账号下次就不用再打一次 islogin
+                $.userArr[i].uid = $.uid;
+                $.setdata($.toStr($.userArr), 'WPS_COOKIE');
+            }
+
+            if (!$.uid) {
+                $.log(taskMsg('❌', '账号状态', 'Cookie 格式不正确，缺少必要参数'));
                 continue;
             }
 
-            if (GLOBAL_CONFIG.task_center) {
+            // 多账号通知要靠这行分段，否则几段任务结果会连成一片
+            $.beforeMsgs = taskMsg('👤', '账号', $.uid);
+
+            // 限量爆款：每天 10 点放号、库存少，排最前先抢
+            if (GLOBAL_CONFIG.hot && !isOn('wps_off_hot')) {
+                $.log(`# 开始执行 限量爆款 任务`);
+                await doHotSelectTask();
+                $.log(`# 执行完成 限量爆款 任务`);
+                await $.wait(jitter(ACTION_GAP));
+            }
+
+            // 会员试用：三档奖品都有库存就全领，次日开奖
+            if (GLOBAL_CONFIG.trial && !isOn('wps_off_trial')) {
+                $.log(`# 开始执行 会员试用 任务`);
+                await doTrialTask();
+                $.log(`# 执行完成 会员试用 任务`);
+                await $.wait(jitter(ACTION_GAP));
+            }
+
+            if (GLOBAL_CONFIG.task_center && !isOn('wps_off_center')) {
                 $.log(`# 开始执行 WPS任务中心 任务`);
                 // WPS任务中心：签到 → 两轮任务 → 抽奖
                 await doSign();
-                await $.wait(1000);
+                await $.wait(jitter(ACTION_GAP));
                 await doAllTasks();
                 await $.wait(1500);
                 await doAllTasks();
@@ -148,30 +197,35 @@ async function main() {
             }
 
             // 天天领福利
-            if (GLOBAL_CONFIG.lottery3) {
+            if (GLOBAL_CONFIG.lottery3 && !isOn('wps_off_lottery3')) {
                 $.log(`# 开始执行 天天领福利 任务`);
                 await doLottery3Tasks();
                 $.log(`# 执行完成 天天领福利 任务`);
+                await $.wait(jitter(ACTION_GAP));
             }
 
             // 办公助手（活动 2026.03.16 结束，默认关闭）
-            if (GLOBAL_CONFIG.fragment_collect) {
+            if (GLOBAL_CONFIG.fragment_collect && !isOn('wps_off_fragment')) {
                 $.log(`# 开始执行 WPS办公助手 任务`);
                 await doFragmentCollectTasks();
                 $.log(`# 执行完成 WPS办公助手 任务`);
+                await $.wait(jitter(ACTION_GAP));
             }
 
             // WPS挑战计划
-            if (GLOBAL_CONFIG.challenge) {
+            if (GLOBAL_CONFIG.challenge && !isOn('wps_off_challenge')) {
                 $.log(`# 开始执行 WPS挑战计划 任务`);
                 await doChallengeTasks();
                 $.log(`# 执行完成 WPS挑战计划 任务`);
+                await $.wait(jitter(ACTION_GAP));
             }
 
             // WPS超级会员小程序（签到 + 浏览任务 + 抽奖）
-            $.log(`# 开始执行 wps超级会员小程序 任务`);
-            await doSvipApplet();
-            $.log(`# 执行完成 wps超级会员小程序 任务`);
+            if (!isOn('wps_off_applet')) {
+                $.log(`# 开始执行 wps超级会员小程序 任务`);
+                await doSvipApplet();
+                $.log(`# 执行完成 wps超级会员小程序 任务`);
+            }
 
             // 合并通知
             $.messages.splice(0, 0, $.beforeMsgs), $.Messages = $.Messages.concat($.messages);
@@ -232,6 +286,12 @@ async function getPublicKey() {
 // 签到
 async function doSign() {
     try {
+        // 先查 day_info，已签就不必再走公钥/RSA/提交
+        if (await isSignedToday()) {
+            report('每日签到', '今日已签到');
+            return;
+        }
+
         // 首先获取签到所需的加密公钥
         const publicKey = await getPublicKey();
         if (!publicKey) {
@@ -265,16 +325,14 @@ async function doSign() {
 
         if (response && response.code === 1000000) {
             const rewards = response.data.rewards[0];
-            $.log(`✅ 签到成功: ${rewards.reward_name}\n`);
-            $.messages.push(`签到成功: ${rewards.reward_name}`);
-        } else if (response && response.msg && response.msg.includes('has sign')) {
-            $.log(`✅ 今日已签到\n`);
-            $.messages.push(`今日已签到`);
+            report('每日签到', `成功(${rewards.reward_name})`);
         } else {
-            $.log(`❌ 签到失败: ${response ? JSON.stringify(response) : '网络错误'}\n`);
+            const raw = (response && (response.ext_msg || response.msg)) || (response ? '' : '网络错误');
+            const st = classify(raw, '今日已签到');
+            report('每日签到', st.t + (st.e === '✅' ? '' : ` (${raw || $.toStr(response)})`), st.e);
         }
     } catch (e) {
-        $.log(`❌ 签到异常: ${e.message}\n`);
+        $.log(taskMsg('❌', '每日签到', `异常 ${e.message}`));
     }
 }
 
@@ -687,8 +745,7 @@ async function doLottery(times) {
 
             if (response && response.result === 'ok') {
                 const rewardName = response.data.lottery_v2.reward_name;
-                $.log(`✅ 第${i+1}次抽奖成功: ${rewardName}\n`);
-                $.messages.push(`第${i+1}次抽奖: ${rewardName}`);
+                report('任务中心抽奖', `第${i + 1}次 ${rewardName}`);
             } else {
                 $.log(`❌ 第${i+1}次抽奖失败: ${response ? JSON.stringify(response) : '网络错误'}\n`);
             }
@@ -795,15 +852,14 @@ async function doSvipApplet() {
         let signSuccess = false;
         if (response && response.result === 'ok') {
             const days = (response.data && response.data.continuous_days) || '?';
-            $.log(`✅ 小程序签到成功，已签到${days}天\n`);
-            $.messages.push(`小程序签到成功，已签到${days}天`);
-            signSuccess = true;
-        } else if (response && response.msg && response.msg.includes('already clocked in today')) {
-            $.log(`✅ 小程序今日已签到\n`);
-            $.messages.push('小程序今日已签到');
+            report('小程序签到', `成功，已签到${days}天`);
             signSuccess = true;
         } else {
-            $.log(`❌ 小程序签到失败: ${response ? JSON.stringify(response) : '网络错误'}\n`);
+            const raw = (response && response.msg) || (response ? '' : '网络错误');
+            const st = classify(raw, '今日已签到');
+            report('小程序签到', st.t + (st.e === '✅' ? '' : ` (${raw || $.toStr(response)})`), st.e);
+            // 已签到同样算成功，后面才能接着做浏览任务
+            signSuccess = st.e === '✅';
         }
 
         // 领昨日打卡奖励(奖励次日开放、隔天作废)，不论今日签到成败都尝试
@@ -866,8 +922,7 @@ async function claimClockInRewards(infData, sKey, ss) {
                 body: JSON.stringify(signObj)
             });
             if (response && response.result === 'ok' && response.data && response.data.reward_status === true) {
-                $.log(`✅ 领取昨日奖励成功: ${name}\n`);
-                $.messages.push(`领取昨日奖励: ${name}`);
+                report('昨日奖励', name);
             } else {
                 $.log(`⚠️ 领取昨日奖励未成功: ${name}(${response ? response.msg : '网络错误'})，可去小程序手动领\n`);
             }
@@ -1057,9 +1112,8 @@ async function getAppletPageInfo() {
             let lotteryTimes = 0;
             for (const item of response.data || []) {
                 if (item.type === 45 && item.lottery_v2) {
-                    const uniq = item.component_uniq_number || {};
-                    componentNumber = uniq.component_number || componentNumber;
-                    componentNodeId = uniq.component_node_id || componentNodeId;
+                    componentNumber = item.number || componentNumber;
+                    componentNodeId = item.component_node_id || componentNodeId;
                     for (const session of item.lottery_v2.lottery_list || []) {
                         if (session.times) {
                             lotteryTimes = Math.max(lotteryTimes, session.times || 0);
@@ -1146,8 +1200,7 @@ async function appletLottery(componentNumber, componentNodeId, sessionId) {
             const lotteryV2 = response.lottery_v2 || (response.data && response.data.lottery_v2) || {};
             if (lotteryV2 && lotteryV2.success) {
                 const rewardName = lotteryV2.reward_name || '未知奖品';
-                $.log(`✅ 小程序抽奖成功: ${rewardName}\n`);
-                $.messages.push(`小程序抽奖: ${rewardName}`);
+                report('小程序抽奖', rewardName);
                 return true;
             } else if (lotteryV2) {
                 $.log(`⚠️ 小程序抽奖失败: error_code=${lotteryV2.error_code !== undefined ? lotteryV2.error_code : -1}, msg=${lotteryV2.send_msg || ''}\n`);
@@ -1173,15 +1226,14 @@ async function executeAppletBrowse() {
             $.log(`正在执行浏览任务 [${title}]\n`);
             if (await browseSingleTask(task)) {
                 okCount++;
-                $.messages.push(`浏览任务[${title}] 完成`);
+                report('小程序浏览', `${title} 完成`);
             } else {
                 failCount++;
-                $.messages.push(`浏览任务[${title}] 失败`);
+                report('小程序浏览', `${title} 失败`, '❌');
             }
             await $.wait(1000);
         }
-        $.log(`✅ 小程序浏览任务完成：成功${okCount}个，失败${failCount}个\n`);
-        $.messages.push(`小程序浏览任务：成功${okCount}个，失败${failCount}个`);
+        report('小程序浏览', `成功${okCount} 失败${failCount}`, failCount ? '⚠️' : '✅');
         await $.wait(1000);
     } else {
         $.log(`ℹ️ 无待执行的浏览任务\n`);
@@ -1292,13 +1344,12 @@ async function challengeComponentAction(title, taskId, componentAction, actionNa
         if (response && response.result === 'ok') {
             const taskCenter = response.data && response.data.task_center;
             if (taskCenter && taskCenter.success) {
-                $.log(`✅ ${actionName}任务 [${title}] 成功\n`);
-                if (actionName === '领取') $.messages.push(`挑战计划领取 [${title}] 奖励成功`);
+                $.log(taskMsg('✅', '挑战计划', `${actionName}任务 ${title} 成功`));
+                if (actionName === '领取') report('挑战计划', `${title} 奖励领取成功`);
                 return taskCenter.token || true;
             }
             const reason = (taskCenter && taskCenter.reason) || JSON.stringify(response);
-            $.log(`❌ ${actionName}任务 [${title}] 失败：${reason}\n`);
-            $.messages.push(`挑战计划${actionName}任务 [${title}] 失败`);
+            report('挑战计划', `${actionName}任务 ${title} 失败 ${String(reason).slice(0, 30)}`, '❌');
             return false;
         }
         $.log(`❌ ${actionName}任务 [${title}] 失败：${response ? JSON.stringify(response) : '网络错误'}\n`);
@@ -1532,8 +1583,7 @@ async function doFragmentCollectLottery(times) {
 
             if (response && response.result === 'ok') {
                 const rewardName = response.data.lottery.name;
-                $.log(`✅ 办公助手第${i+1}次抽奖成功: ${rewardName}\n`);
-                $.messages.push(`办公助手第${i+1}次抽奖: ${rewardName}`);
+                report('办公助手抽奖', `第${i + 1}次 ${rewardName}`);
             } else {
                 $.log(`❌ 办公助手第${i+1}次抽奖失败: ${response ? JSON.stringify(response) : '网络错误'}\n`);
             }
@@ -1590,6 +1640,155 @@ async function getFlzxPageInfo() {
     }
 }
 
+// 限量爆款「每天10点可领·任选1个」(privilege_select)：超级会员 ≫ 积分，逐档抢，抢到一档即止
+// page_info 的组件项用顶层 number / component_node_id / type（没有 component_uniq_number 字段）
+async function doHotSelectTask() {
+    try {
+        const list = await getFlzxPageInfo();
+        if (!list) {
+            report('限量爆款', 'page_info 无响应', '❌');
+            return;
+        }
+
+        const item = list.find(it => it && it.privilege_select) ||
+            list.find(it => it && it.number === FLZX_HOT_COMP.number);
+        const ps = (item && item.privilege_select) || {};
+        const details = ps.privilege_select_details || [];
+        if (!details.length) {
+            report('限量爆款', '未找到爆款组件(活动可能已换期，需重抓 page_info)', '⚠️');
+            return;
+        }
+
+        // 每天只有 1 次机会，用掉了就直接收
+        if (ps.select_reach_limit) {
+            report('限量爆款', '今日已领取');
+            return;
+        }
+
+        // has_stock=false 表示该档已抢光(未到 daily_stock_refresh_hour 10 点或已被抢完)，
+        // 打过去只会回"哎呀，来晚了"，所以只挑有货的档；字段整体缺失时才退回全部档位
+        const inStock = details.filter(d => d.has_stock === true);
+        const pool = details.some(d => d.has_stock !== undefined) ? inStock : details;
+        if (!pool.length) {
+            report('限量爆款', `今日暂无库存(${details.map(d => d.daily_stock_refresh_hour + '点放量').join('/')})`, '⚠️');
+            return;
+        }
+
+        // 会员优先，其次按 hours/积分多的优先
+        const score = d => (/会员/.test(d.title || '') ? 10000 : 0) + (d.hours || 0) * 100 + (d.nums || 0);
+        const ranked = pool.slice().sort((a, b) => score(b) - score(a));
+        let lastReason = '';
+
+        for (const d of ranked) {
+            const response = await Request({
+                url: 'https://personal-act.wps.cn/activity-rubik/activity/component_action',
+                headers: flzxHeaders(),
+                body: {
+                    component_uniq_number: {
+                        activity_number: FLZX_ACTIVITY,
+                        page_number: FLZX_PAGE,
+                        component_number: item.number || FLZX_HOT_COMP.number,
+                        component_node_id: item.component_node_id || FLZX_HOT_COMP.node,
+                    },
+                    component_type: item.type || FLZX_HOT_COMP.type,
+                    component_action: 'privilege_select.exec',
+                    // 每个选项的 group_id 与 privilege_id 不一定相等(超级会员是 1/101)，都取自 detail
+                    privilege_select: { group_id: d.group_id, privilege_id: d.privilege_id },
+                }
+            });
+
+            const inner = (response && response.data && response.data.privilege_select) || {};
+            if (response && response.result === 'ok' && inner.success === true) {
+                report('限量爆款', `领取成功 ${d.title || 'pid ' + d.privilege_id}`);
+                return;
+            }
+            // 这一档没抢到(多半已秒光)，继续抢下一档
+            lastReason = inner.reason || (response && response.msg) || '';
+            debug(response, `限量爆款 ${d.title || d.privilege_id} 未中`);
+            await $.wait(300);
+        }
+        const st = classify(lastReason, '已领取');
+        report('限量爆款', st.t, st.e);
+    } catch (e) {
+        $.log(taskMsg('❌', '限量爆款', `异常 ${e.message}`));
+    }
+}
+
+// 会员免费试用(瓜分奖品)：preview 拿当天奖品 → 未申领的逐档 sign_up，三档全领、均次日开奖
+async function doTrialTask() {
+    try {
+        const base = {
+            activity_number: FLZX_ACTIVITY,
+            page_number: FLZX_PAGE,
+            component_number: FLZX_TRIAL_COMP.number,
+            component_node_id: FLZX_TRIAL_COMP.node,
+        };
+        const callTrial = async (action, extra) => {
+            const body = Object.assign({
+                component_uniq_number: base,
+                component_type: FLZX_TRIAL_COMP.type,
+                component_action: action,
+            }, extra);
+            return await Request({
+                url: 'https://personal-act.wps.cn/activity-rubik/activity/component_action',
+                headers: flzxHeaders(),
+                body
+            });
+        };
+        // 奖品名去掉「超级会员」前缀，日志里 7天卡/月卡/3个月卡 更好读
+        const shortName = t => String(t || '奖品').replace(/超级会员/g, '');
+
+        const pv = await callTrial('divide_prize.preview', {});
+        const details = (((pv || {}).data || {}).divide_prize || {}).divide_prize_details || [];
+        if (!details.length || details.every(d => d.has_join)) {
+            report('会员试用', '全部已申请');
+            return;
+        }
+
+        const parts = [];
+        let allGood = true;
+        let acted = 0;
+        for (const d of details) {
+            const name = shortName(d.title);
+            if (d.has_join) {
+                parts.push(`${name}已申请`);
+                continue;
+            }
+            if (d.stock != null && d.stock <= 0) {
+                parts.push(`${name}已领完`);
+                allGood = false;
+                continue;
+            }
+            // 逐档申领之间留 5~10 秒随机间隔避风控
+            if (acted > 0) await $.wait(5000 + Math.floor(Math.random() * 5000));
+            acted++;
+
+            const su = await callTrial('divide_prize.sign_up', {
+                divide_prize: { cycle_id: d.cycle_id, session_id: `${d.session_id}_${beijingDate()}` },
+            });
+            const inner = ((su || {}).data || {}).divide_prize || {};
+            if (su && su.result === 'ok' && inner.success === true) {
+                parts.push(`${name}✓`);
+            } else {
+                const st = classify(inner.reason || (su && su.msg) || '无响应', '已申请');
+                parts.push(`${name}${st.t}`);
+                if (st.e !== '✅') {
+                    allGood = false;
+                    debug(su, `会员试用 ${d.title}`);
+                }
+            }
+        }
+        // 三档都到位(本次成功或此前已申请)就折成一句，有问题才逐项罗列
+        if (allGood) {
+            report('会员试用', '全部已申请');
+        } else {
+            report('会员试用', parts.join(' '), '⚠️');
+        }
+    } catch (e) {
+        $.log(taskMsg('❌', '会员试用', `异常 ${e.message}`));
+    }
+}
+
 // 天天领福利任务: 打卡(复用已有序列) → 抽奖(动态取场次与次数)
 async function doLottery3Tasks() {
     try {
@@ -1598,19 +1797,17 @@ async function doLottery3Tasks() {
 
         // 1) 每日打卡: 已有序列必须复用，盲发新序列会清零连续天数；取不到组件宁可不签
         const fragItem = list.find(it => it && it.fragment_collect) ||
-            list.find(it => it && it.component_uniq_number && it.component_uniq_number.component_number === FLZX_FRAG_COMP.number);
+            list.find(it => it && it.number === FLZX_FRAG_COMP.number);
         if (!fragItem) {
             $.log(`⚠️ 未取到打卡组件，跳过(避免误新建序列)\n`);
         } else {
             const fc = fragItem.fragment_collect || {};
-            const uniq = fragItem.component_uniq_number || {};
             const records = fc.sign_records || [];
             const today = beijingDate();
             const todayRec = records.find(r => r && r.sign_date === today);
             const seriesId = fc.sign_series_id || '';
             if (todayRec && todayRec.sign_status === 'signed') {
-                $.log(`✅ 天天领福利今日已打卡\n`);
-                $.messages.push('天天领福利: 今日已打卡');
+                report('天天领福利打卡', '今日已打卡');
             } else {
                 const response = await Request({
                     url: 'https://personal-act.wps.cn/activity-rubik/activity/component_action',
@@ -1619,8 +1816,8 @@ async function doLottery3Tasks() {
                         component_uniq_number: {
                             activity_number: FLZX_ACTIVITY,
                             page_number: FLZX_PAGE,
-                            component_number: uniq.component_number || FLZX_FRAG_COMP.number,
-                            component_node_id: uniq.component_node_id || FLZX_FRAG_COMP.node,
+                            component_number: fragItem.number || FLZX_FRAG_COMP.number,
+                            component_node_id: fragItem.component_node_id || FLZX_FRAG_COMP.node,
                         },
                         component_type: 42,
                         component_action: 'fragment_collect.sign_in',
@@ -1634,11 +1831,9 @@ async function doLottery3Tasks() {
                 const inner = (response && response.data && response.data.fragment_collect) || {};
                 const reason = inner.reason || (response && (response.msg || response.ext_msg)) || '未知错误';
                 if (response && response.result === 'ok' && inner.success === true) {
-                    $.log(`✅ 天天领福利打卡成功${seriesId ? '' : '(新序列)'}\n`);
-                    $.messages.push(`天天领福利打卡成功${seriesId ? '' : '(新序列)'}`);
+                    report('天天领福利打卡', `成功${seriesId ? '' : '(新序列)'}`);
                 } else if (String(reason).includes('Duplicate') || String(reason).includes('已')) {
-                    $.log(`✅ 天天领福利今日已打卡\n`);
-                    $.messages.push('天天领福利: 今日已打卡');
+                    report('天天领福利打卡', '今日已打卡');
                 } else {
                     $.log(`❌ 天天领福利打卡失败: ${reason}\n`);
                 }
@@ -1647,7 +1842,7 @@ async function doLottery3Tasks() {
 
         // 2) 天天抽奖: 免费次数每日 10 点后刷新，先看 page_info 次数再抽，场次动态取进行中的
         const lotItem = list.find(it => it && it.type === 45 && it.lottery_v2) ||
-            list.find(it => it && it.component_uniq_number && it.component_uniq_number.component_number === FLZX_LOTTERY_COMP.number);
+            list.find(it => it && it.number === FLZX_LOTTERY_COMP.number);
         const lv = (lotItem && lotItem.lottery_v2) || {};
         const sessions = lv.lottery_list || [];
         const sess = sessions.find(s => s && s.session_status === 'IN_PROGRESS') || sessions[0];
@@ -1655,12 +1850,11 @@ async function doLottery3Tasks() {
         if (times < 1) {
             $.log(`ℹ️ 天天领福利: 今日暂无免费次数(10点后刷新或已用完)\n`);
         } else {
-            const uniq = (lotItem && lotItem.component_uniq_number) || {};
             $.log(`ℹ️ 天天领福利: 抽奖次数 ${times}\n`);
             await doLottery3(times, {
                 sessionId: (sess && sess.session_id) || FLZX_LOTTERY_COMP.session,
-                componentNumber: uniq.component_number || FLZX_LOTTERY_COMP.number,
-                componentNodeId: uniq.component_node_id || FLZX_LOTTERY_COMP.node,
+                componentNumber: (lotItem && lotItem.number) || FLZX_LOTTERY_COMP.number,
+                componentNodeId: (lotItem && lotItem.component_node_id) || FLZX_LOTTERY_COMP.node,
             });
         }
     } catch (e) {
@@ -1689,8 +1883,7 @@ async function doLottery3(times, ctx) {
             });
             const inner = (response && response.data && response.data.lottery_v2) || {};
             if (response && response.result === 'ok' && inner.success === true) {
-                $.log(`✅ 天天领福利第${i + 1}次抽奖成功: ${inner.reward_name || '未知奖品'}\n`);
-                $.messages.push(`天天领福利抽奖: ${inner.reward_name || '未知奖品'}`);
+                report('天天领福利抽奖', inner.reward_name || '未知奖品');
             } else {
                 const reason = inner.send_msg || (inner.error_code === 10005 ? '次数用完' : ((response && response.msg) || '未知错误'));
                 $.log(`ℹ️ 天天领福利第${i + 1}次抽奖终止: ${reason}\n`);
@@ -1704,45 +1897,50 @@ async function doLottery3(times, ctx) {
     }
 }
 
-function GetCookie() {
+async function GetCookie() {
     try {
         let msg = '';
         debug($request.headers, "获取Header");
         
         // 从请求头中获取cookie
         const cookie = $request.headers['Cookie'] || $request.headers['cookie'];
-        
-        if (cookie) {
-            // 从Cookie中提取uid
-            const uidMatch = cookie.match(/(?:^|;)\s*uid\s*=\s*([^;]+)/);
-            const uid = uidMatch ? uidMatch[1] : null;
-            
-            if (!uid) {
-                $.log(`❌ 无法从Cookie中提取uid`);
+        if (!cookie) {
+            $.log(`❌ 未能从请求头获取Cookie`);
+            return;
+        }
+
+        // uid 优先用 cookie 里的(零成本)；没有就拿这份 cookie 现调 islogin 兜底，
+        // 这样抓取点不要求对方一定带 uid。接口补 uid 会挂住当前请求几十~几百毫秒
+        let uid = extractUidFromCookie(cookie);
+        let uidFromApi = false;
+        if (!uid) {
+            const login = await checkLogin(cookie);
+            if (!login.uid) {
+                $.log(`❌ 无法确定账号 uid: cookie 里没有 uid 且 islogin ${login.invalid ? `判登录态失效(${String(login.msg || '').slice(0, 40)})` : '无回包(网络异常)'}，本次不入库`);
                 return;
             }
-
-            $.log(`✅ 成功获取 Cookie，提取到 UID: ${uid}`);
-            
-            // 使用 find() 方法找到与 uid 匹配的对象，以新增/更新用户 cookie
-            const user = $.userArr.find(user => user.uid === uid);
-            if (user) {
-                if (user.cookie == cookie) {
-                    $.log(`🔄 Cookie未发生变化，无需更新`);
-                    return;
-                }
-                msg += `♻️ 更新用户 [${uid}] Cookie`;
-                user.cookie = cookie;
-            } else {
-                msg += `🆕 新增用户 [${uid}] Cookie`;
-                $.userArr.push({ "uid": uid, "cookie": cookie });
-            }
-            // 写入数据持久化
-            $.setdata($.toStr($.userArr), 'WPS_COOKIE');
-            $.Messages.push(msg), $.log(msg);
-        } else {
-            $.log(`❌ 未能从请求头获取Cookie`);
+            uid = login.uid;
+            uidFromApi = true;
         }
+
+        $.log(`✅ 成功获取 Cookie，${uidFromApi ? 'islogin 补到' : '提取到'} UID: ${uid}`);
+
+        // 使用 find() 方法找到与 uid 匹配的对象，以新增/更新用户 cookie
+        const user = $.userArr.find(user => user.uid === uid);
+        if (user) {
+            if (user.cookie == cookie) {
+                $.log(`🔄 Cookie未发生变化，无需更新`);
+                return;
+            }
+            msg = taskMsg('♻️', 'Cookie入库', `更新 [${uid}]`);
+            user.cookie = cookie;
+        } else {
+            msg = taskMsg('🆕', 'Cookie入库', `新增 [${uid}]`);
+            $.userArr.push({ "uid": uid, "cookie": cookie });
+        }
+        // 写入数据持久化
+        $.setdata($.toStr($.userArr), 'WPS_COOKIE');
+        $.Messages.push(msg), $.log(msg);
     } catch (e) {
         $.log("❌ Cookie获取失败"), $.log(e);
     }
@@ -1753,17 +1951,113 @@ function GetCookie() {
     if (typeof $request !== `undefined`) {
         // 仅处理活动页请求来获取 Cookie（Cookie 中带 uid 即可）
         if ($request.url.includes('personal-act.wps.cn/rubik2/portal/')) {
-            GetCookie();
+            await GetCookie();
+        }
+    } else if (isOn('wps_clear')) {
+        // BoxJS 里把 wps_clear 置 true 可一次性清空已抓 Cookie，执行后自动复位
+        if ($.isNode()) {
+            $.Messages.push(taskMsg('⚠️', 'wps_clear', '只在 Surge/Loon/QX/Stash 生效，Node 环境请直接改 WPS_COOKIE 环境变量'));
+        } else {
+            $.setdata('', 'WPS_COOKIE');
+            $.setdata('false', 'wps_clear');
+            $.Messages.push(taskMsg('✅', 'Cookie入库', '已清空，请重新抓取'));
         }
     } else {
         await main();  // 主函数
     }
 })()
-    .catch((e) => $.Messages.push(e.message || e) && $.logErr(e))
+    .catch((e) => {
+        $.alerts.push('❌ 运行异常');
+        $.Messages.push(taskMsg('❌', '运行异常', String((e && e.message) || e)));
+        $.logErr(e);
+    })
     .finally(async () => {
-        await sendMsg($.Messages.join('\n').trimStart().trimEnd());  // 推送通知
+        await sendMsg($.Messages.join('\n').trimStart().trimEnd(), alertSubtitle());  // 推送通知,前置失败走 subtitle
         $.done();
     })
+
+// 在 [min,max] 秒区间取随机毫秒
+function jitter([min, max]) {
+    return Math.floor((min + Math.random() * (max - min)) * 1000);
+}
+
+// BoxJS 开关读数：NE 存储可能是布尔 true，也可能是字符串 "true"/"1"，一律认。
+// 任务开关用肯定式命名(wps_off_*=true 才跳过)，因为 BoxJS 的 boolean 控件默认就是 false，上游那种"设为 false 才关闭"一存就会全关
+function isOn(key) {
+    const v = getEnv(key);
+    return v === true || v === 1 || v === 'true' || v === '1';
+}
+
+// 服务端各种提示归类: ✅=已做过/已达上限(均属正常完结)，⚠️=没领到(售罄/没资格/原文异常)
+function classify(msg, doneLabel) {
+    const m = String(msg || '');
+    if (!m) return { e: '⚠️', t: '未成功' };
+    if (/已签|has sign/i.test(m)) return { e: '✅', t: '已签到' };
+    if (/Duplicate entry|已领取|已申领|已参与|已参加|已报名|已完成|重复|repeat|already/i.test(m)) return { e: '✅', t: doneLabel || '已完成' };
+    if (/无.*次数|没有.*次数|次数.*(用完|不足|为0)|达到?.*上限|已达.*上限|超(出|过).*次数|reach limit|out of limit|上限/i.test(m)) return { e: '✅', t: '已达上限' };
+    if (/售罄|领完|抢完|发完|抢光|领光|out of stock|sold out|库存/i.test(m)) return { e: '⚠️', t: '已领完' };
+    if (/资格|不满足|未满足|不符合|无权限|没有权限|没有资格|not (match|qualified)|不在.*(范围|名单)|未达条件/i.test(m)) return { e: '⚠️', t: '没资格' };
+    return { e: '⚠️', t: m.length > 30 ? m.slice(0, 30) + '…' : m };
+}
+
+// 通知行统一格式: 标记 + 任务名 + 状态，emoji 只在行首出现一次
+function taskMsg(mark, tag, text) {
+    return `${mark} ${tag}: ${text}`;
+}
+
+// 组好一行同时进日志与通知，避免两边文案不一致
+function report(tag, text, mark = '✅') {
+    const msg = taskMsg(mark, tag, text);
+    $.messages.push(msg);
+    $.log(msg);
+    return msg;
+}
+
+// 前置失败要在通知栏一眼看出来，所以走 subtitle 而不是埋在正文里
+function alertSubtitle() {
+    return Array.from(new Set($.alerts)).join(' ');
+}
+
+// 签到预检: day_info 的 has_sign 为真就不再走公钥/RSA/提交
+async function isSignedToday() {
+    try {
+        const response = await Request({
+            url: 'https://personal-bus.wps.cn/sign_in/v1/day_info',
+            headers: {
+                'accept': 'application/json, text/plain, */*',
+                'origin': 'https://personal-act.wps.cn',
+                'referer': 'https://personal-act.wps.cn/',
+                'user-agent': WIN_UA,
+                'cookie': $.cookie
+            }
+        });
+        return !!((response && response.data && response.data.info) || {}).has_sign;
+    } catch (e) {
+        return false;
+    }
+}
+
+// 登录态校验 + uid 兜底。Request 内部吞掉网络错误(回包为空)，故空回包按网络抖动重试一次，
+// 只有服务端明确回非 ok 才判真失效——避免整点网络抖动被误报成"Cookie 失效"
+async function checkLogin(cookieStr) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+        if (attempt > 0) await $.wait(3000);
+        const response = await Request({
+            url: 'https://account.wps.cn/api/v3/islogin',
+            headers: {
+                'accept': 'application/json, text/plain, */*',
+                'origin': 'https://personal-act.wps.cn',
+                'referer': 'https://personal-act.wps.cn/',
+                'user-agent': WIN_UA,
+                'cookie': cookieStr || $.cookie
+            }
+        });
+        if (!response) continue;
+        if (response.result === 'ok' && response.userid) return { uid: String(response.userid) };
+        return { invalid: true, msg: response.msg || $.toStr(response) };
+    }
+    return { netErr: true };
+}
 
 // 请求函数二次封装
 async function Request(options) {
@@ -1805,7 +2099,7 @@ async function Request(options) {
 }
 
 // 发送消息
-async function sendMsg(message) {
+async function sendMsg(message, subtitle) {
     if (!message) return;
     try {
         if ($.isNode()) {
@@ -1814,9 +2108,9 @@ async function sendMsg(message) {
             } catch (e) {
                 var notify = require('./utils/sendNotify');
             }
-            await notify.sendNotify($.name, message);
+            await notify.sendNotify($.name + (subtitle ? ` ${subtitle}` : ''), message);
         } else {
-            $.msg($.name, '', message);
+            $.msg($.name, subtitle || '', message);
         }
     } catch (e) {
         $.log(`\n\n----- ${$.name} -----\n${message}`);

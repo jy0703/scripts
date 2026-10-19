@@ -1,40 +1,43 @@
 /**
  * 脚本名称：中国移动签到
- * 活动规则：中国移动「签到领流量/话费」活动(1021122301) 的 App 端 mark31 签到，每天一次；另有 AI豆任务(mark/task) 与秒杀抢券(markSeckill：触发时刻早于 11:00 不执行，开抢早于 11:00 的场次也不抢，某一期抢中后本周内不再打、下周继续)；开关 cmcc_video 后追加「追剧领福利」页(1126082530) 的每日打卡 + 代币任务 + 周日抽奖；开关 cmcc_wed 后追加「周三充值日」(hlwyxhdhub/wedrecharge) 的做任务挣次数 + 抽拼图集话费券（每天做，攒碎片），cmcc_wed_sk 再打场次秒杀(drawPrize，仅北京时间周三开火，当天打过一次即收工)
+ * 活动规则：中国移动「签到领流量/话费」活动(1021122301) 的 App 端 mark31 签到，每天一次；另有 AI豆任务(mark/task) 与秒杀抢券(markSeckill：触发时刻早于 11:00 不执行，开抢早于 11:00 的场次也不抢，某一期抢中后本周内不再打、下周继续)；开关 cmcc_video 后追加「追剧领福利」页(1126082530) 的每日打卡 + 代币任务 + 周日抽奖；开关 cmcc_seed 后追加「AI豆苗养成记」(dev.coc.10086.cn 独立域，需 phone 头凭证)；开关 cmcc_wed 后追加「周三充值日」(hlwyxhdhub/wedrecharge) 的做任务挣次数 + 抽拼图集话费券（每天做，攒碎片），cmcc_wed_sk 再打场次秒杀(drawPrize，仅北京时间周三开火，当天打过一次即收工；场次时间默认听服务端 rec_login 的 seckillTime)
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。账号参数（App 票据/省市编码等）由本脚本 GetCookie 抓取后存入 cmcc_data
- * 环境变量：cmcc_data / cmcc_claim(默认开，填 false 才关) / cmcc_task / cmcc_seckill / cmcc_sk_min(每日秒杀的北京时间下限，默认 11:00，填 00:00 不受限) / cmcc_video / cmcc_wed / cmcc_wed_sk / cmcc_wed_sk_at / cmcc_task_skip_days；cmcc_task_fail 为脚本自动维护的任务黑名单
- * 更新时间：2026-10-12 新增周三充值日(hlwyxhdhub wedrecharge)：任务代做 + 抽拼图 + 集齐领取 + 场次秒杀，开关 cmcc_wed / cmcc_wed_sk；AI豆任务同步上游：握手会话整轮复用、taskToken 任务直接握手、外部合作区跳过、status=1 遗留补领、公众号类即弃、停留与间隔提速；连签奖励改为只要开了就查一遍代领（不再要求当天由脚本签到），展示改用响应里的 prizeName/prizeValue。2026-10-13 每日秒杀加 11:00 触发门控(cmcc_sk_min)与"按周去重"(skWinDay 记抢中那期的日期，比较时换算成该周周一：本周不再打，下周自动恢复)；服务端回"已领取/限领"也按同样口径落盘，覆盖在 App 里领过的情况；邀好友/助力类任务与外部合作区一样常驻跳过；周三场次秒杀加"当天打过即收工"(wedSkDay，发过 drawPrize 才记)
+ * 环境变量：cmcc_data / cmcc_claim(默认开，填 false 才关) / cmcc_task / cmcc_seckill / cmcc_sk_min(每日秒杀的北京时间下限，默认 11:00，填 00:00 不受限) / cmcc_video / cmcc_seed / cmcc_coc3_phone(豆苗 phone 凭证，或写进 cmcc_data 的 coc3Phone) / cmcc_seed_channel / cmcc_wed / cmcc_wed_sk / cmcc_wed_sk_at(留空=服务端下发场次自动选最近未开始的一场) / cmcc_task_skip_days；cmcc_task_fail 为脚本自动维护的任务黑名单
+ * 更新时间：2026-10-12 新增周三充值日(hlwyxhdhub wedrecharge)：任务代做 + 抽拼图 + 集齐领取 + 场次秒杀，开关 cmcc_wed / cmcc_wed_sk；AI豆任务同步上游：握手会话整轮复用、taskToken 任务直接握手、外部合作区跳过、status=1 遗留补领、公众号类即弃、停留与间隔提速；连签奖励改为只要开了就查一遍代领（不再要求当天由脚本签到），展示改用响应里的 prizeName/prizeValue。2026-10-13 每日秒杀加 11:00 触发门控(cmcc_sk_min)与"按周去重"(skWinDay 记抢中那期的日期，比较时换算成该周周一：本周不再打，下周自动恢复)；服务端回"已领取/限领"也按同样口径落盘，覆盖在 App 里领过的情况；邀好友/助力类任务与外部合作区一样常驻跳过；周三场次秒杀加"当天打过即收工"(wedSkDay，发过 drawPrize 才记)。2026-10-18 同步上游：追剧新增看精彩视频每日任务(queryDiyVideoTask + getYDRZToken + cmlive 两步，每完成 +1 抽奖次数、周日 2 次)；新增 AI豆苗养成记(cmcc_seed)；周三场次秒杀同步 rec_login 下发场次 + 等待期会话重建与开火前强刷
 
 ------------------ Surge 配置 ------------------
 
 [Script]
 中国移动获取Cookie = type=http-request,pattern=^https?:\/\/wx\.10086\.cn\/qwhdsso\/appTokenLogin,requires-body=1,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,script-update-interval=0
+中国移动豆苗获取phone = type=http-request,pattern=^https?:\/\/dev\.coc\.10086\.cn\/,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,script-update-interval=0
 
 中国移动签到 = type=cron,cronexp="0 1 * * *",wake-system=1,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,script-update-interval=0
 
 [MITM]
-hostname = wx.10086.cn
+hostname = wx.10086.cn,dev.coc.10086.cn
 
 ------------------- Loon 配置 -------------------
 
 [Script]
 http-request ^https?:\/\/wx\.10086\.cn\/qwhdsso\/appTokenLogin script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,requires-body=true,timeout=600,tag=中国移动获取Cookie
+http-request ^https?:\/\/dev\.coc\.10086\.cn\/ script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,timeout=600,tag=中国移动豆苗获取phone
 
 cron "0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js, timeout=600, tag=中国移动签到
 
 [MITM]
-hostname = wx.10086.cn
+hostname = wx.10086.cn,dev.coc.10086.cn
 
 --------------- Quantumult X 配置 ---------------
 
 [rewrite_local]
 ^https?:\/\/wx\.10086\.cn\/qwhdsso\/appTokenLogin url script-request-body https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js
+^https?:\/\/dev\.coc\.10086\.cn\/ url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js
 
 [task_local]
 "0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js, tag=中国移动签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/cmcc.png, enabled=true
 
 [MITM]
-hostname = wx.10086.cn
+hostname = wx.10086.cn,dev.coc.10086.cn
 
  */
 
@@ -68,6 +71,27 @@ const DIY_LOTTERY_API = BASE + '/qwhdhub/diyLottery';
 // 该活动的任务与抽奖共用同一个 componentId：任务 earnOpportunity 加的就是抽奖次数
 const VIDEO_COMPONENT = '4EC96l0-9btuobajC9Yu';
 const VIDEO_DRAW_WEEKDAY = 0;  // 抽奖开放日(北京时间周日)：实测非周日回 FAILED「抽奖时间为周日，请确认~」，且次数过期作废
+// 追剧「看精彩视频」每日任务（上游 53079e4）：视频站 cmlive 与 qwhdhub 是两套会话，
+// QWHD 会话只能经 getYDRZToken 换 YDRZ 票据，再调 cmpassLoginByCmToken 换视频站 JWT。
+// sourceId 必须是 017027（App 原生用的值），抓包实测 001191 会被视频站拒绝。
+const VIDEO_TASK_API = BASE + '/qwhdhub/api/diyVideoDayRedesign/task';
+const CMLIVE_BASE = 'https://v.cmcc-cs.cn/cmlive/api';
+const CMLIVE_SOURCE_ID = '017027';
+const CMLIVE_REFERER = 'https://v.cmcc-cs.cn/cmlive/live/feed?id=102518&cmliveChannelId=203&belongChannelId=203&secondChannel=spr&openSelfResearch=1&tagId=157&jtCode=1';
+// AI豆苗养成记（移动爱购 activityId 17692，dev.coc.10086.cn 独立域）：签到 + 浏览/分享任务 + 领阳光值。
+// 凭证与该域自己的请求头 phone（抓包 dev.coc.10086.cn 任一请求即可，长期有效），与 qwhdhub 会话无关。
+const RUN_SEED = getEnv('cmcc_seed') === 'true';
+const SEED_BASE = 'https://dev.coc.10086.cn/coc3/coc3-market-activity';
+const SEED_PAGE_URL = 'https://dev.coc.10086.cn/coc3/canvas/rightsmarket-h5-canvas/online/2026dmycj?pageRecorded=true';
+const SEED_PAGE_KEY = '2026dmycj';
+const SEED_ACTIVITY_ID = 17692;
+const SEED_TASK_LIST_ID = 55;
+const SEED_SIGN_TASK_ID = 3115;
+const SEED_CHANNEL = getEnv('cmcc_seed_channel') || 'P00000011939';
+const SEED_WTAC = 'P00000008211_';
+// 任务类型：1 浏览/直播；2 分享；3 订购；4/5 领取/关注；6 邀请 —— 3/6 需要真实操作，直接跳过
+const SEED_SKIP_TYPES = { 3: '需真实办理/订购', 6: '需真实好友助力' };
+const SEED_STATE_KEY = 'cmcc_seed_state';
 // 周三充值日(hlwyxhdhub/wedrecharge)：拼图抽奖主流程 + 场次秒杀，同一 SSO 通道但要按该活动页换票
 const RUN_WED = getEnv('cmcc_wed') === 'true';
 const WED_SECKILL = getEnv('cmcc_wed_sk') === 'true';
@@ -81,7 +105,8 @@ const WED_SKIP = { yqyh: '需邀请真实用户助力', czhf: '需真实充值�
 const WED_MAX_DRAWS = 30;     // 单次执行最多抽这么多发
 const WED_DAY = 3;            // 场次秒杀只在北京时间周三打（任务/拼图每天都做）
 // 周三场次秒杀参数（照 py 默认值）
-const WSK_AT = getEnv('cmcc_wed_sk_at') || '08:00:00';
+// 留空 = 用服务端 rec_login 下发的 seckillTime 自动选最近一个未开始场次；填了则强制该时刻（上游 ac50860）
+const WSK_AT_CFG = getEnv('cmcc_wed_sk_at') || '';
 const WSK_LEAD = 400;         // 提前开火(ms)
 const WSK_INTERVAL = 350;     // 连发间隔(ms)
 const WSK_MAX_ATTEMPTS = 200;
@@ -135,6 +160,28 @@ async function main() {
     }
 }
 
+// 豆苗 phone 凭证抓取（dev.coc.10086.cn 的请求头）：开捕获开关后在 App 里打开「AI豆苗养成记」活动页即可入库
+// 该域请求不带 userCheckId 这类账号标识，所以多账号只能按"填空位"处理：
+// 只有一个账号就直接写；多个账号写第一条还没 phone 的；都填过则不动，提示用户先清空要更新的那条
+function GrabCocPhone() {
+    try {
+        if ($request.method === 'OPTIONS') return;
+        const phone = ObjectKeys2LowerCase($request.headers)['phone'] || '';
+        if (!phone) return;   // 活动静态资源也走这条规则，没有 phone 头的直接忽略
+        const list = $.userArr;
+        if (!list.length) { $.log('❌ 豆苗 phone 未入库：cmcc_data 还没有账号，请先抓一次签到凭证'); return; }
+        const idx = list.length === 1 ? 0 : list.findIndex(e => !e.coc3Phone);
+        if (idx < 0) { $.log('⚠️ 豆苗 phone 未入库：所有账号都已有 phone，请先清空要更新那条的 coc3Phone'); return; }
+        list[idx].coc3Phone = phone;
+        $.setdata($.toStr(list), 'cmcc_data');
+        const msg = `🎉 豆苗 phone 已写入 ${list[idx].userName || '账号' + (idx + 1)}（长度 ${String(phone).length}）`;
+        $.Messages.push(msg);
+        $.log(msg);
+    } catch (e) {
+        $.log('❌ 豆苗 phone 获取失败'), $.log(e);
+    }
+}
+
 // 获取Cookie数据 (rewrite 抓取入口, 与头部 http-request 正则配套)
 function GetCookie() {
     try {
@@ -163,6 +210,8 @@ function GetCookie() {
             'skWinDay': old.skWinDay || '',
             'skWinPrize': old.skWinPrize || '',
             'wedSkDay': old.wedSkDay || '',
+            // 豆苗 phone 是手工填进 cmcc_data 的长期凭证，重抓包不能冲掉
+            'coc3Phone': old.coc3Phone || '',
         };
 
         const index = $.userArr.findIndex(e => e.userCheckId == newData.userCheckId);
@@ -256,6 +305,15 @@ async function doSign(user) {
                     lines.push(...await doVideoAct(user));
                 } catch (e) {
                     say(`[追剧] 失败: ${e.message || e}`);
+                }
+            }
+
+            // AI豆苗养成记走 dev.coc.10086.cn 独立域+独立凭证(phone 头)，与主站会话无关
+            if (RUN_SEED) {
+                try {
+                    lines.push(...await runSeed(user));
+                } catch (e) {
+                    say(`[豆苗] 失败: ${e.message || e}`);
                 }
             }
 
@@ -628,7 +686,7 @@ async function openHubSession(user, cache) {
 
 // ---------- 追剧领福利（diy-client 1126082530，参考 yupaiLy/cmcc-auto-checkin 的 cmcc_extra.py）----------
 
-// 独立活动：换该活动页会话 → 每日打卡 → diyTask 任务(挣抽奖次数) → 抽奖
+// 独立活动：换该活动页会话 → 每日打卡 → diyTask 任务(挣抽奖次数) → 视频日任务(挣抽奖次数) → 抽奖
 // 返回结果行，由 main() 拼进本账号通知
 async function doVideoAct(user) {
     const lines = [];
@@ -637,6 +695,7 @@ async function doVideoAct(user) {
         const ctx = await exchangeSession(user, VIDEO_ENTRY);
         say(`[追剧] ${await videoSign(ctx)}`);
         lines.push(...await runDiyTasks(ctx));
+        lines.push(...await runVideoDay(ctx));
         lines.push(...await runDiyLottery(ctx));
     } catch (e) {
         say(`[追剧] 失败: ${e.message || e}`);
@@ -689,6 +748,131 @@ async function runDiyTasks(ctx) {
         await $.wait(randomInt(1000, 2500));
     }
     say(`[追剧·任务] 待办 ${todo.length} 个，完成 ${done} 个`);
+    return lines;
+}
+
+// 该活动抽奖次数余额（任务与视频任务挣的都是它）；查不到返回 null，只用于前后对比
+async function lotteryRemain(ctx) {
+    const r = await Request({ url: `${DIY_LOTTERY_API}/period/remain/${VIDEO_COMPONENT}`, method: 'post', headers: apiHeaders(ctx), _timeout: 30000 });
+    if (!r || r.code !== 'SUCCESS') return null;
+    return Number((r.data || {}).remain) || 0;
+}
+
+// 视频站头：cmlive 与 qwhdhub 是两套会话，这里绝不带主站 Cookie，只带视频站自己的 JWT
+function cmliveHeaders(referer, jwt) {
+    const h = {
+        accept: 'application/json, text/plain, */*',
+        origin: 'https://v.cmcc-cs.cn',
+        referer: referer,
+        'x-requested-with': 'XMLHttpRequest',
+        'user-agent': USER_AGENT,
+        'accept-language': 'zh-CN,zh-Hans;q=0.9',
+    };
+    if (jwt) h.authorization = jwt;
+    return h;
+}
+
+// QWHD 会话 → getYDRZToken 票据 → cmpassLoginByCmToken 换视频站 JWT（全自动，无需抓包凭证）
+async function openCmliveSession(ctx) {
+    const r = await Request({ url: `${BASE}/qwhdhub/user/getYDRZToken?targetSourceId=${CMLIVE_SOURCE_ID}`, headers: apiHeaders(ctx), _timeout: 30000 });
+    const ydrz = r && r.data;
+    if (!ydrz || typeof ydrz !== 'string') { $.log(`[追剧·视频] YDRZ 取票为空(code=${r && r.code} ${(r && r.msg) || ''})，sourceId=${CMLIVE_SOURCE_ID}`); return ''; }
+    const l = await Request({ url: `${CMLIVE_BASE}/user/auth/cmpassLoginByCmToken`, method: 'post', headers: cmliveHeaders(CMLIVE_REFERER, ''), body: { cmpassToken: ydrz }, _timeout: 30000 });
+    const jwt = l && typeof l.object === 'string' ? l.object : '';
+    if (!l || String(l.rtnCode) !== '0' || !jwt) { $.log(`[追剧·视频] 视频站登录被拒: ${l && l.rtnCode} ${(l && l.rtnMsg) || ''}`); return ''; }
+    $.log('[追剧·视频] 视频站 JWT 已换取（cmpassLoginByCmToken）');
+    return jwt;
+}
+
+async function cmliveGet(jwt, path, params, referer) {
+    const q = Object.keys(params).map(k => `${encodeURIComponent(k)}=${encodeURIComponent(params[k])}`).join('&');
+    try {
+        return (await Request({ url: `${CMLIVE_BASE}${path}?${q}`, headers: cmliveHeaders(referer, jwt), _timeout: 30000 })) || {};
+    } catch (e) {
+        return { rtnCode: 'NETWORK_ERROR', rtnMsg: String((e && e.message) || e) };
+    }
+}
+
+// 从清单里筛今日可做的视频任务：周日会下发「视频周日1/2」两个独立任务(各 maxPerDay=1)，
+// 其余时间 1 个；按 taskStage/todayRemain/earnOpportunity 自适应，不写死任务 ID
+function videoTasks(data) {
+    const todo = ((data || {}).undoTodayTaskList || []).filter(t => t.taskStage === 'UNDO'
+        && Number(t.todayRemain || 0) > 0 && Number(t.earnOpportunity || 0) > 0);
+    let video = todo.filter(t => /视频/.test(`${t.name || ''}${t.description || ''}`) || /cmlive/.test(String(t.url || '')));
+    if (!video.length && todo.length === 1) video = todo;   // 服务端改名后只剩一个待办，按视频任务处理
+    return video;
+}
+
+async function queryVideoTaskList(ctx) {
+    return await Request({ url: `${VIDEO_TASK_API}/queryDiyVideoTask`, headers: apiHeaders(ctx), _timeout: 30000 });
+}
+
+// 单个视频任务：登记浏览入口 → getFiveMinuteTaskInfo 取 cToken → fiveMinuteTaskFinish 上报
+// 前端有 300s 倒计时，实测拿到 cToken 可直接上报，所以不等倒计时
+async function completeVideoTask(ctx, jwt, task) {
+    const name = task.name || '看精彩视频';
+    let jt = String(task.param || '');
+    if (!/^QWHD_/.test(jt) && task.taskId) jt = 'QWHD_' + task.taskId;
+    if (!jt) return { ok: false, msg: `${name} 缺少 jtToken` };
+
+    const turl = String(task.url || '');
+    if (turl) {
+        const target = turl.startsWith('/') ? BASE + turl : turl;
+        try {
+            assertSafeUrl(target);
+            await Request({ url: target, headers: apiHeaders(ctx), _respType: 'all', followRedirect: false, _timeout: 30000 });
+        } catch (e) { $.log(`[追剧·视频] startBrowse 失败（不阻断）: ${(e && e.message) || e}`); }
+    }
+
+    const ref = CMLIVE_REFERER + '&jtToken=' + encodeURIComponent(jt);
+    const info = await cmliveGet(jwt, '/advert/lottery/getFiveMinuteTaskInfo', { token: jt }, ref);
+    const obj = info.object || {};
+    const d = obj.data || {};
+    if (String(info.rtnCode) !== '0' || obj.code !== 'SUCCESS' || !Object.keys(d).length)
+        return { ok: false, msg: `${name} 领取失败: ${info.rtnCode} ${obj.msg || info.rtnMsg || ''}` };
+    const status = String(d.status || '');
+    // status=0 表示服务端已记完成（上次跑过或 App 里做过），不再重复上报
+    if (status === '0') return { ok: true, already: true, msg: `${name} 已完成（${d.finishDesc || '奖励已发放'}）` };
+    if (status !== '1') return { ok: false, msg: `${name} 状态异常（status=${status || '空'}）` };
+    const ctoken = d.cToken || '';
+    if (!ctoken) return { ok: false, msg: `${name} 未下发 cToken` };
+
+    const fin = await cmliveGet(jwt, '/advert/lottery/fiveMinuteTaskFinish', { token: ctoken }, ref);
+    const fobj = fin.object || {};
+    if (String(fin.rtnCode) !== '0' || !fobj.data) return { ok: false, msg: `${name} 上报失败: ${fin.rtnCode} ${fobj.msg || fin.rtnMsg || ''}` };
+    return { ok: true, msg: `${name} 完成` };
+}
+
+// 视频日任务：每完成一个 +1 抽奖机会（每周上限 8 次，周日可做 2 次）
+// 每轮重新拉清单——完成一个后服务端才放出下一个，最多 5 轮防异常循环（上游 f136786）
+async function runVideoDay(ctx) {
+    const lines = [];
+    const say = t => { lines.push(t); $.log(t); };
+    const first = await queryVideoTaskList(ctx);
+    if (!first || first.code !== 'SUCCESS') { $.log(`[追剧·视频] 清单获取失败: ${first && first.code} ${first && first.msg || ''}`); return lines; }
+    if (!videoTasks(first.data).length) { $.log('[追剧·视频] 今日已完成（或已到上限）'); return lines; }
+
+    const jwt = await openCmliveSession(ctx);
+    if (!jwt) { say('[追剧·视频] 失败：视频站登录未成功'); return lines; }
+
+    const before = await lotteryRemain(ctx);
+    const results = [];
+    let done = 0;
+    for (let round = 0; round < 5; round++) {
+        const r = await queryVideoTaskList(ctx);
+        if (!r || r.code !== 'SUCCESS') { results.push(`清单刷新失败: ${r && r.msg}`); break; }
+        const list = videoTasks(r.data);
+        if (!list.length) break;
+        const one = await completeVideoTask(ctx, jwt, list[0]);
+        results.push((one.ok ? '✓ ' : '✗ ') + one.msg);
+        if (!one.ok || one.already) break;   // 已完成的直接收工，不白耗轮次
+        done++;
+        await $.wait(randomInt(900, 1600));
+    }
+    const after = await lotteryRemain(ctx);
+    const add = (before != null && after != null && after > before) ? `（抽奖次数 ${before}→${after}）` : '';
+    if (done) say(`[追剧·视频] 完成 ${done} 次${add}`);
+    $.log(`[追剧·视频] 明细: ${results.join('；') || '今日已完成'}`);
     return lines;
 }
 
@@ -763,6 +947,196 @@ function hmToMinutes(s) {
 // 每天的秒杀是否该执行：触发时刻（北京时间）不早于 cmcc_sk_min
 function skWindowOpen() {
     return beijingMinuteOfDay(Date.now()) >= SK_MIN_OPEN;
+}
+
+// ---------- AI豆苗养成记（dev.coc.10086.cn，参考 yupaiLy/cmcc-auto-checkin 的 cmcc_seed.py）----------
+
+// 该域只认请求头 phone，绝不带主站 Cookie；channelCode/wtAc 是活动侧固定标识
+function seedHeaders(cred) {
+    return {
+        'user-agent': USER_AGENT,
+        accept: 'application/json, text/plain, */*',
+        'content-type': 'application/json;charset=utf-8',
+        origin: 'https://dev.coc.10086.cn',
+        referer: SEED_PAGE_URL,
+        phone: cred,
+        'accept-language': 'zh-CN,zh-Hans;q=0.9',
+    };
+}
+
+// 统一 POST；网关偶发非 JSON 或网络抖动按失败结构返回，不抛异常（网络错误重试一次）
+async function seedPost(cred, path, body) {
+    for (const retry of [0, 1000]) {
+        try {
+            const r = await Request({ url: `${SEED_BASE}${path}`, method: 'post', headers: seedHeaders(cred), body: body || {}, _timeout: 30000 });
+            if (r) return r;
+            return { resultCode: 'NO_RESP', msg: '响应非 JSON' };
+        } catch (e) {
+            if (!retry) { await $.wait(1000); continue; }
+            return { resultCode: 'NETWORK_ERROR', msg: String((e && e.message) || e) };
+        }
+    }
+    return { resultCode: 'NETWORK_ERROR', msg: 'unreachable' };
+}
+
+// 凭证身份：只记长度与尾 4 位，不存明文，用于检测 coc3_phone 被更换
+function seedCredSig(cred) { return `${String(cred).length}:${String(cred).slice(-4)}`; }
+
+function seedUuid() {
+    const h = n => Array.from({ length: n }, () => '0123456789abcdef'[Math.floor(Math.random() * 16)]).join('');
+    return `${h(8)}-${h(4)}-4${h(3)}-8${h(3)}-${h(12)}`;
+}
+
+// 任务跳转 URL 里的目标页短路径：.../online/yidongaini?x → yidongaini
+function seedTargetKey(task) {
+    return (/\/online\/([^/?#]+)/.exec(String(task.unfinishRedirectUrl || '')) || [])[1] || '';
+}
+
+function seedAge(sec) {
+    sec = Math.max(0, Math.floor(sec));
+    if (sec < 60) return '不到 1 分钟';
+    const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600), m = Math.floor((sec % 3600) / 60);
+    if (d) return `${d} 天 ${h} 小时`;
+    if (h) return `${h} 小时 ${m} 分钟`;
+    return `${m} 分钟`;
+}
+
+// 每日签到：本地状态 + accumulateCount 双重判断。首次运行时 count 已 >0 说明可能是在 App 里签的，
+// 保守只记录不重复签（照抄上游，避免把连续签到周期打断）
+async function seedSign(cred, state, today) {
+    const info = await seedPost(cred, '/cmpp-manage/task/getTaskSignInfo', { taskId: SEED_SIGN_TASK_ID, needQyCredits: 1, needLimit: 0 });
+    if (info.resultCode !== 0) return `签到信息获取失败: ${info.resultCode} ${info.msg || ''}`;
+    const count = Number(((info.data || {}).accumulateCount) || 0);
+    if (state.signDate === today) return '今日已签到（本地记录），跳过';
+    if (state.signCount != null && count > Number(state.signCount)) {
+        state.signDate = today; state.signCount = count;
+        return '今日已签到（签到天数已增加），跳过';
+    }
+    if (state.signCount == null && count > 0) {
+        state.signDate = today; state.signCount = count;
+        return '检测到已有签到记录，今日不重复签到';
+    }
+    const body = { taskId: SEED_SIGN_TASK_ID, channelCode: SEED_CHANNEL, needLimit: 0 };
+    if (SEED_WTAC) { body.wtAc = SEED_WTAC; body.wtAcId = seedUuid(); }
+    const resp = await seedPost(cred, '/cmpp-manage/task/accumulateSign', body);
+    const awards = resp.data;
+    if (resp.resultCode === 0 && Array.isArray(awards) && awards.length) {
+        state.signDate = today; state.signCount = count + 1;
+        return `签到成功：${awards.map(a => a.awardName || '奖励').join('、')}`;
+    }
+    const msg = String(resp.msg || '');
+    if (resp.resultCode === 500 || resp.resultCode === 502 || /已签|重复/.test(msg)) {
+        state.signDate = today; state.signCount = count;
+        return `今日已签到（${msg || resp.resultCode}），跳过`;
+    }
+    return `签到失败: ${resp.resultCode} ${msg}`;
+}
+
+// 可代做任务：type 2 走 share，其余走 visit(目标页)；上报被接受即算完成，
+// 最后统一复查一次（上游做法：不逐个等待复查）
+async function seedTasks(cred) {
+    const r = await seedPost(cred, '/cmpp-manage/task/getGrowthTaskList', { taskListId: SEED_TASK_LIST_ID });
+    if (r.resultCode !== 0) return { lines: [`任务清单获取失败: ${r.resultCode} ${r.msg || ''}`], done: 0 };
+    const todo = (r.data || []).filter(t => t.isFinish === 0);
+    const lines = [];
+    const accepted = [];
+    let done = 0;
+    const doIt = t => t.taskType === 2
+        ? seedPost(cred, '/cmpp-manage/task/share', { channelCode: SEED_CHANNEL, visitUrl: SEED_PAGE_KEY, taskId: t.taskId })
+        : seedPost(cred, '/cmpp-manage/task/visit', { channelCode: SEED_CHANNEL, visitUrl: seedTargetKey(t), taskId: t.taskId });
+
+    for (const t of todo) {
+        const title = t.taskMainTitle || `任务${t.taskId}`;
+        const ttype = t.taskType;
+        if (SEED_SKIP_TYPES[ttype]) { $.log(`[豆苗·任务] ${title}: ${SEED_SKIP_TYPES[ttype]}，跳过`); continue; }
+        if (![1, 2, 4, 5].includes(ttype)) { $.log(`[豆苗·任务] ${title}: 类型 ${ttype}，跳过`); continue; }
+        if (ttype !== 2 && !seedTargetKey(t)) { $.log(`[豆苗·任务] ${title}: 缺少目标页，跳过`); continue; }
+
+        let resp = await doIt(t);
+        if (typeof resp.data === 'string' && /频繁/.test(resp.data)) {   // 限频退避重试一次
+            await $.wait(5000);
+            resp = await doIt(t);
+        }
+        if (resp.resultCode !== 0) lines.push(`✗ ${title}：${resp.msg || resp.resultCode}`);
+        else if (resp.data === null || resp.data === undefined || resp.data === true) { lines.push(`✓ ${title} 已上报`); accepted.push(t.taskId); done++; }
+        else lines.push(`· ${title}：${resp.data}`);
+        $.log(`[豆苗·任务] ${title} → ${lines[lines.length - 1]}`);
+        await $.wait(randomInt(800, 1500));
+    }
+    if (accepted.length) {
+        await $.wait(2000);
+        const chk = await seedPost(cred, '/cmpp-manage/task/getGrowthTaskList', { taskListId: SEED_TASK_LIST_ID });
+        if (chk.resultCode === 0) {
+            const still = (chk.data || []).filter(t => accepted.includes(t.taskId) && t.isFinish !== 1).length;
+            if (still) lines.push(`· 复查：${still} 个任务状态待刷新`);
+        }
+    }
+    if (!lines.length) lines.push('任务已全部完成');
+    return { lines, done };
+}
+
+// 待领阳光值气泡：home 里的 unreceivedCreditsVOList 逐条 claim
+async function seedClaim(cred) {
+    const r = await seedPost(cred, '/api/activity/slgCredits/getSlgCreditsHomePage', { activityId: SEED_ACTIVITY_ID });
+    if (r.resultCode !== 0) return { lines: [`待领阳光值获取失败: ${r.resultCode} ${r.msg || ''}`], got: 0 };
+    const records = (r.data || {}).unreceivedCreditsVOList || [];
+    if (!records.length) return { lines: ['待领阳光值：无'], got: 0 };
+    const lines = [];
+    let got = 0;
+    for (const rec of records) {
+        const resp = await seedPost(cred, '/api/activity/slgCredits/getGrowthBubble', {
+            activityId: SEED_ACTIVITY_ID, creditsRecordId: rec.recordId, referer: SEED_PAGE_KEY, channelNo: SEED_CHANNEL,
+        });
+        const name = rec.showName || '阳光值', num = Number(rec.showNum || 0);
+        if (resp.resultCode === 0) { lines.push(`✓ 领取 ${name} +${num}`); got += num; }
+        else lines.push(`✗ 领取 ${name} 失败: ${resp.msg || resp.resultCode}`);
+        $.log(`[豆苗·领取] ${lines[lines.length - 1]}`);
+        await $.wait(500);
+    }
+    return { lines, got };
+}
+
+// 主流程：凭证探活 → 签到 → 任务 → 领取 → 阳光值前后对比（入账延迟不等待，照上游 0c27462）
+async function runSeed(user) {
+    const lines = [];
+    const say = t => { lines.push(t); $.log(t); };
+    const cred = user.coc3Phone || getEnv('cmcc_coc3_phone') || '';
+    if (!cred) { say('[豆苗] 未配置 coc3_phone（抓 dev.coc.10086.cn 任一请求的 phone 头），跳过'); return lines; }
+
+    const all = $.toObj($.getdata(SEED_STATE_KEY), {}) || {};
+    const k = user.userCheckId || user.userName || 'default';
+    const state = all[k] || {};
+    const nowSec = Date.now() / 1000;
+    const sig = seedCredSig(cred);
+    let ageSec = 0, isNew = false;
+    if (state.credSig !== sig) { Object.assign(state, { credSig: sig, credFirst: nowSec, lastOk: null }); isNew = true; }
+    else ageSec = Math.max(0, nowSec - Number(state.credFirst || nowSec));
+
+    // 探活：queryGrowthValue 回 -516 或 msg 含「登录」即凭证失效
+    const chkResp = await seedPost(cred, '/api/activity/slgCredits/queryGrowthValue', { activityId: SEED_ACTIVITY_ID });
+    const chkMsg = String(chkResp.msg || '');
+    if (chkResp.resultCode === -516 || /登录/.test(chkMsg)) {
+        const extra = state.lastOk ? `，上次成功 ${seedAge(nowSec - Number(state.lastOk))} 前` : '';
+        say(`[豆苗] coc3_phone 已失效（${chkMsg || '登录已失效'}），已存活 ${seedAge(ageSec)}${extra}，请重新抓包更新`);
+        return lines;
+    }
+    state.lastOk = nowSec;
+    const growthBefore = chkResp.resultCode === 0 ? Number(((chkResp.data || {}).growthValue)) : null;
+    $.log(`[豆苗·凭证] coc3_phone 已存活 ${seedAge(ageSec)}${isNew ? '（新凭证，从本次开始计时）' : ''}`);
+
+    const today = $.time('yyyy-MM-dd');
+    const signLine = await seedSign(cred, state, today);
+    const taskRes = await seedTasks(cred);
+    const claimRes = await seedClaim(cred);
+    const afterResp = await seedPost(cred, '/api/activity/slgCredits/queryGrowthValue', { activityId: SEED_ACTIVITY_ID });
+    const growthAfter = afterResp.resultCode === 0 ? Number(((afterResp.data || {}).growthValue)) : null;
+    const lagged = claimRes.got && growthBefore != null && growthAfter != null && growthAfter < growthBefore + claimRes.got;
+
+    taskRes.lines.forEach(l => $.log(`[豆苗·任务] ${l}`));
+    all[k] = state;
+    $.setdata($.toStr(all, '{}'), SEED_STATE_KEY);
+    say(`[豆苗] 签到${signLine.slice(0, 24)}｜任务完成 ${taskRes.done} 个｜领取 ${claimRes.got} 阳光值｜余额 ${growthBefore ?? '?'}→${growthAfter ?? '?'}${lagged ? '（入账延迟，以活动页为准）' : ''}`);
+    return lines;
 }
 
 // ---------- 周三充值日（hlwyxhdhub/wedrecharge，参考 yupaiLy/cmcc-auto-checkin 的 cmcc_wed.py）----------
@@ -973,31 +1347,76 @@ async function doWedSeckill(user) {
     if (user.wedSkDay === $.time('yyyyMMdd')) { $.log('[周三·秒杀] 今天已执行过，本次不再打'); return lines; }
     let fired = 0;
     try {
-        const ctx = await exchangeSession(user, WED_ENTRY);
+        let ctx = await exchangeSession(user, WED_ENTRY);
         await wedApi(ctx, 'queryActivityInfo');
+        // 会话保活：HLWHD Cookie 只有 30 分钟，等待期间重建一次，开火前再强制重建
+        const fresh = async () => {
+            ctx = await exchangeSession(user, WED_ENTRY);
+            await wedApi(ctx, 'queryActivityInfo');
+        };
         const info = await wedApi(ctx, 'queryDrawPrizeInfo');
-        const srvMs = Number(info.currentTime) || Date.now();
-        const target = beijingAt(WSK_AT);
-        $.log(`[周三·秒杀] 服务器时间 ${fmtCn(srvMs)}，本机偏差 ${(srvMs - Date.now()).toFixed(0)} ms，rdStatus=${info.rdStatus}`);
-        $.log(`[周三·秒杀] 目标场次 ${WSK_AT}（北京时间 ${fmtCn(target)}），提前 ${WSK_LEAD}ms，间隔 ${WSK_INTERVAL}ms，预算 ${WSK_MAX_ATTEMPTS} 发`);
+        let srvMs = Number(info.currentTime) || Date.now();
+        $.log(`[周三·秒杀] 服务器时间 ${fmtCn(srvMs)}，本机偏差 ${(srvMs - Date.now()).toFixed(0)} ms，rdStatus=${info.rdStatus || '?'}`);
+
+        // 场次小时由服务端 rec_login 的 seckillTime 下发；未下发时不采信前端兜底的 [8,12,18]，按 App 显示只取 08:00
+        let skHours = null, sessNote = '';
+        try {
+            const rec = (await Request({ url: `${WED_API}/_pub/rec_login`, headers: apiHeaders(ctx), _timeout: 15000 })) || {};
+            const d = rec.data || {};
+            if (Array.isArray(d.seckillTime) && d.seckillTime.length) { skHours = d.seckillTime.map(Number); sessNote = '服务端下发'; }
+            else sessNote = '服务端未下发，按 App 显示取 08:00';
+            const nfos = d.Seckillnfos || [];
+            if (nfos.length) $.log('[周三·秒杀] 奖品: ' + nfos.map(p => `${p.name || ''}${p.subTitle ? `（${p.subTitle}）` : ''}`).join('；'));
+        } catch (e) { $.log(`[周三·秒杀] rec_login 获取失败: ${(e && e.message) || e}`); }
+        skHours = (skHours || [8]).sort((a, b) => a - b);
+        $.log(`[周三·秒杀] 共 ${skHours.length} 个场次（${sessNote}）: ` + skHours.map(h => `${pad2(h)}:00`).join(' / '));
+
+        // 目标场次：cmcc_wed_sk_at 优先，否则取最近一个未开始的。
+        // 这里按"今天这一场"算，不做 beijingAt 的顺延（顺延会把已过的 08:00 说明天的，导致今日已结束判不出来）
+        const dayAt = hms => {
+            const p = String(hms).split(':').map(Number);
+            const d = new Date(srvMs + 8 * 3600000);
+            return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), p[0] || 0, p[1] || 0, p[2] || 0) - 8 * 3600000;
+        };
+        let target, src;
+        if (WSK_AT_CFG) { target = dayAt(WSK_AT_CFG); src = `配置 ${WSK_AT_CFG}`; }
+        else {
+            const future = skHours.filter(h => dayAt(`${pad2(h)}:00:00`) >= srvMs);
+            if (!future.length) { say('[周三·秒杀] 今日场次已全部结束，明日再跑（或配置 cmcc_wed_sk_at 指定场次）'); return lines; }
+            target = dayAt(`${pad2(future[0])}:00:00`); src = `场次 ${pad2(future[0])}:00`;
+        }
+        $.log(`[周三·秒杀] 选定目标 ${fmtCn(target)}（${src}），提前 ${WSK_LEAD}ms，间隔 ${WSK_INTERVAL}ms，预算 ${WSK_MAX_ATTEMPTS} 发`);
 
         const waitMs = target - WSK_LEAD - srvMs;
         if (waitMs > WSK_MAX_WAIT) {
             say(`[周三·秒杀] 距开场还有 ${(waitMs / 60000).toFixed(1)} 分钟，超过等待上限 ${WSK_MAX_WAIT / 60000} 分钟，本次跳过（定时请设在开场前 1~2 分钟）`);
             return lines;
         }
-        // 等到点：每轮重新校时，防本机时钟漂移与会话过期
-        let remainMs = waitMs;
-        while (remainMs > 0) {
-            await $.wait(Math.min(remainMs + WSK_LEAD, 480000));
-            try {
-                const now2 = Number((await wedApi(ctx, 'queryDrawPrizeInfo')).currentTime) || Date.now();
-                remainMs = target - WSK_LEAD - now2;
-                if (remainMs > 60000) $.log(`[周三·秒杀] 会话心跳 ok，距开场 ${(remainMs / 1000).toFixed(0)} 秒`);
-            } catch (e) {
-                $.log(`[周三·秒杀] 校时失败: ${e.message || e}`);
-                remainMs -= 480000;
+        // 等到点：>150s 分段校时（校时失败即重建会话），150s~30s 之间强制重建一次，≤30s 贴等
+        let deadline = Date.now() + Math.max(0, waitMs), refreshed = false;
+        while (true) {
+            const remain = deadline - Date.now();
+            if (remain <= 0) break;
+            if (refreshed && remain > 30) { await $.wait(Math.min(remain - 30, 20000)); continue; }
+            if (remain > 150000) {
+                await $.wait(Math.min(30000, remain - 150000));
+                try {
+                    const now2 = Number((await wedApi(ctx, 'queryDrawPrizeInfo')).currentTime) || Date.now();
+                    deadline = Date.now() + Math.max(0, target - WSK_LEAD - now2);
+                    if (deadline - Date.now() > 60000) $.log(`[周三·秒杀] 会话心跳 ok，距开火 ${((deadline - Date.now()) / 1000).toFixed(0)} 秒`);
+                } catch (e) {
+                    $.log(`[周三·秒杀] 校时失败，重建会话: ${(e && e.message) || e}`);
+                    try { await fresh(); } catch (e2) { $.log(`[周三·秒杀] 重建会话失败: ${(e2 && e2.message) || e2}`); }
+                }
+                continue;
             }
+            if (!refreshed && remain > 30) {
+                $.log('[周三·秒杀] 开火前刷新会话（HLWHD Cookie 30 分钟滑动过期）');
+                try { await fresh(); } catch (e) { $.log(`[周三·秒杀] 开火前刷新失败: ${(e && e.message) || e}`); }
+                refreshed = true;
+                continue;
+            }
+            await $.wait(Math.min(200, remain));
         }
 
         let code = '', msg = '';
@@ -1064,14 +1483,6 @@ function wedQuotaLeft(t) {
 }
 
 // 北京时间 HH:MM:SS 对应的时间戳；已过 1 小时以上算明天（照 py 的处理）
-function beijingAt(hms) {
-    const parts = String(hms || '08:00:00').split(':').map(Number);
-    const bj = new Date(Date.now() + 8 * 3600000);
-    let t = Date.UTC(bj.getUTCFullYear(), bj.getUTCMonth(), bj.getUTCDate(), parts[0] || 0, parts[1] || 0, parts[2] || 0) - 8 * 3600000;
-    if (t < Date.now() - 3600000) t += 86400000;
-    return t;
-}
-
 // 签到结果统一格式: <端> <状态>（<天数>）[，获得: X][，备注]
 function markLine(who, ok, days, prize, note) {
     return `${who} ${ok ? '签到成功' : '今日已签'}${days ? `（${days}）` : ''}${prize ? `，获得: ${prize}` : ''}${note ? `，${note}` : ''}`;
@@ -1238,6 +1649,8 @@ function skPost(ctx, url, payload) {
     return Request({ url, method: 'post', headers: apiHeaders(ctx), body: payload || {}, _timeout: 10000 });
 }
 
+function pad2(n) { return String(n).padStart(2, '0'); }
+
 // 毫秒时间戳 → 北京时间 MM-DD HH:mm:ss（不依赖设备时区）
 function fmtCn(ms) {
     const d = new Date(Number(ms) + 8 * 3600000);
@@ -1398,7 +1811,9 @@ async function sendMsg(message) {
 // 脚本执行入口: $request 存在 → 抓取模式, 否则 → 定时任务模式
 !(async () => {
     if (typeof $request !== `undefined`) {
-        GetCookie();
+        // 两条抓取线：主站 appTokenLogin 拿签到凭证，豆苗域拿 phone 头
+        if (/dev\.coc\.10086\.cn/i.test($request.url || '')) GrabCocPhone();
+        else GetCookie();
     } else {
         await main();  // 主函数
     }
