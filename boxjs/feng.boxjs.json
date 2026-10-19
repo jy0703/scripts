@@ -654,7 +654,7 @@
           "name": "AI豆苗养成记",
           "val": false,
           "type": "boolean",
-          "desc": "移动爱购 AI豆苗：每日签到 + 浏览/分享任务 + 领取阳光值。phone 凭证由脚本用 App 票据走 userLoginV2 自产并缓存进该账号 coc3Phone（无需手填）；App 票据过期时兜底：开着获取Cookie进一次豆苗页抓取"
+          "desc": "移动爱购 AI豆苗：每日签到 + 浏览/分享任务 + 领取阳光值。phone 凭证只能抓包：开着获取Cookie进一次「AI豆苗养成记」页自动入库到该账号 coc3Phone（实测可用一小时以上，失效了重抓一次即可）。脚本不尝试自产——它的入口 userLoginV2 要 ticket=App 原生会话，由客户端安全 SDK 签名，55 分钟前的 ticket 复放即失效"
         },
         {
           "id": "cmcc_seed_channel",
