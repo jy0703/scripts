@@ -2,7 +2,7 @@
  * 脚本名称：中国移动签到
  * 活动规则：中国移动「签到领流量/话费」活动(1021122301) 的 App 端 mark31 签到，每天一次；另有 AI豆任务(mark/task) 与秒杀抢券(markSeckill：触发时刻早于 11:00 不执行，开抢早于 11:00 的场次也不抢，某一期抢中后本周内不再打、下周继续)；开关 cmcc_video 后追加「追剧领福利」页(1126082530) 的每日打卡 + 代币任务 + 周日抽奖；开关 cmcc_seed 后追加「AI豆苗养成记」(dev.coc.10086.cn 独立域，需 phone 头凭证)；开关 cmcc_wed 后追加「周三充值日」(hlwyxhdhub/wedrecharge) 的做任务挣次数 + 抽拼图集话费券（每天做，攒碎片），cmcc_wed_sk 再打场次秒杀(drawPrize，仅北京时间周三开火，当天打过一次即收工；场次时间默认听服务端 rec_login 的 seckillTime)
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。账号参数（App 票据/省市编码等）由本脚本 GetCookie 抓取后存入 cmcc_data
- * 环境变量：cmcc_data / cmcc_claim(默认开，填 false 才关) / cmcc_task / cmcc_seckill / cmcc_sk_min(每日秒杀的北京时间下限，默认 11:00，填 00:00 不受限) / cmcc_video / cmcc_seed / cmcc_coc3_phone(豆苗 phone 凭证，或写进 cmcc_data 的 coc3Phone) / cmcc_seed_channel / cmcc_wed / cmcc_wed_sk / cmcc_wed_sk_at(留空=服务端下发场次自动选最近未开始的一场) / cmcc_task_skip_days；cmcc_task_fail 为脚本自动维护的任务黑名单
+ * 环境变量：cmcc_data / cmcc_claim(默认开，填 false 才关) / cmcc_task / cmcc_seckill / cmcc_sk_min(每日秒杀的北京时间下限，默认 11:00，填 00:00 不受限) / cmcc_video / cmcc_seed(凭证写在各账号 cmcc_data 的 coc3Phone，不单列变量) / cmcc_seed_channel / cmcc_wed / cmcc_wed_sk / cmcc_wed_sk_at(留空=服务端下发场次自动选最近未开始的一场) / cmcc_task_skip_days；cmcc_task_fail 为脚本自动维护的任务黑名单
  * 更新时间：2026-10-12 新增周三充值日(hlwyxhdhub wedrecharge)：任务代做 + 抽拼图 + 集齐领取 + 场次秒杀，开关 cmcc_wed / cmcc_wed_sk；AI豆任务同步上游：握手会话整轮复用、taskToken 任务直接握手、外部合作区跳过、status=1 遗留补领、公众号类即弃、停留与间隔提速；连签奖励改为只要开了就查一遍代领（不再要求当天由脚本签到），展示改用响应里的 prizeName/prizeValue。2026-10-13 每日秒杀加 11:00 触发门控(cmcc_sk_min)与"按周去重"(skWinDay 记抢中那期的日期，比较时换算成该周周一：本周不再打，下周自动恢复)；服务端回"已领取/限领"也按同样口径落盘，覆盖在 App 里领过的情况；邀好友/助力类任务与外部合作区一样常驻跳过；周三场次秒杀加"当天打过即收工"(wedSkDay，发过 drawPrize 才记)。2026-10-18 同步上游：追剧新增看精彩视频每日任务(queryDiyVideoTask + getYDRZToken + cmlive 两步，每完成 +1 抽奖次数、周日 2 次)；新增 AI豆苗养成记(cmcc_seed)；周三场次秒杀同步 rec_login 下发场次 + 等待期会话重建与开火前强刷
 
 ------------------ Surge 配置 ------------------
@@ -170,8 +170,11 @@ function GrabCocPhone() {
         if (!phone) return;   // 活动静态资源也走这条规则，没有 phone 头的直接忽略
         const list = $.userArr;
         if (!list.length) { $.log('❌ 豆苗 phone 未入库：cmcc_data 还没有账号，请先抓一次签到凭证'); return; }
+        // 该域每个请求都带 phone 头：同值就完全静默（不写也不通知），否则会一路刷写，
+        // 多账号时还会把同一份凭证扇进所有空位
+        if (list.some(e => e.coc3Phone === phone)) return;
         const idx = list.length === 1 ? 0 : list.findIndex(e => !e.coc3Phone);
-        if (idx < 0) { $.log('⚠️ 豆苗 phone 未入库：所有账号都已有 phone，请先清空要更新那条的 coc3Phone'); return; }
+        if (idx < 0) { $.log('⚠️ 豆苗 phone 未入库：所有账号都已有别的 phone，请先清空要更新那条的 coc3Phone'); return; }
         list[idx].coc3Phone = phone;
         $.setdata($.toStr(list), 'cmcc_data');
         const msg = `🎉 豆苗 phone 已写入 ${list[idx].userName || '账号' + (idx + 1)}（长度 ${String(phone).length}）`;
@@ -1100,8 +1103,8 @@ async function seedClaim(cred) {
 async function runSeed(user) {
     const lines = [];
     const say = t => { lines.push(t); $.log(t); };
-    const cred = user.coc3Phone || getEnv('cmcc_coc3_phone') || '';
-    if (!cred) { say('[豆苗] 未配置 coc3_phone（抓 dev.coc.10086.cn 任一请求的 phone 头），跳过'); return lines; }
+    const cred = user.coc3Phone || '';
+    if (!cred) { say('[豆苗] 该账号 cmcc_data 里没有 coc3Phone，跳过：开着获取Cookie进一次豆苗活动页即自动写入，也可手工在该账号条目里加该字段'); return lines; }
 
     const all = $.toObj($.getdata(SEED_STATE_KEY), {}) || {};
     const k = user.userCheckId || user.userName || 'default';

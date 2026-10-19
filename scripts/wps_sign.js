@@ -119,8 +119,6 @@ const ACTION_GAP = [5, 10];  // 任务之间的随机间隔(秒)，模拟真人�
 async function main() {
     if ($.userArr.length) {
         $.log(`\n🌀 找到 ${$.userArr.length} 个 Cookie 变量`);
-        // 打印各 BoxJS 开关实际读到的值(undefined=未设置，按 GLOBAL_CONFIG 走)
-        $.log(`任务开关: ${['wps_off_hot', 'wps_off_trial', 'wps_off_center', 'wps_off_lottery3', 'wps_off_fragment', 'wps_off_challenge', 'wps_off_applet'].map(k => `${k.slice(8)}=${JSON.stringify(getEnv(k))}`).join(' ')}`);
 
         // 遍历账号
         for (let i = 0; i < $.userArr.length; i++) {

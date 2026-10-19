@@ -565,7 +565,6 @@
         "cmcc_sk_min",
         "cmcc_video",
         "cmcc_seed",
-        "cmcc_coc3_phone",
         "cmcc_seed_channel",
         "cmcc_wed",
         "cmcc_wed_sk",
@@ -630,17 +629,7 @@
           "name": "AI豆苗养成记",
           "val": false,
           "type": "boolean",
-          "desc": "移动爱购 AI豆苗：每日签到 + 浏览/分享任务 + 领取阳光值；需另配下面的 phone 凭证，未配置则整块跳过并提示"
-        },
-        {
-          "id": "cmcc_coc3_phone",
-          "name": "豆苗 phone 凭证",
-          "val": "",
-          "type": "textarea",
-          "autoGrow": true,
-          "rows": 1,
-          "placeholder": "抓 dev.coc.10086.cn 任一请求头 phone 的值",
-          "desc": "dev.coc.10086.cn 请求头 phone，长期有效。开着「中国移动获取Cookie」进一次豆苗活动页会自动写入该账号的 coc3Phone（多账号先留空等它填位），也可手工粘贴"
+          "desc": "移动爱购 AI豆苗：每日签到 + 浏览/分享任务 + 领取阳光值；凭证是该域的请求头 phone，存在各账号 cmcc_data 条目的 coc3Phone 里（开着获取Cookie进一次豆苗页自动写入），缺了整块跳过并提示"
         },
         {
           "id": "cmcc_seed_channel",

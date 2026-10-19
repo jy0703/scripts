@@ -105,9 +105,11 @@ var onRequest, onResponse;
         if (!env) { console.log('[cmcc] 豆苗 phone 已抓到（' + String(phone).length + ' 字符），但 context.env 不可用，未入库'); return request; }
         var list = readList(env[ENV_KEY]);
         if (!list.length) { console.log('[cmcc] 豆苗 phone 未入库：' + ENV_KEY + ' 里还没有账号，请先抓一次签到凭证'); return request; }
+        // 同值即静默：该域每个请求都带 phone 头，不去重会一路刷写并反复推 Bark（多账号还会扇进所有空位）
+        for (var s = 0; s < list.length; s++) { if (list[s].coc3Phone === phone) return request; }
         var idx = list.length === 1 ? 0 : -1;
         if (idx === -1) { for (var i = 0; i < list.length; i++) { if (!list[i].coc3Phone) { idx = i; break; } } }
-        if (idx === -1) { console.log('[cmcc] 豆苗 phone 未入库：所有账号都已有 phone，要更新请先清空对应条目'); return request; }
+        if (idx === -1) { console.log('[cmcc] 豆苗 phone 未入库：所有账号都已有别的 phone，要更新请先清空对应条目'); return request; }
         list[idx].coc3Phone = phone;
         var text = JSON.stringify(list);
         env[ENV_KEY] = text;
