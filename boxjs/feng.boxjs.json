@@ -86,7 +86,8 @@
         "WPS 任务中心(签到/任务/抽奖)、天天领福利、挑战计划、超级会员小程序，支持多账号",
         "抓取：开启插件捕获开关后从 WPS 会员中心横幅进入签到活动页，Cookie 不含 uid 也会由 islogin 自动补，只要能带上 wps_sid",
         "小程序浏览任务依赖「获取小程序code」(@wxCode.address/token)，账号 ref 填本区域 WPS_REF，也可在 WPS_COOKIE 账号项里单独指定",
-        "日常要跳过某项任务，把本区域对应的「关闭…」开关置 true(未设置=照常执行)；抓错 Cookie 可用「清空已抓 Cookie」一次性清除"
+        "日常要跳过某项任务，把本区域对应的「关闭…」开关置 true(未设置=照常执行)；抓错 Cookie 可用「清空已抓 Cookie」一次性清除",
+        "定时：限量爆款每天 10 点放量(库存少)，脚本按服务端 server_time 校时蹲到放量时刻再重取库存，故 cron 需设在 9:58 左右且 timeout≥600"
       ],
       "icons": [
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/wps.png",
@@ -103,7 +104,10 @@
         "wps_off_fragment",
         "wps_off_challenge",
         "wps_off_applet",
-        "wps_clear"
+        "wps_clear",
+        "wps_sk_at",
+        "wps_sk_lead",
+        "wps_sk_maxwait"
       ],
       "settings": [
         {
@@ -188,6 +192,27 @@
           "val": false,
           "type": "boolean",
           "desc": "置 true 后运行一次即清空 WPS_COOKIE 并自动复位为 false；仅 NE 生效，Node 环境请改环境变量"
+        },
+        {
+          "id": "wps_sk_at",
+          "name": "放量时刻覆盖",
+          "val": "",
+          "type": "textarea",
+          "desc": "北京时间 HH:MM[:SS]。留空则读组件返回的 daily_stock_refresh_hour(当前 10 点)；填了强制该时刻"
+        },
+        {
+          "id": "wps_sk_lead",
+          "name": "提前开火(ms)",
+          "val": "",
+          "type": "textarea",
+          "desc": "抵消网络往返，留空用 400"
+        },
+        {
+          "id": "wps_sk_maxwait",
+          "name": "最长蹲守(ms)",
+          "val": "",
+          "type": "textarea",
+          "desc": "距放量超过该时长本次就不蹲，留空用 300000(5分钟)；定时需设在开场前该时长之内"
         }
       ]
     },
@@ -629,7 +654,7 @@
           "name": "AI豆苗养成记",
           "val": false,
           "type": "boolean",
-          "desc": "移动爱购 AI豆苗：每日签到 + 浏览/分享任务 + 领取阳光值；凭证是该域的请求头 phone，存在各账号 cmcc_data 条目的 coc3Phone 里（开着获取Cookie进一次豆苗页自动写入），缺了整块跳过并提示"
+          "desc": "移动爱购 AI豆苗：每日签到 + 浏览/分享任务 + 领取阳光值。phone 凭证由脚本用 App 票据走 userLoginV2 自产并缓存进该账号 coc3Phone（无需手填）；App 票据过期时兜底：开着获取Cookie进一次豆苗页抓取"
         },
         {
           "id": "cmcc_seed_channel",

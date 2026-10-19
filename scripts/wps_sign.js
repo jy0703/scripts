@@ -6,7 +6,7 @@
  * 小程序浏览任务：依赖 YYB code 服务，boxjs 配置 @wxCode.address / @wxCode.token，账号 ref 填在本脚本区域 WPS_REF
  *          （Node 环境变量 WX_CODE_ADDRESS / WX_CODE_TOKEN / WPS_REF 亦可，多个 ref 逗号分隔按账号顺序对应）
  * 获取 Cookie：在 WPS 内从会员中心横幅进入签到活动页（触发 rubik2/portal 页面请求）即可抓取。入库主键是 uid：Cookie 里带 uid 直接取，只有 wps_sid 时由 islogin 现补(会多挂几十~几百毫秒)，两者都拿不到才拒绝入库
- * 更新时间：2026-10-19 新增限量爆款(每天10点放量，只挑有货档位抢)与会员试用(divide_prize 三档全领，次日开奖)；另加 day_info 签到预检、islogin 登录态校验(区分网络抖动与真失效)、classify 文案归类、任务间 5~10s 随机间隔、BoxJS 逐任务关闭开关，通知行统一为 标记+任务名+状态 且前置失败走 subtitle、多账号加账号分段行；2026-10-04 天天领福利切福利中心新期(YM2025060910400185)，打卡复用序列/抽奖动态场次，sign_date 改北京日期；签到加密本地化；小程序动态签名+动态盐+领昨日奖励
+ * 更新时间：2026-10-19 新增限量爆款(每天10点放量，只挑有货档位抢)与会员试用(divide_prize 三档全领，次日开奖)；另加 day_info 签到预检、islogin 登录态校验(区分网络抖动与真失效)、classify 文案归类、任务间 5~10s 随机间隔、BoxJS 逐任务关闭开关，通知行统一为 标记+任务名+状态 且前置失败走 subtitle、多账号加账号分段行；限量爆款按 server_time 校时蹲到放量时刻再重取库存(每档只发一发)，定时改 9:58 触发、timeout 600；2026-10-04 天天领福利切福利中心新期(YM2025060910400185)，打卡复用序列/抽奖动态场次，sign_date 改北京日期；签到加密本地化；小程序动态签名+动态盐+领昨日奖励
 
 ------------------ Surge 配置 ------------------
 
@@ -14,9 +14,9 @@
 hostname = personal-act.wps.cn
 
 [Script]
-WPS签到获取Cookie = type=http-request,pattern=^https?:\/\/personal-act\.wps\.cn\/rubik2\/portal\/,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js,script-update-interval=0
+WPS签到获取Cookie = type=http-request,pattern=^https?:\/\/personal-act\.wps\.cn\/rubik2\/portal\/,requires-body=0,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js,script-update-interval=0
 
-WPS签到 = type=cron,cronexp="0 10 * * *",timeout=120,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js,script-update-interval=0
+WPS签到 = type=cron,cronexp="58 9 * * *",timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js,script-update-interval=0
 
 ------------------- Loon 配置 -------------------
 
@@ -24,9 +24,9 @@ WPS签到 = type=cron,cronexp="0 10 * * *",timeout=120,script-path=https://raw.g
 hostname = personal-act.wps.cn
 
 [Script]
-http-request ^https?:\/\/personal-act\.wps\.cn\/rubik2\/portal\/ tag=WPS签到获取Cookie,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js,requires-body=1
+http-request ^https?:\/\/personal-act\.wps\.cn\/rubik2\/portal\/ timeout=30, tag=WPS签到获取Cookie,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js,requires-body=0
 
-cron "0 10 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js, timeout=120, tag=WPS签到,enable=true
+cron "58 9 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js, timeout=600, tag=WPS签到,enable=true
 
 --------------- Quantumult X 配置 ---------------
 
@@ -37,15 +37,15 @@ hostname = personal-act.wps.cn
 ^https?:\/\/personal-act\.wps\.cn\/rubik2\/portal\/ url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js
 
 [task_local]
-0 10 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js, tag=WPS签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/wps.png, enabled=true
+58 9 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js, tag=WPS签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/wps.png, enabled=true
 
 ------------------ Stash 配置 ------------------
 
 cron:
   script:
     - name: WPS签到
-      cron: '0 10 * * *'
-      timeout: 120
+      cron: '58 9 * * *'
+      timeout: 600
 
 http:
   mitm:
@@ -56,7 +56,7 @@ http:
     - match: ^https?:\/\/personal-act\.wps\.cn\/rubik2\/portal\/
       name: WPS签到获取Cookie
       type: request
-      require-body: true
+      require-body: false
 
 script-providers:
   WPS签到:
@@ -113,6 +113,9 @@ const WIN_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KH
 const SKIP_KEYWORDS = ['邀请', 'PDF转换', 'PDF合并', '语音速记', '关注', '消费', '开通会员', '认证', '上喜马拉雅', '微博', '苏宁易购', '添加'];
 
 const ACTION_GAP = [5, 10];  // 任务之间的随机间隔(秒)，模拟真人操作避风控
+const SK_LEAD = Number(getEnv('wps_sk_lead')) || 400;            // 限量爆款提前开火(ms)，抵消网络往返
+const SK_MAX_WAIT = Number(getEnv('wps_sk_maxwait')) || 300000;  // 距放量超过该时长就不干等(ms)，本次不蹲
+const SK_AT_CFG = getEnv('wps_sk_at') || '';             // 北京时间 HH:MM[:SS] 强制放量时刻，留空读 daily_stock_refresh_hour
 
 
 // 主函数
@@ -1638,37 +1641,91 @@ async function getFlzxPageInfo() {
     }
 }
 
+// 读爆款组件的实时状态(组件项用顶层 number / component_node_id / type / server_time，没有 component_uniq_number 字段)
+async function loadHotState() {
+    const list = await getFlzxPageInfo();
+    if (!list) return null;
+    const item = list.find(it => it && it.privilege_select) ||
+        list.find(it => it && it.number === FLZX_HOT_COMP.number);
+    const ps = (item && item.privilege_select) || {};
+    return { item, ps, details: ps.privilege_select_details || [] };
+}
+
+// 只挑有货档位；has_stock 字段整体缺失时才退回全部档位
+function pickHotPool(details) {
+    const inStock = details.filter(d => d.has_stock === true);
+    return details.some(d => d.has_stock !== undefined) ? inStock : details;
+}
+
+// 蹲到放量时刻：时刻优先取 wps_sk_at，否则取 detail 的 daily_stock_refresh_hour；
+// 一律以组件项的 server_time(秒) 为准，本机时钟偏差与整点漂移都不采信本机时间。
+// 返回 'waited' 真蹲过一段(需要重取库存), 'now' 已过放量时刻, false 本次不该开火
+async function waitHotOpenWindow(item, details) {
+    const srvSec = Number(item && item.server_time);
+    if (!srvSec) return 'now';
+    const srvMs = srvSec * 1000;
+    const p = SK_AT_CFG.split(':').map(Number);
+    const hours = details.map(x => Number(x.daily_stock_refresh_hour)).filter(h => Number.isFinite(h));
+    const hour = SK_AT_CFG ? (p[0] || 0) : (hours.length ? Math.min(...hours) : NaN);
+    if (!Number.isFinite(hour)) return 'now';
+
+    const bj = new Date(srvMs + 8 * 3600000);
+    const target = Date.UTC(bj.getUTCFullYear(), bj.getUTCMonth(), bj.getUTCDate(), hour, p[1] || 0, p[2] || 0) - 8 * 3600000;
+    const waitMs = target - SK_LEAD - srvMs;
+    if (waitMs <= 0) return 'now';
+    if (waitMs > SK_MAX_WAIT) {
+        report('限量爆款', `距放量 ${Math.round(waitMs / 1000)}s 超过等待上限，本次不蹲`, '⚠️');
+        return false;
+    }
+    $.log(taskMsg('⏳', '限量爆款', `距放量 ${Math.round(waitMs / 1000)}s(校时偏差 ${(srvMs - Date.now()).toFixed(0)}ms)，蹲点`));
+    let remain = waitMs;
+    do {
+        const step = Math.min(remain, 30000);   // 分段等，避免一次性长睡卡住日志
+        await $.wait(step);
+        remain -= step;
+    } while (remain > 0);
+    return 'waited';
+}
+
 // 限量爆款「每天10点可领·任选1个」(privilege_select)：超级会员 ≫ 积分，逐档抢，抢到一档即止
-// page_info 的组件项用顶层 number / component_node_id / type（没有 component_uniq_number 字段）
+// 每天只有 1 次机会，故每档只发 1 发不连发(售罄失败是否消耗当天机会尚未实测)，蹲到放量再重取库存
 async function doHotSelectTask() {
     try {
-        const list = await getFlzxPageInfo();
-        if (!list) {
+        let state = await loadHotState();
+        if (!state) {
             report('限量爆款', 'page_info 无响应', '❌');
             return;
         }
-
-        const item = list.find(it => it && it.privilege_select) ||
-            list.find(it => it && it.number === FLZX_HOT_COMP.number);
-        const ps = (item && item.privilege_select) || {};
-        const details = ps.privilege_select_details || [];
-        if (!details.length) {
+        if (!state.details.length) {
             report('限量爆款', '未找到爆款组件(活动可能已换期，需重抓 page_info)', '⚠️');
             return;
         }
-
-        // 每天只有 1 次机会，用掉了就直接收
-        if (ps.select_reach_limit) {
+        if (state.ps.select_reach_limit) {
             report('限量爆款', '今日已领取');
             return;
         }
 
-        // has_stock=false 表示该档已抢光(未到 daily_stock_refresh_hour 10 点或已被抢完)，
-        // 打过去只会回"哎呀，来晚了"，所以只挑有货的档；字段整体缺失时才退回全部档位
-        const inStock = details.filter(d => d.has_stock === true);
-        const pool = details.some(d => d.has_stock !== undefined) ? inStock : details;
+        let pool = pickHotPool(state.details);
+
+        // 无货分两种：还没到放量时刻(蹲到点再判)，或确实被抢光了
         if (!pool.length) {
-            report('限量爆款', `今日暂无库存(${details.map(d => d.daily_stock_refresh_hour + '点放量').join('/')})`, '⚠️');
+            const gate = await waitHotOpenWindow(state.item, state.details);
+            if (gate === false) return;
+            if (gate === 'waited') {
+                // 放量切换有数秒滞后，到点后重取确认，最多 3 次
+                for (let i = 0; i < 3 && !pool.length; i++) {
+                    if (i) await $.wait(2000);
+                    state = (await loadHotState()) || state;
+                    if (state.ps.select_reach_limit) {
+                        report('限量爆款', '今日已领取');
+                        return;
+                    }
+                    pool = pickHotPool(state.details);
+                }
+            }
+        }
+        if (!pool.length) {
+            report('限量爆款', `今日暂无库存(${state.details.map(d => d.daily_stock_refresh_hour + '点放量').join('/')})`, '⚠️');
             return;
         }
 
@@ -1685,10 +1742,10 @@ async function doHotSelectTask() {
                     component_uniq_number: {
                         activity_number: FLZX_ACTIVITY,
                         page_number: FLZX_PAGE,
-                        component_number: item.number || FLZX_HOT_COMP.number,
-                        component_node_id: item.component_node_id || FLZX_HOT_COMP.node,
+                        component_number: state.item.number || FLZX_HOT_COMP.number,
+                        component_node_id: state.item.component_node_id || FLZX_HOT_COMP.node,
                     },
-                    component_type: item.type || FLZX_HOT_COMP.type,
+                    component_type: state.item.type || FLZX_HOT_COMP.type,
                     component_action: 'privilege_select.exec',
                     // 每个选项的 group_id 与 privilege_id 不一定相等(超级会员是 1/101)，都取自 detail
                     privilege_select: { group_id: d.group_id, privilege_id: d.privilege_id },
@@ -1700,7 +1757,7 @@ async function doHotSelectTask() {
                 report('限量爆款', `领取成功 ${d.title || 'pid ' + d.privilege_id}`);
                 return;
             }
-            // 这一档没抢到(多半已秒光)，继续抢下一档
+            // 这一档没抢到(多半已秒光)，继续试下一档
             lastReason = inner.reason || (response && response.msg) || '';
             debug(response, `限量爆款 ${d.title || d.privilege_id} 未中`);
             await $.wait(300);

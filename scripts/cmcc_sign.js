@@ -84,6 +84,7 @@ const RUN_SEED = getEnv('cmcc_seed') === 'true';
 const SEED_BASE = 'https://dev.coc.10086.cn/coc3/coc3-market-activity';
 const SEED_PAGE_URL = 'https://dev.coc.10086.cn/coc3/canvas/rightsmarket-h5-canvas/online/2026dmycj?pageRecorded=true';
 const SEED_PAGE_KEY = '2026dmycj';
+const SEED_LOGIN_API = 'https://dev.coc.10086.cn/coc3/gr/login/ssoRights';
 const SEED_ACTIVITY_ID = 17692;
 const SEED_TASK_LIST_ID = 55;
 const SEED_SIGN_TASK_ID = 3115;
@@ -1099,12 +1100,42 @@ async function seedClaim(cred) {
     return { lines, got };
 }
 
-// 主流程：凭证探活 → 签到 → 任务 → 领取 → 阳光值前后对比（入账延迟不等待，照上游 0c27462）
+// phone 凭证自产：userLoginV2 用 App 票据（与 cmcc_sign 的 token 同一串 cookie）换加密手机号 token，
+// 真机抓包确认 ticket 与 jsid 同值、ticketType=11、businessType=RIGHTS_MARKET，其余字段留空
+async function seedLogin(user) {
+    const ticket = user.token || '';
+    if (!ticket) { $.log('[豆苗] 无 App 票据(token)，无法自产 phone 凭证'); return ''; }
+    const r = await Request({
+        url: `${SEED_LOGIN_API}/userLoginV2`, method: 'post',
+        headers: {
+            accept: 'application/json, text/plain, */*',
+            'content-type': 'application/json;charset=utf-8',
+            origin: 'https://dev.coc.10086.cn',
+            referer: SEED_PAGE_URL,
+            'user-agent': user.userAgent || USER_AGENT,
+            'accept-language': 'zh-CN,zh-Hans;q=0.9',
+        },
+        body: { ticket, ticketType: '11', businessType: 'RIGHTS_MARKET', wxoaType: '', m1: '', m2: '', s1: '', s2: '', from: '', jsid: ticket },
+        _timeout: 30000,
+    });
+    const d = (r && r.data) || {};
+    if (!r || String(r.code) !== '0' || !d.token) {
+        $.log(`[豆苗] userLoginV2 换取失败: ${r && r.code} ${(r && r.message) || ''}`);
+        return '';
+    }
+    user.coc3Phone = d.token;
+    user.coc3PhoneAt = Date.now();
+    saveUsers();
+    $.log(`[豆苗] userLoginV2 已自产 phone 凭证（${d.mobileMask || '手机号已掩码'}，province ${d.provinceCode || '?'}）`);
+    return d.token;
+}
+
+// 主流程：凭证探活（缺了就自产一次）→ 签到 → 任务 → 领取 → 阳光值前后对比（入账延迟不等待，照上游 0c27462）
 async function runSeed(user) {
     const lines = [];
     const say = t => { lines.push(t); $.log(t); };
-    const cred = user.coc3Phone || '';
-    if (!cred) { say('[豆苗] 该账号 cmcc_data 里没有 coc3Phone，跳过：开着获取Cookie进一次豆苗活动页即自动写入，也可手工在该账号条目里加该字段'); return lines; }
+    let cred = user.coc3Phone || await seedLogin(user);
+    if (!cred) { say('[豆苗] 拿不到 phone 凭证（App 票据过期时才会这样），跳过；也可开着获取Cookie进一次豆苗页兜底'); return lines; }
 
     const all = $.toObj($.getdata(SEED_STATE_KEY), {}) || {};
     const k = user.userCheckId || user.userName || 'default';
@@ -1115,15 +1146,28 @@ async function runSeed(user) {
     if (state.credSig !== sig) { Object.assign(state, { credSig: sig, credFirst: nowSec, lastOk: null }); isNew = true; }
     else ageSec = Math.max(0, nowSec - Number(state.credFirst || nowSec));
 
-    // 探活：queryGrowthValue 回 -516 或 msg 含「登录」即凭证失效
-    const chkResp = await seedPost(cred, '/api/activity/slgCredits/queryGrowthValue', { activityId: SEED_ACTIVITY_ID });
-    const chkMsg = String(chkResp.msg || '');
-    if (chkResp.resultCode === -516 || /登录/.test(chkMsg)) {
+    // 探活：queryGrowthValue 回 -516 或 msg 含「登录」即凭证失效 → 先自动 userLoginV2 重登一次再复检
+    let chkResp = await seedPost(cred, '/api/activity/slgCredits/queryGrowthValue', { activityId: SEED_ACTIVITY_ID });
+    let chkMsg = String(chkResp.msg || '');
+    const dead = () => chkResp.resultCode === -516 || /登录/.test(chkMsg);
+    if (dead()) {
+        $.log(`[豆苗·凭证] 已失效（${chkMsg || '登录已失效'}，存活 ${seedAge(ageSec)}），尝试用 App 票据自产新凭证`);
+        const fresh = await seedLogin(user);
+        if (fresh) {
+            cred = fresh;
+            chkResp = await seedPost(cred, '/api/activity/slgCredits/queryGrowthValue', { activityId: SEED_ACTIVITY_ID });
+            chkMsg = String(chkResp.msg || '');
+        }
+    }
+    if (dead()) {
         const extra = state.lastOk ? `，上次成功 ${seedAge(nowSec - Number(state.lastOk))} 前` : '';
-        say(`[豆苗] coc3_phone 已失效（${chkMsg || '登录已失效'}），已存活 ${seedAge(ageSec)}${extra}，请重新抓包更新`);
+        say(`[豆苗] phone 凭证失效且自产失败（${chkMsg || '登录已失效'}）${extra}——App 票据多半已过期，请重新抓包或开着获取Cookie进一次豆苗页`);
         return lines;
     }
     state.lastOk = nowSec;
+    // 自产换新凭证后重置计时起点，别让下一轮把老凭证的存活时长算到新账上
+    const sig2 = seedCredSig(cred);
+    if (state.credSig !== sig2) Object.assign(state, { credSig: sig2, credFirst: nowSec });
     const growthBefore = chkResp.resultCode === 0 ? Number(((chkResp.data || {}).growthValue)) : null;
     $.log(`[豆苗·凭证] coc3_phone 已存活 ${seedAge(ageSec)}${isNew ? '（新凭证，从本次开始计时）' : ''}`);
 
