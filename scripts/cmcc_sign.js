@@ -1,43 +1,44 @@
 /**
  * 脚本名称：中国移动签到
- * 活动规则：中国移动「签到领流量/话费」活动(1021122301) 的 App 端 mark31 签到，每天一次；另有 AI豆任务(mark/task) 与秒杀抢券(markSeckill：触发时刻早于 11:00 不执行，开抢早于 11:00 的场次也不抢，某一期抢中后本周内不再打、下周继续)；开关 cmcc_video 后追加「追剧领福利」页(1126082530) 的每日打卡 + 代币任务 + 周日抽奖；开关 cmcc_seed 后追加「AI豆苗养成记」(dev.coc.10086.cn 独立域，需 phone 头凭证)；开关 cmcc_wed 后追加「周三充值日」(hlwyxhdhub/wedrecharge) 的做任务挣次数 + 抽拼图集话费券（每天做，攒碎片），cmcc_wed_sk 再打场次秒杀(drawPrize，仅北京时间周三开火，当天打过一次即收工；场次时间默认听服务端 rec_login 的 seckillTime)
+ * 活动规则：中国移动「签到领流量/话费」活动(1021122301) 的 App 端 mark31 签到，每天一次；另有 AI豆任务(mark/task) 与秒杀抢券(markSeckill：触发时刻早于 11:00 不执行，开抢早于 11:00 的场次也不抢，某一期抢中后本周内不再打、下周继续)；开关 cmcc_video 后追加「追剧领福利」页(1126082530) 的每日打卡 + 代币任务 + 周日抽奖；开关 cmcc_seed 后追加「AI豆苗养成记」(coc 独立域，用长效 ticket 每次现签 phone 头)；开关 cmcc_gold 后追加签到专属 AI豆兑换话费券(按 5/2/1.5/1 元顶格兑，默认关)；开关 cmcc_wed 后追加「周三充值日」(hlwyxhdhub/wedrecharge) 的做任务挣次数 + 抽拼图集话费券（每天做，攒碎片），cmcc_wed_sk 再打场次秒杀(drawPrize，仅北京时间周三开火，当天打过一次即收工；场次时间默认听服务端 rec_login 的 seckillTime)
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。账号参数（App 票据/省市编码等）由本脚本 GetCookie 抓取后存入 cmcc_data
- * 环境变量：cmcc_data / cmcc_claim(默认开，填 false 才关) / cmcc_task / cmcc_seckill / cmcc_sk_min(每日秒杀的北京时间下限，默认 11:00，填 00:00 不受限) / cmcc_video / cmcc_seed(凭证写在各账号 cmcc_data 的 coc3Phone，不单列变量) / cmcc_seed_channel / cmcc_wed / cmcc_wed_sk / cmcc_wed_sk_at(留空=服务端下发场次自动选最近未开始的一场) / cmcc_task_skip_days；cmcc_task_fail 为脚本自动维护的任务黑名单
- * 更新时间：2026-10-12 新增周三充值日(hlwyxhdhub wedrecharge)：任务代做 + 抽拼图 + 集齐领取 + 场次秒杀，开关 cmcc_wed / cmcc_wed_sk；AI豆任务同步上游：握手会话整轮复用、taskToken 任务直接握手、外部合作区跳过、status=1 遗留补领、公众号类即弃、停留与间隔提速；连签奖励改为只要开了就查一遍代领（不再要求当天由脚本签到），展示改用响应里的 prizeName/prizeValue。2026-10-13 每日秒杀加 11:00 触发门控(cmcc_sk_min)与"按周去重"(skWinDay 记抢中那期的日期，比较时换算成该周周一：本周不再打，下周自动恢复)；服务端回"已领取/限领"也按同样口径落盘，覆盖在 App 里领过的情况；邀好友/助力类任务与外部合作区一样常驻跳过；周三场次秒杀加"当天打过即收工"(wedSkDay，发过 drawPrize 才记)。2026-10-18 同步上游：追剧新增看精彩视频每日任务(queryDiyVideoTask + getYDRZToken + cmlive 两步，每完成 +1 抽奖次数、周日 2 次)；新增 AI豆苗养成记(cmcc_seed)；周三场次秒杀同步 rec_login 下发场次 + 等待期会话重建与开火前强刷
+ * 环境变量：cmcc_data / cmcc_claim(默认开，填 false 才关) / cmcc_task / cmcc_seckill / cmcc_sk_min(每日秒杀的北京时间下限，默认 11:00，填 00:00 不受限) / cmcc_video / cmcc_seed(凭证写在各账号 cmcc_data 的 coc3Ticket，抓不到则回落 App 票据 token，不单列变量) / cmcc_seed_channel / cmcc_gold(兑换会真扣 AI 豆，默认关) / cmcc_wed / cmcc_wed_sk / cmcc_wed_sk_at(留空=服务端下发场次自动选最近未开始的一场) / cmcc_task_skip_days；cmcc_task_fail 为脚本自动维护的任务黑名单
+ * 更新时间：2026-10-12 新增周三充值日(hlwyxhdhub wedrecharge)：任务代做 + 抽拼图 + 集齐领取 + 场次秒杀，开关 cmcc_wed / cmcc_wed_sk；AI豆任务同步上游：握手会话整轮复用、taskToken 任务直接握手、外部合作区跳过、status=1 遗留补领、公众号类即弃、停留与间隔提速；连签奖励改为只要开了就查一遍代领（不再要求当天由脚本签到），展示改用响应里的 prizeName/prizeValue。2026-10-13 每日秒杀加 11:00 触发门控(cmcc_sk_min)与"按周去重"(skWinDay 记抢中那期的日期，比较时换算成该周周一：本周不再打，下周自动恢复)；服务端回"已领取/限领"也按同样口径落盘，覆盖在 App 里领过的情况；邀好友/助力类任务与外部合作区一样常驻跳过；周三场次秒杀加"当天打过即收工"(wedSkDay，发过 drawPrize 才记)。2026-10-18 同步上游：追剧新增看精彩视频每日任务(queryDiyVideoTask + getYDRZToken + cmlive 两步，每完成 +1 抽奖次数、周日 2 次)；新增 AI豆苗养成记(cmcc_seed)；周三场次秒杀同步 rec_login 下发场次 + 等待期会话重建与开火前强刷。2026-10-19 同步上游 d967d65：豆苗凭证改为长效 coc3_ticket(client.app.coc.10086.cn 的整串 Cookie)，每次运行 userLoginV2 现签短效 phone 头，抓不到 ticket 回落 App 票据 token；新增上游 1753cf1 签到专属 AI豆兑换话费券(cmcc_gold，默认关)；phone 抓取(dev.coc.10086.cn 请求头)整条下线，凭证只认 ticket
+
 
 ------------------ Surge 配置 ------------------
 
 [Script]
 中国移动获取Cookie = type=http-request,pattern=^https?:\/\/wx\.10086\.cn\/qwhdsso\/appTokenLogin,requires-body=1,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,script-update-interval=0
-中国移动豆苗获取phone = type=http-request,pattern=^https?:\/\/dev\.coc\.10086\.cn\/,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,script-update-interval=0
+中国移动豆苗获取ticket = type=http-request,pattern=^https?:\/\/client\.app\.coc\.10086\.cn\/,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,script-update-interval=0
 
 中国移动签到 = type=cron,cronexp="0 1 * * *",wake-system=1,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,script-update-interval=0
 
 [MITM]
-hostname = wx.10086.cn,dev.coc.10086.cn
+hostname = wx.10086.cn,client.app.coc.10086.cn
 
 ------------------- Loon 配置 -------------------
 
 [Script]
 http-request ^https?:\/\/wx\.10086\.cn\/qwhdsso\/appTokenLogin script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,requires-body=true,timeout=600,tag=中国移动获取Cookie
-http-request ^https?:\/\/dev\.coc\.10086\.cn\/ script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,timeout=600,tag=中国移动豆苗获取phone
+http-request ^https?:\/\/client\.app\.coc\.10086\.cn\/ script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,timeout=600,tag=中国移动豆苗获取ticket
 
 cron "0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js, timeout=600, tag=中国移动签到
 
 [MITM]
-hostname = wx.10086.cn,dev.coc.10086.cn
+hostname = wx.10086.cn,client.app.coc.10086.cn
 
 --------------- Quantumult X 配置 ---------------
 
 [rewrite_local]
 ^https?:\/\/wx\.10086\.cn\/qwhdsso\/appTokenLogin url script-request-body https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js
-^https?:\/\/dev\.coc\.10086\.cn\/ url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js
+^https?:\/\/client\.app\.coc\.10086\.cn\/ url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js
 
 [task_local]
 "0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js, tag=中国移动签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/cmcc.png, enabled=true
 
 [MITM]
-hostname = wx.10086.cn,dev.coc.10086.cn
+hostname = wx.10086.cn,client.app.coc.10086.cn
 
  */
 
@@ -79,9 +80,10 @@ const CMLIVE_BASE = 'https://v.cmcc-cs.cn/cmlive/api';
 const CMLIVE_SOURCE_ID = '017027';
 const CMLIVE_REFERER = 'https://v.cmcc-cs.cn/cmlive/live/feed?id=102518&cmliveChannelId=203&belongChannelId=203&secondChannel=spr&openSelfResearch=1&tagId=157&jtCode=1';
 // AI豆苗养成记（移动爱购 activityId 17692，dev.coc.10086.cn 独立域）：签到 + 浏览/分享任务 + 领阳光值。
-// 凭证与该域自己的请求头 phone（抓包 dev.coc.10086.cn 任一请求即可，长期有效），与 qwhdhub 会话无关。
+// 凭证是长效的大网 SSO ticket（client.app.coc.10086.cn 请求的整串 Cookie），每次运行现签短效 phone 头（上游 d967d65）。
 const RUN_SEED = getEnv('cmcc_seed') === 'true';
 const SEED_BASE = 'https://dev.coc.10086.cn/coc3/coc3-market-activity';
+const SEED_LOGIN_API = 'https://dev.coc.10086.cn/coc3/gr/login/ssoRights';
 const SEED_PAGE_URL = 'https://dev.coc.10086.cn/coc3/canvas/rightsmarket-h5-canvas/online/2026dmycj?pageRecorded=true';
 const SEED_PAGE_KEY = '2026dmycj';
 const SEED_ACTIVITY_ID = 17692;
@@ -92,6 +94,12 @@ const SEED_WTAC = 'P00000008211_';
 // 任务类型：1 浏览/直播；2 分享；3 订购；4/5 领取/关注；6 邀请 —— 3/6 需要真实操作，直接跳过
 const SEED_SKIP_TYPES = { 3: '需真实办理/订购', 6: '需真实好友助力' };
 const SEED_STATE_KEY = 'cmcc_seed_state';
+// 签到专属 AI豆兑换话费券（qwhdhub 同一会话）：兑换会真扣 AI 豆、每商品每期限兑一次，默认关
+const RUN_GOLD = getEnv('cmcc_gold') === 'true';
+const GOLD_API = BASE + '/qwhdhub/api/mark/task';
+const GOLD_TIERS = ['5元话费券', '2元话费券', '1.5元话费券', '1元话费券'];
+const GOLD_MIN_STOCK = 100;   // 前端同款判定：剩余 <=100 视为已抢光
+const GOLD_MAX_ROUNDS = 8;    // 单商品每期限兑一次，轮次上限只作兜底
 // 周三充值日(hlwyxhdhub/wedrecharge)：拼图抽奖主流程 + 场次秒杀，同一 SSO 通道但要按该活动页换票
 const RUN_WED = getEnv('cmcc_wed') === 'true';
 const WED_SECKILL = getEnv('cmcc_wed_sk') === 'true';
@@ -160,28 +168,25 @@ async function main() {
     }
 }
 
-// 豆苗 phone 凭证抓取（dev.coc.10086.cn 的请求头）：开捕获开关后在 App 里打开「AI豆苗养成记」活动页即可入库
-// 该域请求不带 userCheckId 这类账号标识，所以多账号只能按"填空位"处理：
-// 只有一个账号就直接写；多个账号写第一条还没 phone 的；都填过则不动，提示用户先清空要更新的那条
-function GrabCocPhone() {
+// 豆苗 ticket 抓取（client.app.coc.10086.cn 的整串 Cookie 头，就是上游说的 coc3_ticket）：
+// 开捕获后在 App 里随便点一页就会命中，不需要进具体活动；同值完全静默，多账号按填空位写
+function GrabCocTicket() {
     try {
         if ($request.method === 'OPTIONS') return;
-        const phone = ObjectKeys2LowerCase($request.headers)['phone'] || '';
-        if (!phone) return;   // 活动静态资源也走这条规则，没有 phone 头的直接忽略
+        const cookie = ObjectKeys2LowerCase($request.headers)['cookie'] || '';
+        if (!/JSESSIONID=/i.test(cookie) || !/SessionServer/i.test(cookie)) return;  // 没带大网会话头的请求忽略
         const list = $.userArr;
-        if (!list.length) { $.log('❌ 豆苗 phone 未入库：cmcc_data 还没有账号，请先抓一次签到凭证'); return; }
-        // 该域每个请求都带 phone 头：同值就完全静默（不写也不通知），否则会一路刷写，
-        // 多账号时还会把同一份凭证扇进所有空位
-        if (list.some(e => e.coc3Phone === phone)) return;
-        const idx = list.length === 1 ? 0 : list.findIndex(e => !e.coc3Phone);
-        if (idx < 0) { $.log('⚠️ 豆苗 phone 未入库：所有账号都已有别的 phone，请先清空要更新那条的 coc3Phone'); return; }
-        list[idx].coc3Phone = phone;
+        if (!list.length) { $.log('❌ 豆苗 ticket 未入库：cmcc_data 还没有账号，请先抓一次签到凭证'); return; }
+        if (list.some(e => e.coc3Ticket === cookie)) return;
+        const idx = list.length === 1 ? 0 : list.findIndex(e => !e.coc3Ticket);
+        if (idx < 0) { $.log('⚠️ 豆苗 ticket 未入库：所有账号都已有 ticket，请先清空要更新那条的 coc3Ticket'); return; }
+        list[idx].coc3Ticket = cookie;
         $.setdata($.toStr(list), 'cmcc_data');
-        const msg = `🎉 豆苗 phone 已写入 ${list[idx].userName || '账号' + (idx + 1)}（长度 ${String(phone).length}）`;
+        const msg = `🎉 豆苗 ticket 已写入 ${list[idx].userName || '账号' + (idx + 1)}（长度 ${String(cookie).length}）`;
         $.Messages.push(msg);
         $.log(msg);
     } catch (e) {
-        $.log('❌ 豆苗 phone 获取失败'), $.log(e);
+        $.log('❌ 豆苗 ticket 获取失败'), $.log(e);
     }
 }
 
@@ -213,8 +218,8 @@ function GetCookie() {
             'skWinDay': old.skWinDay || '',
             'skWinPrize': old.skWinPrize || '',
             'wedSkDay': old.wedSkDay || '',
-            // 豆苗 phone 是手工填进 cmcc_data 的长期凭证，重抓包不能冲掉
-            'coc3Phone': old.coc3Phone || '',
+            // 豆苗 ticket 是长期凭证，重抓签到包不能冲掉
+            'coc3Ticket': old.coc3Ticket || '',
         };
 
         const index = $.userArr.findIndex(e => e.userCheckId == newData.userCheckId);
@@ -311,12 +316,21 @@ async function doSign(user) {
                 }
             }
 
-            // AI豆苗养成记走 dev.coc.10086.cn 独立域+独立凭证(phone 头)，与主站会话无关
+            // AI豆苗养成记走 dev.coc.10086.cn 独立域+独立凭证(ticket 现签 phone 头)，与主站会话无关
             if (RUN_SEED) {
                 try {
                     lines.push(...await runSeed(user));
                 } catch (e) {
                     say(`[豆苗] 失败: ${e.message || e}`);
+                }
+            }
+
+            // AI豆兑换话费券复用签到会话（上游放在攒豆之后）：空跑只写日志，兑到/失败才进通知
+            if (RUN_GOLD) {
+                try {
+                    lines.push(...await runGold(ctx, user));
+                } catch (e) {
+                    say(`[AI豆兑换] 失败: ${e.message || e}`);
                 }
             }
 
@@ -1099,35 +1113,67 @@ async function seedClaim(cred) {
     return { lines, got };
 }
 
-// phone 凭证只能抓包：入口 userLoginV2 要的 ticket 是 App 原生会话（biz-orange/LN/uamrandcodelogin/autoLogin 铸，
-// 带 Leadeon x-token 签名），实测 55 分钟前的 ticket 复放即 40006；它换来的 phone 反而一小时后仍可用。
+// ticket → phone 现签（上游 d967d65）：ticket 就是 App 大网 SSO 的整串会话 Cookie，
+// 先试抓取入库的 coc3Ticket，再回落账号自己的 App 票据 token（同一族串，只是抓取时机不同）
+async function seedTicketSign(user) {
+    const cands = [...new Set([user.coc3Ticket, user.token].filter(Boolean))];
+    if (!cands.length) return { token: '', ticket: '', err: '无 ticket' };
+    let last = '';
+    for (const ticket of cands) {
+        const r = await Request({
+            url: `${SEED_LOGIN_API}/userLoginV2`, method: 'post',
+            headers: {
+                accept: 'application/json, text/plain, */*',
+                'content-type': 'application/json;charset=utf-8',
+                origin: 'https://dev.coc.10086.cn',
+                referer: SEED_PAGE_URL,
+                'user-agent': user.userAgent || USER_AGENT,
+                'accept-language': 'zh-CN,zh-Hans;q=0.9',
+            },
+            body: { ticket, ticketType: 11, businessType: 'RIGHTS_MARKET', wxoaType: '', m1: '', m2: '', s1: '', s2: '', from: '', jsid: ticket },
+            _timeout: 30000,
+        });
+        const d = (r && r.data) || {};
+        if (r && String(r.code) === '0' && d.token) {
+            $.log(`[豆苗·凭证] ticket 现签成功（${d.mobileMask || '手机号已掩码'}，来源 ${ticket === user.coc3Ticket ? 'coc3Ticket' : 'App 票据'}）`);
+            return { token: d.token, ticket };
+        }
+        last = `${r && r.code} ${String((r && r.message) || '').slice(0, 18)}`;
+    }
+    return { token: '', ticket: '', err: last };
+}
+
+// 主流程：现签 phone（失败退回已抓的 phone）→ 探活 → 签到 → 任务 → 领取 → 余额前后对比
 async function runSeed(user) {
     const lines = [];
     const say = t => { lines.push(t); $.log(t); };
-    const cred = user.coc3Phone || '';
-    if (!cred) { say('[豆苗] 还没有 phone 凭证：开着获取Cookie进一次豆苗活动页即可，本次跳过'); return lines; }
+    const signed = await seedTicketSign(user);
+    const cred = signed.token;
+    if (!cred) { say(`[豆苗] ticket 现签失败(${signed.err})，本次跳过：开着获取Cookie在 App 里点任意一页重抓 ticket`); return lines; }
 
     const all = $.toObj($.getdata(SEED_STATE_KEY), {}) || {};
     const k = user.userCheckId || user.userName || 'default';
     const state = all[k] || {};
     const nowSec = Date.now() / 1000;
-    const sig = seedCredSig(cred);
+    // 计时按"服役的 ticket"记（token 每次现签，长度/尾号都跟着 ticket 走）
+    const tracked = signed.ticket || cred;
+    const sig = seedCredSig(tracked);
     let ageSec = 0, isNew = false;
     if (state.credSig !== sig) { Object.assign(state, { credSig: sig, credFirst: nowSec, lastOk: null }); isNew = true; }
     else ageSec = Math.max(0, nowSec - Number(state.credFirst || nowSec));
 
-    // 探活：queryGrowthValue 回 -516 或 msg 含「登录」即凭证失效（票据本身没有续期接口，只能重抓）
+    // 探活：queryGrowthValue 回 -516 或 msg 含「登录」即凭证失效（ticket 没有续期接口，只能重抓）
     const chkResp = await seedPost(cred, '/api/activity/slgCredits/queryGrowthValue', { activityId: SEED_ACTIVITY_ID });
     const chkMsg = String(chkResp.msg || '');
     const dead = () => chkResp.resultCode === -516 || /登录/.test(chkMsg);
     if (dead()) {
         const extra = state.lastOk ? `，上次成功 ${seedAge(nowSec - Number(state.lastOk))} 前` : '';
-        say(`[豆苗] phone 凭证已失效（${chkMsg || '登录已失效'}，已存活 ${seedAge(ageSec)}${extra}）——请开着获取Cookie再进一次豆苗活动页`);
+        say(`[豆苗] ticket 已失效（${chkMsg || '登录已失效'}，已服役 ${seedAge(ageSec)}${extra}）——开着获取Cookie在 App 里点任意一页重抓`);
         return lines;
     }
     state.lastOk = nowSec;
     const growthBefore = chkResp.resultCode === 0 ? Number(((chkResp.data || {}).growthValue)) : null;
-    $.log(`[豆苗·凭证] coc3_phone 已存活 ${seedAge(ageSec)}${isNew ? '（新凭证，从本次开始计时）' : ''}`);
+    $.log(`[豆苗·凭证] ticket 已服役 ${seedAge(ageSec)}（token 每次现签）${isNew ? '，首次使用从本次计时' : ''}`);
 
     const today = $.time('yyyy-MM-dd');
     const signLine = await seedSign(cred, state, today);
@@ -1141,6 +1187,95 @@ async function runSeed(user) {
     all[k] = state;
     $.setdata($.toStr(all, '{}'), SEED_STATE_KEY);
     say(`[豆苗] 签到${signLine.slice(0, 24)}｜任务完成 ${taskRes.done} 个｜领取 ${claimRes.got} 阳光值｜余额 ${growthBefore ?? '?'}→${growthAfter ?? '?'}${lagged ? '（入账延迟，以活动页为准）' : ''}`);
+    return lines;
+}
+
+// ---------- 签到专属 AI豆兑换话费券（qwhdhub/api/mark/task，参考 yupaiLy/cmcc-auto-checkin 的 cmcc_gold.py / issue #12）----------
+
+// 话费券每日限量、先到先得；AI豆 1:1 抵扣。只兑话费券，按面额从高到低顶格，
+// 0.5 元档与「充值加赠券」一律不兑；单商品每期限兑一次（兑过 status=USED），重复运行幂等。
+async function goldApi(ctx, path, payload) {
+    const r = await Request({ url: `${GOLD_API}/${path}`, method: 'post', headers: apiHeaders(ctx), body: payload || {}, _timeout: 30000 });
+    if (!r) throw new Error(`${path} 无响应`);
+    return r;
+}
+
+// 余额（currentFee 即可兑 AI 豆数）+ 商品列表
+async function goldState(ctx) {
+    const resp = await goldApi(ctx, 'getExchangeList', { channel: 'app' });
+    if (String(resp.code) !== 'SUCCESS') throw new Error(`getExchangeList 失败: ${resp.code} ${resp.msg || ''}`);
+    const data = resp.data || {};
+    const prizes = Array.isArray(data.prizes) ? data.prizes : [];
+    const num = v => { const n = Number(v || 0); return isFinite(n) ? n : 0; };
+    return { balance: num(data.currentFee), data, prizes, num };
+}
+
+// 按面额顺序取第一个在架、库存充足、豆够的档位；skipIds 是本次已经碰过壁的档
+function goldPick(prizes, balance, skipIds) {
+    const byName = {};
+    prizes.forEach(p => { byName[p.name] = p; });
+    for (const name of GOLD_TIERS) {
+        const p = byName[name];
+        if (!p || p.status !== 'WITHOUT' || skipIds.has(p.id)) continue;   // USED 已兑过 / IN_QUEUE 发货中 / 下架
+        if (Number(p.stock || 0) <= GOLD_MIN_STOCK) continue;               // 前端同款判定：余量 <=100 视为已抢光
+        if (Number(p.cost || 0) > balance) continue;
+        return p;
+    }
+    return null;
+}
+
+async function runGold(ctx, user) {
+    const lines = [];
+    const say = t => { lines.push(t); $.log(t); };
+    let st;
+    try {
+        st = await goldState(ctx);
+    } catch (e) {
+        // 会话过期就重建一次再试（换票最贵，正常情况复用主流程已建立的会话）
+        $.log(`[AI豆兑换] 首次取列表失败(${e.message || e})，重建会话重试`);
+        ctx = await exchangeSession(user);
+        st = await goldState(ctx);
+    }
+    const { balance, data, prizes, num } = st;
+    $.log(`[AI豆兑换] 余额 ${balance} 豆（累计 ${num(data.totalFee)}、已兑 ${num(data.exchangeFee)}）`);
+    GOLD_TIERS.forEach(name => {
+        const p = prizes.find(x => x.name === name);
+        if (!p) return;
+        const stock = Number(p.stock || 0);
+        let state = { WITHOUT: '可兑', USED: '已兑过' }[p.status] || p.status || '?';
+        if (p.status === 'WITHOUT' && stock <= GOLD_MIN_STOCK) state = '已抢光';
+        $.log(`[AI豆兑换] 档位 ${name} ${Number(p.cost || 0)}豆 库存 ${stock}（${state}）`);
+    });
+
+    const got = [], bad = [];
+    // 碰过壁的档本次不再重试：列表每轮都从服务端重取，只改本地对象挡不住下一轮（上游是同档重复打满 8 轮）
+    const skipIds = new Set();
+    for (let round = 0; round < GOLD_MAX_ROUNDS; round++) {
+        const cur = await goldState(ctx);
+        const target = goldPick(cur.prizes, cur.balance, skipIds);
+        if (!target) break;
+        const stock = await goldApi(ctx, 'checkStock', { prizeId: target.id });
+        const left = (stock.data || {}).stock;
+        if (typeof left !== 'number' || left <= GOLD_MIN_STOCK) {
+            $.log(`[AI豆兑换] ${target.name} 库存不足(${left})，看下一档`);
+            skipIds.add(target.id);
+            continue;
+        }
+        const resp = await goldApi(ctx, 'exchange', { prizeId: target.id });
+        if (String(resp.code) === 'SUCCESS') {
+            got.push(target.name);
+            say(`🎉 [AI豆兑换] ${target.name} 成功（${Number(target.cost)} 豆），去 App「我的奖品」核销`);
+            await $.wait(1000);
+            continue;
+        }
+        // FAILED 时 data 是错误码：1 内部员工不在范围；2/3 今日已抢光
+        const reason = { 1: '内部员工不在兑换范围', 2: '今日已抢光', 3: '今日已抢光' }[resp.data] || `未知错误码 ${resp.data}`;
+        bad.push(target.name);
+        skipIds.add(target.id);
+        say(`[AI豆兑换] ${target.name} 失败：${reason}`);
+        if (resp.data === 1) break;
+    }
+    if (!got.length && !bad.length) $.log('[AI豆兑换] 本次无可兑档位（AI豆不足/已兑过/已抢光）');
     return lines;
 }
 
@@ -1816,8 +1951,9 @@ async function sendMsg(message) {
 // 脚本执行入口: $request 存在 → 抓取模式, 否则 → 定时任务模式
 !(async () => {
     if (typeof $request !== `undefined`) {
-        // 两条抓取线：主站 appTokenLogin 拿签到凭证，豆苗域拿 phone 头
-        if (/dev\.coc\.10086\.cn/i.test($request.url || '')) GrabCocPhone();
+        // 两条抓取线：主站 appTokenLogin 拿签到凭证，coc 大网域拿豆苗 ticket
+        const where = $request.url || '';
+        if (/client\.app\.coc\.10086\.cn/i.test(where)) GrabCocTicket();
         else GetCookie();
     } else {
         await main();  // 主函数
