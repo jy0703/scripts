@@ -3,7 +3,9 @@
  * 活动规则：LINLEE 手打柠檬茶小程序每日签到领积分，连签 2/5/7/15/22 天得饮品券
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。账号走 code 服务(YYB Go)静默登录，token 失效自动重登
  * 环境变量：LINLI_REF、linli_cache、linli_debug（code 服务地址与令牌用 @wxCode.address / @wxCode.token）
- * 更新时间：2026-10-11
+ *           LINLI_USERKEY 可选：同会话密钥 encryptKey|iv|version|过期时间戳ms。
+ *           一般不用填 —— 签到前会自动向 code 服务(/wx/getlatestuserkey，内部 1133)现取；取不到才用手动值兜底
+ * 更新时间：2026-10-21
 
 ------------------ Surge 配置 ------------------
 
@@ -53,6 +55,7 @@ async function main() {
         if (!user) {
             $.messages.push('❌ 登录失败，详见日志');
         } else {
+            user.ref = ref;   // 取风控密钥要按 ref 找微信账号
             if (!user.activityId) user.activityId = await discoverActivity(user);
             const missing = FIELDS.filter(k => !user[k]);
             missing.length ? $.messages.push(`❌ 数据不完整，缺: ${missing.join(',')}，请清空 ${CACHE_KEY} 后重跑`) : await doSign(user);
@@ -158,6 +161,7 @@ async function doSign(user) {
         if (st.signStatus === 1) {
             msg = `📝 今日已签 · ${statLine(st)}`;
         } else {
+            await ensureUserKey(user);
             const timestamp = String(Date.now());
             const body = {
                 activityId: user.activityId,
@@ -167,6 +171,7 @@ async function doSign(user) {
                 signature: makeSignature({ activityId: user.activityId, storeId: user.storeId, timestamp, userId: user.userId }),
                 v: 1,
             };
+            attachRiskData(user, body);
             const res = parseOk(await qmPost(user, '/web/cmk-center/sign/takePartInSign', body));
             if (res.code !== 0) {
                 // 状态查询偶发不准，服务端说已签就当已签，不报失败
@@ -219,13 +224,103 @@ function statLine(st) {
     return s;
 }
 
-// 企迈 v2 风控签名: 参数字典序拼接 + 反转 activityId 作 key 后 md5 取大写
-// 抓包里的 data/version 是微信 getUserCryptoManager().getLatestUserKey() 的密钥加密整包 body 得到的，脱离小程序运行时拿不到；
-// 实测只发 signature 签到照常成功并发奖，服务端并不强制 data
+// 企迈 v1 风控签名: 参数字典序拼接 + 反转 activityId 作 key 后 md5 取大写
+// 抓包里的 data/version 是把"追加 data 之前的整个 body"按 JSON.stringify 原序序列化后，
+// 用 wx.getUserCryptoManager().getLatestUserKey() 下发的会话密钥做 AES-CBC/PKCS7/base64 得到的。
+// 密钥按用户会话轮换、TTL 约 1 小时，脱离小程序运行时只能外部提供；不给就只发 signature
+// （实测服务端不强制 data，签到照常成功发奖）。
 function makeSignature({ activityId, storeId, timestamp, userId }) {
     const params = { activityId: String(activityId), sellerId: String(storeId), timestamp: String(timestamp), userId: String(userId) };
     const str = Object.keys(params).sort().map(k => `${k}=${params[k]}`).join('&');
     return Crypt('md5', `${str}&key=${String(activityId).split('').reverse().join('')}`).toUpperCase();
+}
+
+// 同会话密钥：优先取账号缓存里的 userKey，其次全局环境变量。
+// 支持 "encryptKey|iv|version[|过期时间戳ms]"、同样式的 ":" 分隔，或 {"encryptKey":..,"iv":..,"version":..,"expireAt":..}
+// 微信侧密钥 TTL 约 1 小时，所以建议第 4 段带上过期时间：过期就自动退回只发 signature，不冒被拒的风险。
+function parseUserKey(user) {
+    const raw = user.userKey || getEnv('LINLI_USERKEY', '@linli.userkey');
+    if (!raw) return null;
+    let k = null;
+    if (typeof raw === 'object') k = raw;
+    else if (/^\s*\{/.test(raw)) k = $.toObj(raw);
+    else {
+        const parts = String(raw).trim().split(/[|:]/).filter(Boolean);
+        if (parts.length >= 2) k = { encryptKey: parts[0], iv: parts[1], version: parts[2], expireAt: parts[3] };
+    }
+    if (!k || !k.encryptKey || !k.iv) {
+        $.log(`⚠️ [风控] userKey 格式不对(需 encryptKey|iv|version[|过期时间戳])，本次跳过 data`);
+        return null;
+    }
+    const expireAt = k.expireAt != null && k.expireAt !== '' ? Number(k.expireAt) : null;
+    if (expireAt && Date.now() > expireAt) {
+        $.log(`⚠️ [风控] userKey 已过期 ${Math.round((Date.now() - expireAt) / 1000)}s，本次跳过 data`);
+        return null;
+    }
+    return { encryptKey: String(k.encryptKey), iv: String(k.iv), version: k.version != null && k.version !== '' ? Number(k.version) : null, expireAt };
+}
+
+// 就地给 body 追加 data/version；没有可用密钥时保持原样（服务端不强制）
+function attachRiskData(user, body) {
+    const k = parseUserKey(user);
+    if (!k) return;
+    const plain = JSON.stringify(body);   // 必须是被加密前那份、键序不变的 body
+    const data = Crypt('aes-cbc', plain, k.encryptKey, k.iv);
+    if (!data) {
+        $.log('⚠️ [风控] data 加密失败，本次不发 data');
+        return;
+    }
+    body.data = data;
+    if (k.version != null) body.version = k.version;
+    $.log(`🔐 [风控] data 已生成 (明文 ${plain.length}B → 密文 ${data.length}B base64, version=${k.version})`);
+}
+
+// 向 code 服务(YYB Go)现取同会话密钥：它已封装 1133 的 webapi_getuserencryptkey。
+// 响应形状(实测 2026-10-21): {code:0, data:{openid, result:{data:"<JSON字符串>", err_no:0}}}
+// 内层 JSON: {encrypt_key, iv, version, expire_in, create_time}
+async function fetchUserKey(user) {
+    if (!$.codeServer || !user.ref) return null;
+    const headers = { 'Content-Type': 'application/json' };
+    if ($.yybToken) headers['Authorization'] = `Bearer ${$.yybToken}`;
+    const resp = await Request({
+        url: `${$.codeServer}/wx/getlatestuserkey`,
+        headers,
+        body: { ref: String(user.ref), app_id: APPID, payload: { api_name: 'webapi_getuserencryptkey', data: {}, env: 1 } },
+        _timeout: 30000,
+    });
+    if (!resp || Number(resp.code) !== 0) {
+        $.log(`⚠️ [风控] 取密钥失败(${resp ? resp.code : '无响应'}) ${resp && resp.msg ? resp.msg : ''}，改用已有 userKey`);
+        return null;
+    }
+    const result = (resp.data && resp.data.result) || {};
+    let inner = result.data != null ? result.data : result;
+    if (typeof inner === 'string') inner = $.toObj(inner);
+    if (!inner || typeof inner !== 'object') {
+        $.log('⚠️ [风控] 取密钥响应结构不认识，跳过 data');
+        return null;
+    }
+    const encryptKey = String(inner.encrypt_key || inner.encryptKey || '');
+    const iv = String(inner.iv || '');
+    if (!encryptKey || !iv) {
+        $.log('⚠️ [风控] 响应里缺 encrypt_key/iv，跳过 data');
+        return null;
+    }
+    const version = inner.version != null ? Number(inner.version) : '';
+    const expireIn = Number(inner.expire_in != null ? inner.expire_in : inner.expireIn) || 3600;
+    // create_time 是秒级；缺了就按当下算
+    const created = Number(inner.create_time) || Math.floor(Date.now() / 1000);
+    const expireAt = (created + expireIn) * 1000;
+    return `${encryptKey}|${iv}|${version}|${expireAt}`;
+}
+
+// 优先现取（密钥约 1 小时轮换，旧的会失效）；取不到再退回手动配置的 userKey
+async function ensureUserKey(user) {
+    const fresh = await fetchUserKey(user);
+    if (fresh) {
+        user.userKey = fresh;
+        const k = parseUserKey(user);
+        $.log(`🔑 [风控] 已取到会话密钥 version=${k && k.version}，约 ${k && k.expireAt ? Math.max(0, Math.round((k.expireAt - Date.now()) / 1000)) : '?'}s 后失效`);
+    }
 }
 
 // 抓包里的 {status,code} 中 code 有 "0" 与 0 两种形态，统一成数字再判

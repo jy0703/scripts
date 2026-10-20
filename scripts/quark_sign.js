@@ -1,12 +1,13 @@
 /**
  * 脚本名称：夸克网盘签到
- * 活动规则：夸克网盘每日签到领空间容量，连签达目标有额外奖励
- * 脚本说明：支持多账号，支持 NE / Node.js 环境。每次运行用缓存里的 service_ticket/uid/昵称现算 vcode/sign_wg，不依赖抓到的旧签名；请求 UA 跟着账号走（quark_data 里的 ua），没写就用内置那条
+ * 活动规则：一个脚本跑两个活动 —— ① 夸克网盘每日签到领空间容量，连签达目标有额外奖励；② 夸克 App 内「扫描王签到」每日签到领金币，金币可兑扫描王 VIP（30 天一期）
+ * 脚本说明：支持多账号，支持 NE / Node.js 环境。每次运行用缓存里的 service_ticket/uid/昵称现算 vcode/sign_wg，不依赖抓到的旧签名；扫描王的公参 ut 也是现算（keyNo3 加密账号固化的 utdid）；请求 UA 跟着账号走（quark_data 里的 ua），没写就用内置那条
  * 环境变量：quark_data、quark_debug、quark_api、quark_api_token
- * 凭证来源：只有 quark_data 一个入口 —— 用本地取凭证网页 quark-api/（手机验证码登录）点「复制 全部账号（票+UA）」，把 {手机号:{service_ticket,kps_wg,ua}} 整段粘进去；旧的手填数组写法仍能读，回写时统一成按手机号的 map
+ * 凭证来源：只有 quark_data 一个入口 —— 用本地取凭证网页 quark-api/（手机验证码登录）点「复制 全部账号（票+UA+设备）」，把 {手机号:{service_ticket,kps_wg,ua,utdid,ve}} 整段粘进去；旧的手填数组写法仍能读，回写时统一成按手机号的 map；账号项没有 utdid 时扫描王那段跳过、不影响网盘签到
+ * 扫描王接口：POST https://order-api.sm.cn/api/sd6hJds8SIgn/<op>，参数（ve/sv/ut/kp/fr/pr/chid/timestamp/product/token）全在 JSON body、不吃 cookie；身份 kp 与网盘的 kps_wg 是同一张票
  * 换票：配了 quark_api（内网 http://192.168.1.10:8787，公网用 https 隧道地址）时，每次运行先 POST /api/refresh 向那个服务要一张有效票，票或昵称变了就写回 quark_data；服务不通就用缓存里的票继续，票真作废才报错要求重新登录。脚本自身不含账号网关代码，也不抓包
  * quark_api_token：服务与服务端不在同一内网时必填，作为 X-Quark-Token 送出（服务端非内网来源只放行 /api/refresh 并校验它）
- * 更新时间：2026-10-14
+ * 更新时间：2026-10-21
 
 ------------------ Surge 配置 ------------------
 
@@ -33,10 +34,16 @@ const APP_NAME = '夸克网盘';
 const DATA_KEY = 'quark_data';
 const INFO_URL = 'https://drive-m.quark.cn/1/clouddrive/capacity/growth/info';
 const SIGN_URL = 'https://drive-m.quark.cn/1/clouddrive/capacity/growth/sign';
-const WSG_KEY_NO = 4;
-const WSG_KEY = '5ee3f2734745f737';
+// 扫描王签到是另一条链路：参数全在 JSON body，身份仍用同一个 kps_wg（公参名换成 kp）
+const SCANK_HOST = 'https://order-api.sm.cn';
+const SCANK_WELFARE = '/api/sd6hJds8SIgn/pOcKNmTupWelFare';   // 签到页数据（只读）
+const SCANK_SIGN = '/api/sd6hJds8SIgn/pDChohbxo82nCoIn';      // 提交签到
+const SCANK_PRODUCT = 'camera_default';
+const WSG_KEY_NO = 4;                     // 网盘 kps/sign 与 token 用 4；公参 ut 用 3
+const WSG_KEYS = { 3: '4417256570e11d1a', 4: '5ee3f2734745f737' };
 // 账号没带 ua 时用的默认值（逆向包 10.18.6.1161 那台的）
 const DEFAULT_UA = 'Mozilla/5.0 (Linux; Android 13; SM-G981B Build/TP1A.220624.014; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/116.0.0.0 Mobile Safari/537.36 Quark/10.18.6.1161';
+const DEFAULT_VE = '10.18.6.1161';
 
 
 // 主函数
@@ -70,14 +77,21 @@ async function main() {
     $.Messages.push(`\n📊 ${APP_NAME}: 成功 ${ok} / 失败 ${fail}`);
 }
 
-// 单账号：先向取凭证服务要一张有效的票（没配服务就用手上的），再现算凭证 → 查状态 → 未签到则签到
+// 单账号：先向取凭证服务要一张有效的票（没配服务就用手上的），再依次跑网盘签到与扫描王签到
 async function runAccount(acc, api, apiToken) {
     if (!acc.st || !acc.uid) throw new Error(`账号缺少 service_ticket/uid，请从取凭证网页重新复制一份 kps_wg`);
     if (api) await refreshTicket(acc, api, apiToken);
+    const ua = acc.ua || DEFAULT_UA;   // UA 跟着账号走：账号里带 ua 就用它，没有才用内置那条
+
+    await driveSign(acc, ua);
+    await scanSign(acc, ua);
+}
+
+// 夸克网盘：现算 vcode/sign_wg → 查状态 → 未签到则签到
+async function driveSign(acc, ua) {
     const vcode = String(Date.now());
     const kps = buildKps(acc.st, acc.uid, acc.nick);
     const sign = buildSign(vcode, acc.st, acc.uid, acc.nick);
-    const ua = acc.ua || DEFAULT_UA;   // UA 跟着账号走：账号里带 ua 就用它，没有才用内置那条
 
     const info = await growthInfo({ kps, sign, vcode }, '查询签到状态', ua);
     acc.vip = info['88VIP'] ? '88VIP' : '普通用户';
@@ -93,21 +107,50 @@ async function runAccount(acc, api, apiToken) {
     const target = capSign.sign_target === undefined ? '?' : capSign.sign_target;
 
     if (capSign.sign_daily) {
-        push(`✅ 今日已签到 +${convertBytes(capSign.sign_daily_reward || 0)}，连签进度（${progress}/${target}）`);
+        push(`✅ 网盘签到: 今日已签到 +${convertBytes(capSign.sign_daily_reward || 0)}，连签进度（${progress}/${target}）`);
         return;
     }
 
     let line;
     try {
-        line = `✅ 签到成功 +${convertBytes(await growthSign({ kps, sign, vcode }, ua))}，连签进度（${typeof progress === 'number' ? progress + 1 : '?'}/${target}）`;
+        line = `✅ 网盘签到成功 +${convertBytes(await growthSign({ kps, sign, vcode }, ua))}，连签进度（${typeof progress === 'number' ? progress + 1 : '?'}/${target}）`;
     } catch (e) {
         if (!/网络失败/.test(e.message || '')) throw e;
         $.log('⚠️ POST 结果不确定，重新查询签到状态');
         const verified = (await growthInfo({ kps, sign, vcode }, '复查签到状态', ua)).cap_sign;
         if (!verified || !verified.sign_daily) throw new Error('未确认签到成功，等待定时补签');
-        line = `✅ 复查确认今日已签到 +${convertBytes(verified.sign_daily_reward || 0)}，连签进度（${progress}/${target}）`;
+        line = `✅ 网盘复查确认今日已签到 +${convertBytes(verified.sign_daily_reward || 0)}，连签进度（${progress}/${target}）`;
     }
     push(line);
+}
+
+// 夸克扫描王签到：同一个 kps_wg 当公参 kp，ut 用账号固化的 utdid 现算（keyNo3），缺 utdid 就跳过这一段不影响网盘签到
+async function scanSign(acc, ua) {
+    if (!acc.utdid) {
+        push(`⚠️ 扫描王签到: 跳过（账号没有 utdid，取凭证网页重新「复制 全部账号（票+UA+设备）」即可）`);
+        return;
+    }
+    const kp = buildKps(acc.st, acc.uid, acc.nick);
+    const ut = wsgEncrypt(acc.utdid, 3);
+    const ve = acc.ve || DEFAULT_VE;
+    const cred = { kp, ut, ve, ua };
+
+    const welfare = await scankCall(SCANK_WELFARE, cred, '查询扫描王签到状态');
+    const days = Array.isArray(welfare.signWelfare) ? welfare.signWelfare : [];
+    push(`🪙 扫描王金币 ${welfare.validCoins || 0}，本期已签 ${days.filter(d => d && d.signed).length}/${days.length || 30} 天，连签 ${welfare.contNum || 0} 天`);
+
+    const done = await scankCall(SCANK_SIGN, cred, '提交扫描王签到', { allowSigned: true });
+    // 当天已签过时服务端不报错，而是回 code=0 + data.cached=true 的幂等回显（实测金币不二次入账）
+    if ((done && done.__signed) || done.cached === true) {
+        push(`✅ 扫描王签到: 今日已签到（连签 ${done.contNum || welfare.contNum || 0} 天）`);
+        return;
+    }
+    const gain = (done && done.currObtainWelfare) || {};
+    const parts = [];
+    if (Number(gain.coin)) parts.push(`+${gain.coin} 金币`);
+    if (Number(gain.vip)) parts.push(`+${gain.vip} 天会员`);
+    if (gain.awardName) parts.push(gain.awardName);
+    push(`✅ 扫描王签到成功 ${parts.length ? parts.join(' / ') : ''}，连签 ${done.contNum || (welfare.contNum || 0) + 1} 天`);
 }
 
 function push(line) { $.log(line); $.messages.push(line); }
@@ -156,17 +199,19 @@ async function refreshTicket(acc, api, apiToken) {
 
 // ---------- 无线保镖(WSG) 本地生成 ----------
 
-function wsgEncrypt(str) {
-    const ct = Crypt('aes-cbc', str, WSG_KEY, WSG_KEY);
-    const keyNoHex = ('000' + WSG_KEY_NO.toString(16)).slice(-4);
+function wsgEncrypt(str, keyNo = WSG_KEY_NO) {
+    const key = WSG_KEYS[keyNo];
+    if (!key) throw new Error(`密钥表里没有 keyNo=${keyNo}`);
+    const ct = Crypt('aes-cbc', str, key, key);
+    const keyNoHex = ('000' + Number(keyNo).toString(16)).slice(-4);
     return Crypt('hex-to-base64', keyNoHex + Crypt('base64-to-hex', ct));
 }
 
 function wsgDecrypt(b64) {
     const hex = Crypt('base64-to-hex', b64);
     const keyNo = parseInt(hex.slice(0, 4), 16);
-    if (keyNo !== WSG_KEY_NO) throw new Error(`只支持线上 keyNo=${WSG_KEY_NO}，抓到的是 keyNo=${keyNo}（iOS 是 20040、独立网盘 App 是 20030、DEV 包是 1/2，都不通用；请用正式版安卓夸克重抓）`);
-    return Crypt('aes-cbc-dec-iv', Crypt('hex-to-base64', hex.slice(4)), WSG_KEY, WSG_KEY);
+    if (!WSG_KEYS[keyNo]) throw new Error(`只支持密钥表里的 keyNo（4=线上安卓夸克），抓到的是 keyNo=${keyNo}（iOS 是 20040、独立网盘 App 是 20030、DEV 包是 1/2，都不通用；请用正式版安卓夸克重抓）`);
+    return Crypt('aes-cbc-dec-iv', Crypt('hex-to-base64', hex.slice(4)), WSG_KEYS[keyNo], WSG_KEYS[keyNo]);
 }
 
 function buildKps(st, uid, nick) {
@@ -204,6 +249,37 @@ async function growthSign(cred, ua) {
     const payload = await requestJson('post', buildUrl(SIGN_URL, cred), '提交签到', { sign_cyclic: true }, ua);
     if (!payload.data || payload.data.sign_daily_reward === undefined) throw new Error(apiError(payload, '签到失败'));
     return payload.data.sign_daily_reward;
+}
+
+// 扫描王签到：POST order-api.sm.cn，参数（ve/sv/ut/kp/fr/pr/chid/timestamp/product/token）全在 body、不吃 cookie
+// token = MD5(WSG4("{ts}_camera_default_{ut}_{ve}_android_ucpro_{chid}") 的 base64)，ts 与 chid 每次现取（服务端按 token 去重）
+async function scankCall(op, cred, stage, opts = {}) {
+    const ts = Date.now();
+    const chid = newChid();
+    const plain = `${ts}_${SCANK_PRODUCT}_${cred.ut}_${cred.ve}_android_ucpro_${chid}`;
+    debug(`token 原文: ${plain}`, 'SCANK');
+    const body = { ve: cred.ve, sv: 'release', ut: cred.ut, kp: cred.kp, fr: 'android', pr: 'ucpro', chid, timestamp: ts, product: SCANK_PRODUCT, token: Crypt('md5', wsgEncrypt(plain, 4)) };
+    const resp = await Request({
+        url: SCANK_HOST + op, method: 'post',
+        headers: { 'User-Agent': cred.ua || DEFAULT_UA, 'Accept': 'application/json', 'Content-Type': 'application/json' },
+        body, _respType: 'all', _timeout: 20000,
+    });
+    const status = Number(resp && (resp.statusCode || resp.status)) || 0;
+    const payload = resp && $.toObj(resp.body, null);
+    if (status !== 200) throw new Error(`${stage}请求失败（HTTP ${status || '网络失败'}）`);
+    if (!payload || typeof payload !== 'object') throw new Error(`${stage}返回格式异常`);
+    const code = Number(payload.code);
+    if (code === 0) return payload.data || {};
+    const msg = String(payload.msg || payload.message || '');
+    if (opts.allowSigned && (code === 1005 || /已签|重复|超过|已领取/.test(msg))) return { __signed: true };
+    if (code === 2001 || /未登录/.test(msg)) throw new Error('扫描王那边认不出身份（kp 与 utdid 不同源？），到取凭证网页重新登录并整份复制');
+    throw new Error(`${stage}失败：${msg || '未知错误'}(code=${payload.code})`);
+}
+
+function newChid() {
+    let s = '';
+    for (let i = 0; i < 32; i++) s += Math.floor(Math.random() * 16).toString(16);
+    return s;
 }
 
 async function requestJson(method, url, stage, body, ua) {
@@ -271,7 +347,7 @@ function loadAccounts() {
     const push = acc => {
         if (!acc || !acc.st || !acc.uid) return;
         const hit = out.find(e => e.uid === acc.uid);
-        if (hit) { hit.st = acc.st; hit.nick = acc.nick || hit.nick; if (acc.ua) hit.ua = acc.ua; if (acc.user) hit.user = acc.user; if (acc.mobile) hit.mobile = acc.mobile; return; }
+        if (hit) { hit.st = acc.st; hit.nick = acc.nick || hit.nick; if (acc.ua) hit.ua = acc.ua; if (acc.user) hit.user = acc.user; if (acc.mobile) hit.mobile = acc.mobile; if (acc.utdid) hit.utdid = acc.utdid; if (acc.ve) hit.ve = acc.ve; return; }
         out.push(acc);
     };
     if (!cache) return out;
@@ -284,6 +360,8 @@ function loadAccounts() {
             const acc = parseKps(e.kps_wg);
             if (e.service_ticket) acc.st = e.service_ticket;      // 以显式给的票为准（同一次导出里两者一致）
             acc.ua = e.ua || '';
+            acc.utdid = e.utdid || '';      // 扫描王签到要用它现算公参 ut，回写时得原样带回去
+            acc.ve = e.ve || '';
             acc.mobile = isMobile ? key : '';
             acc.user = e.user || (isMobile ? key : '');
             push(acc);
@@ -300,6 +378,8 @@ function persistAccounts(list) {
     list.forEach(e => {
         const key = e.mobile || e.uid;
         const item = { service_ticket: e.st, kps_wg: buildKps(e.st, e.uid, e.nick), ua: e.ua || '' };
+        if (e.utdid) item.utdid = e.utdid;
+        if (e.ve) item.ve = e.ve;
         if (e.user && e.user !== key) item.user = e.user;
         map[key] = item;
     });

@@ -1,5 +1,5 @@
 #!name=夸克网盘签到
-#!desc=夸克网盘每日签到领空间容量，连签达目标有额外奖励，支持多账号（BoxJS 只有 quark_data 一个入口：粘取凭证网页「复制 全部账号（票+UA）」的 JSON；填 quark_api 后每次运行自动向取凭证服务换票并写回缓存，UA 跟随账号）
+#!desc=一个脚本两个活动：夸克网盘每日签到领容量（连签有额外奖励）+ 夸克 App 内「扫描王签到」领金币（可兑扫描王 VIP），支持多账号。BoxJS 只有 quark_data 一个入口：粘取凭证网页「复制 全部账号（票+UA+设备）」的 JSON（扫描王要用 utdid 现算公参 ut，没有就只跑网盘）；填 quark_api 后自动向取凭证服务换票并写回缓存，UA 跟随账号
 
 [Script]
 夸克网盘签到 = type=cron,cronexp="0 9 * * *",wake-system=1,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/quark_sign.js,script-update-interval=0
