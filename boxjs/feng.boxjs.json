@@ -573,7 +573,7 @@
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js",
       "descs_html": [
         "中国移动「签到领流量/话费」(活动 1021122301) App 端签到，每天一次，支持多账号",
-        "抓取：开启「中国移动获取Cookie」→ 打开中国移动 App「我」-「签到」进入活动页；豆苗的 ticket 只要开着抓取在 App 里点任意一页就能入库（取 client.app.coc.10086.cn 的 Cookie 头），不需要再进豆苗活动页；cmcc_data 里的长期 jwt 可自续期，jwt 与 App 票据都失效才需重抓",
+        "抓取：开启「中国移动获取Cookie」→ 打开中国移动 App「我」-「签到」进入活动页；豆苗不需要任何额外抓取（它用的就是这里抓到的 token），想让票据长期有效就再开一个「中国移动票据保活」；cmcc_data 里的 jwt 每次换票都会续期",
         "开关：连签奖励(默认开) / AI豆任务 / AI豆兑换话费券(默认关，真扣豆、每商品每期限兑一次) / 秒杀抢券(11:00 前触发的运行不执行，抢中一次本周收工、下周继续，定时设在开抢前 1~2 分钟) / 追剧领福利(打卡与任务挣抽奖次数，仅周日开放抽奖) / 周三充值日(每天做任务抽拼图集话费券，只有场次秒杀限周三)",
         "周三充值日的任务与拼图每天跟签到一起做；场次秒杀另开 cmcc_wed_sk，按北京时间判定、非周三直接跳过，场次时间 cmcc_wed_sk_at(默认 08:00:00)，定时必须设在开场前 1~2 分钟，否则本次不等待直接跳过。",
         "当天签到完成后再次执行只跑抢券(签到页秒杀、周三场次秒杀)，签到、任务、追剧、拼图都不再跑"
@@ -655,7 +655,7 @@
           "name": "AI豆苗养成记",
           "val": false,
           "type": "boolean",
-          "desc": "移动爱购 AI豆苗：每日签到 + 浏览/分享任务 + 领取阳光值。凭证只需长效 ticket（App 大网 SSO 的整串会话 Cookie）：开着获取Cookie在 App 里点任意一页，抓到 client.app.coc.10086.cn 的 Cookie 头即入库该账号 coc3Ticket；没单独抓到时会回落用账号自己的 App 票据 token。每次运行拿 ticket 现签短效 phone 头，不用再去豆苗活动页抓 phone。注意 ticket 本身会随 App 重新登录轮换，实测抓下 19 分钟仍可签、放几小时即失效，长时间不开 App 时需重抓（同步上游 d967d65）"
+          "desc": "移动爱购 AI豆苗：每日签到 + 浏览/分享任务 + 领取阳光值。凭证不需要单独抓：入口 userLoginV2 用的 ticket 就是 cmcc_data 里该账号的 token（同一条大网 SSO 会话串），每次运行现签短效 phone 头。token 会随 App 重新登录被顶掉（实测抓下 20 分钟内可签、被顶后即刻失效），要长期有效请配合「中国移动票据保活」定时换票（同步上游 d967d65）"
         },
         {
           "id": "cmcc_seed_channel",
@@ -1597,6 +1597,58 @@
           "type": "boolean",
           "desc": "逐条打印请求/响应明细，排查问题用；日志可能含 token 等敏感信息，看完记得关掉"
         }
+      ]
+    },
+    {
+      "id": "cmcc_alive_sign",
+      "name": "中国移动票据保活",
+      "author": "@Feng",
+      "icon": "https://raw.githubusercontent.com/jy0703/scripts/main/icons/cmcc.png",
+      "repo": "https://github.com/jy0703/scripts",
+      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_alive_sign.js",
+      "last_update": "2026-10-21",
+      "keys": [
+        "cmcc_data",
+        "cmcc_alive_act",
+        "cmcc_alive_state"
+      ],
+      "settings": [
+        {
+          "id": "cmcc_data",
+          "name": "中国移动数据",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 5,
+          "placeholder": "",
+          "desc": "与「中国移动」签到脚本共用同一个变量，由签到脚本抓取写入，这里只读复用、不要手填"
+        },
+        {
+          "id": "cmcc_alive_act",
+          "name": "换票入口页",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 2,
+          "placeholder": "https://wx.10086.cn/qwhdhub/qwhdmark/1021122301?channelId=P00000109876",
+          "desc": "留空即用签到活动页（与签到脚本同一入口）。换票需要一个 actUrl，一般不用改"
+        },
+        {
+          "id": "cmcc_alive_state",
+          "name": "保活记录",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 3,
+          "placeholder": "",
+          "desc": "脚本自动维护（各账号上次成功时间与连续失败次数），只用于日志说明票据多久没换成功，勿手填"
+        }
+      ],
+      "descs_html": [
+        "只做一件事：拿 cmcc_data 里各账号的 jwt + token 走一遍主厅 SSO 换票（appTokenLogin），把换发的新 jwt 写回同一个变量。不签到、不做任务、不抢券、不进活动页",
+        "为什么要它：AI豆苗养成记每次运行要用同一条 token 现签 phone 头；实测只发 jwt 必回「APP登录状态已过期」，所以一律 jwt + token 同发，被拒再退成只发票据引导",
+        "按要求只写日志，成功失败都不推 Bark；定时默认每 6 小时一次（0 1,7,13,19 * * *）",
+        "票据被 App 重新登录顶掉时日志会出「❌ 尾号 XXXX: 换票失败 … 需重抓」，这时开着获取Cookie进一次签到页即可，豆苗会跟着一起恢复"
       ]
     }
   ]

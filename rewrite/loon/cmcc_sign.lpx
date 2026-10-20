@@ -1,5 +1,5 @@
 #!name = 中国移动签到
-#!desc = 自动抓取中国移动 App 签到凭证，并每日定时签到、领取连签奖励（boxjs 可选开启 AI豆任务、AI豆兑换话费券、秒杀抢券、追剧领福利含视频每日任务、AI豆苗养成记（开着捕获在 App 里点任意一页取 ticket）、周三充值日拼图/场次秒杀），支持多账号（打开中国移动 App：登录 -「我」-「签到」进入签到领流量活动页）
+#!desc = 自动抓取中国移动 App 签到凭证，并每日定时签到、领取连签奖励（boxjs 可选开启 AI豆任务、AI豆兑换话费券、秒杀抢券、追剧领福利含视频每日任务、AI豆苗养成记（凭证复用签到抓到的 token，不需额外抓取）、周三充值日拼图/场次秒杀），支持多账号（打开中国移动 App：登录 -「我」-「签到」进入签到领流量活动页）
 #!author = Fengzzzz
 #!homepage = https://github.com/jy0703/scripts
 #!icon = https://raw.githubusercontent.com/jy0703/scripts/main/icons/cmcc.png
@@ -7,13 +7,12 @@
 #!type = normal
 
 [Argument]
-capture = switch,false,tag=捕获 Cookie,desc=打开后进签到页抓签到凭证；豆苗 ticket 只要在 App 里点任意一页即可（取 client.app.coc.10086.cn 的 Cookie 头），抓完建议关闭
+capture = switch,false,tag=捕获 Cookie,desc=打开后进一次签到页抓签到凭证（豆苗凭证复用其中的 token，不需额外抓取），抓完建议关闭
 cronExpression = input,"0 1 * * *",tag=定时参数,desc=这里需要输入符合 CRON 表达式的参数
 
 [Script]
 http-request ^https?:\/\/wx\.10086\.cn\/qwhdsso\/appTokenLogin script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,requires-body=true,timeout=600,tag=中国移动获取Cookie,enable={capture}
-http-request ^https?:\/\/client\.app\.coc\.10086\.cn\/ script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,timeout=600,tag=中国移动豆苗获取ticket,enable={capture}
 cron {cronExpression} script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,timeout=600,tag=中国移动签到,enable=true
 
 [Mitm]
-hostname = wx.10086.cn,client.app.coc.10086.cn
+hostname = wx.10086.cn

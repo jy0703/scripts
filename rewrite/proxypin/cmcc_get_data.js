@@ -37,10 +37,10 @@
  *
  * 其他说明：
  *   - 「环境」功能关闭时读不到 bark_url / bark_key，此时既无法落库也无法推送（只能靠脚本日志）；
- *   - 豆苗凭证两条线：client.app.coc.10086.cn 的整串 Cookie 头入库为该账号 coc3Ticket（长效，脚本每次运行用它现签 phone），
- *     在 App 里点任意一页就能抓到；
+ *   - token（大网 SSO 会话串）有双重用途：既是 appTokenLogin 的引导票据，也是「AI豆苗养成记」每次现签 phone 的 ticket，
+ *     所以它必须保持新鲜 —— App 重新登录会顶掉旧串，届时豆苗会签不出（cmcc_alive 保活脚本就是干这个的）；
  *   - jwt 取请求体里 App 自己的缓存值，与 cmcc_sign 的 GetCookie 行为一致，后续由 cmcc_sign 续期回写；
- *   - token 是 App 票据（会过期），jwt 有效时 cmcc_sign 用不到它，仅作兜底。
+ *   - 实测 jwt 不能单独换票（只发 jwtToken 必回「APP登录状态已过期」），cmcc_sign 与保活脚本都是 jwtToken + token 同发。
  */
 
 var onRequest, onResponse;
@@ -54,8 +54,6 @@ var onRequest, onResponse;
 
     onRequest = async function (context, request) {
         var where = String((request && (request.path || request.url)) || '');
-        // 豆苗凭证线：大网域取整串 Cookie 头当 ticket
-        if (isBigNetHost(request)) return grabTicket(context, request);
         if (where.indexOf(API) === -1) return request;    // 生效地址填宽了也不刷屏
         console.log('[cmcc] 命中 ' + String(request.method) + ' ' + where
             + ' | body ' + String(request.body === undefined ? '(未取到)' : request.body).length + ' 字节'
@@ -90,35 +88,6 @@ var onRequest, onResponse;
         }
         return response;
     };
-
-    // 大网 SSO 域：ticket 就藏在这类请求的 Cookie 头里（JSESSIONID=..; UID=..; Comment=SessionServer-unity; ..; ticketID=..）
-    function isBigNetHost(request) {
-        var h = header((request && request.headers) || {}, 'host');
-        var u = String((request && request.url) || '');
-        return /client\.app\.coc\.10086\.cn/i.test(h) || /:\/\/client\.app\.coc\.10086\.cn/i.test(u);
-    }
-
-    function grabTicket(context, request) {
-        var cookie = header((request && request.headers) || {}, 'cookie');
-        // 只认带大网会话的串：静态资源、未登录请求一律安静放行
-        if (!/JSESSIONID=/i.test(cookie) || !/SessionServer/i.test(cookie)) return request;
-        var env = context.env;
-        if (!env) { console.log('[cmcc] 豆苗 ticket 已抓到（' + String(cookie).length + ' 字符），但 context.env 不可用，未入库'); return request; }
-        var list = readList(env[ENV_KEY]);
-        if (!list.length) { console.log('[cmcc] 豆苗 ticket 未入库：' + ENV_KEY + ' 里还没有账号，请先抓一次签到凭证'); return request; }
-        // App 每翻一页都会带同一个 Cookie 头，不去重会一路刷写并反复推 Bark
-        for (var s = 0; s < list.length; s++) { if (list[s].coc3Ticket === cookie) return request; }
-        var idx = list.length === 1 ? 0 : -1;
-        if (idx === -1) { for (var i = 0; i < list.length; i++) { if (!list[i].coc3Ticket) { idx = i; break; } } }
-        if (idx === -1) { console.log('[cmcc] 豆苗 ticket 未入库：所有账号都已有别的 ticket，要更新请先清空对应条目'); return request; }
-        list[idx].coc3Ticket = cookie;
-        var text = JSON.stringify(list);
-        env[ENV_KEY] = text;
-        console.log('[cmcc] 豆苗 ticket 已写入 ' + (list[idx].userName || ('账号' + (idx + 1))) + '，长度 ' + String(cookie).length + '，共 ' + list.length + ' 个账号');
-        console.log('[cmcc] ' + ENV_KEY + ' = ' + text);
-        try { pushBark(context, { all: text, one: JSON.stringify([list[idx]]), count: list.length, name: list[idx].userName }); } catch (e) { console.log('[cmcc] Bark 推送失败: ' + e); }
-        return request;
-    }
 
     // 从登录请求体里取凭证，按 userCheckId 合并进 context.env.cmcc_data
     function grab(context, request) {
@@ -163,7 +132,6 @@ var onRequest, onResponse;
             skWinPrize: old.skWinPrize || '',
             wedSkDay: old.wedSkDay || '',
             // 豆苗 phone 是手工填写的长期凭证，重抓包别冲掉
-            coc3Ticket: old.coc3Ticket || '',
         };
 
         var idx = indexOfUser(list, body.userCheckId);

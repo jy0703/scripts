@@ -1,0 +1,13 @@
+#!name = 中国移动票据保活
+#!desc = 只为主厅 jwt 续期并盯住 App 票据是否还有效（拿 cmcc_data 的 jwt + token 走一遍 appTokenLogin，换发的新 jwt 写回同一变量），不签到、不做任务、只写日志不推送通知。与「中国移动」签到脚本共用 cmcc_data，无需额外抓包
+#!author = Fengzzzz
+#!homepage = https://github.com/jy0703/scripts
+#!icon = https://raw.githubusercontent.com/jy0703/scripts/main/icons/cmcc.png
+#!tag = 签到,自动化
+#!type = normal
+
+[Argument]
+cronExpression = input,"0 1,7,13,19 * * *",tag=定时参数,desc=这里需要输入符合 CRON 表达式的参数（默认每 6 小时一次）
+
+[Script]
+cron {cronExpression} script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_alive_sign.js,timeout=120,tag=中国移动票据保活,enable=true

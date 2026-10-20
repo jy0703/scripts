@@ -1,11 +1,9 @@
 #!name=中国移动获取Cookie
-#!desc=自动抓取中国移动签到凭证与豆苗 ticket
+#!desc=自动抓取中国移动签到凭证
 #!打开中国移动 App，进入 登录 -「我」-「签到」签到领流量/话费 活动页。
-#!豆苗 ticket：开着本模块在 App 里点任意一页即可，抓 client.app.coc.10086.cn 的 Cookie 头写进该账号 coc3Ticket。
 
 [Script]
 中国移动获取Cookie = type=http-request,pattern=^https?:\/\/wx\.10086\.cn\/qwhdsso\/appTokenLogin,requires-body=1,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,script-update-interval=0
-中国移动豆苗获取ticket = type=http-request,pattern=^https?:\/\/client\.app\.coc\.10086\.cn\/,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,script-update-interval=0
 
 [MITM]
-hostname = %APPEND% wx.10086.cn,client.app.coc.10086.cn
+hostname = %APPEND% wx.10086.cn
