@@ -380,8 +380,9 @@ async function openCtx(user) {
 }
 
 // 走 SSO 换取活动会话（QWHD_SESSION_TOKEN 落在 jar 里），返回 { jar, ua, referer }
-// 凭证策略（py 实测结论）：jwt 是账号级长期凭证，appTokenLogin 里 jwtToken 优先于 token，
-// 故优先用缓存 jwt 免票据续期，App 票据仅在 jwt 缺失/失效时作引导兜底。
+// 凭证策略（2026-10-21 真机 HAR 四条对照实测）：appTokenLogin 必须带上大网票据 token ——
+// 只发 jwtToken（token 留空）必回「APP登录状态已过期」，连刚换发出来的新 jwt 单发也不例外；
+// jwtToken + token 同发则 SUCCESS 且每次都换发新 jwt。故首选同发，token 缺失时才单发 jwt。
 async function exchangeSession(user, entryUrl) {
     const jar = {};
     const ua = user.userAgent || USER_AGENT;
@@ -403,21 +404,21 @@ async function exchangeSession(user, entryUrl) {
         took: randomInt(120, 900),
     };
 
-    // ② 优先用缓存 jwt 免票据续期
+    // ② 首选 jwt + App 票据同发（App 的真实形态）；没有票据时才退化成单发 jwt（多半会被拒，见上）
     let resp = null;
     if (user.jwt) {
-        resp = await Request({ url: loginUrl, method: 'post', headers: baseHeaders(jar, ua), body: Object.assign({}, baseBody, { jwtToken: user.jwt, token: '' }), _timeout: 30000 });
+        resp = await Request({ url: loginUrl, method: 'post', headers: baseHeaders(jar, ua), body: Object.assign({}, baseBody, { jwtToken: user.jwt, token: user.token || '' }), _timeout: 30000 });
         if (resp && resp.code === 'SUCCESS') {
-            $.log(`jwt 续期成功（未使用 app_token，凭证链已 ${((Date.now() - (user.jwt_first || Date.now())) / 86400000).toFixed(1)} 天）`);
+            $.log(`jwt 续期成功（${user.token ? 'jwt + App 票据同发' : '仅 jwt，未带票据'}，凭证链已 ${((Date.now() - (user.jwt_first || Date.now())) / 86400000).toFixed(1)} 天）`);
         } else {
-            $.log(`jwt 续期失败(${resp && resp.msg})，回落 appTokenLogin 引导`);
+            $.log(`jwt 续期失败(${resp && resp.code} ${resp && resp.msg})，回落 App 票据引导`);
             resp = null;
         }
     }
 
-    // ③ 回落：App 票据引导登录（首次配置或 jwt 失效后）
+    // ③ 回落：只用 App 票据引导登录（jwt 缺失或同发被拒）
     if (!resp) {
-        if (!user.token) throw new Error('App 票据(token)为空，请重新抓包更新凭证');
+        if (!user.token) throw new Error(user.jwt ? '同发被拒且没有 App 票据可引导：打开 App 进一次签到页重新抓包' : 'App 票据(token)为空，请重新抓包更新凭证');
         resp = await Request({ url: loginUrl, method: 'post', headers: baseHeaders(jar, ua), body: Object.assign({}, baseBody, { jwtToken: null, token: user.token }), _timeout: 30000 });
         if (!resp || resp.code !== 'SUCCESS') {
             // App 票据失效是脚本唯一的"需要人工介入"场景
@@ -1143,13 +1144,15 @@ async function seedTicketSign(user) {
     return { token: '', ticket: '', err: last };
 }
 
-// 主流程：现签 phone（失败退回已抓的 phone）→ 探活 → 签到 → 任务 → 领取 → 余额前后对比
+// 主流程：用 ticket 现签 phone → 探活 → 签到 → 任务 → 领取 → 余额前后对比
+// ticket 只在 App 刚登录后几小时内可签（实测抓下 19 分钟仍签得出 phone，放几小时即 40006；
+// App 重新 autoLogin 会轮换掉旧的），签不出就提示重抓，不缓存 phone 也不留兜底分支。
 async function runSeed(user) {
     const lines = [];
     const say = t => { lines.push(t); $.log(t); };
     const signed = await seedTicketSign(user);
     const cred = signed.token;
-    if (!cred) { say(`[豆苗] ticket 现签失败(${signed.err})，本次跳过：开着获取Cookie在 App 里点任意一页重抓 ticket`); return lines; }
+    if (!cred) { say(`[豆苗] ticket 签不出 phone(${signed.err})，本次跳过——ticket 只在 App 刚登录后几小时内有效，开着获取Cookie在 App 里点任意一页重抓`); return lines; }
 
     const all = $.toObj($.getdata(SEED_STATE_KEY), {}) || {};
     const k = user.userCheckId || user.userName || 'default';
@@ -1168,7 +1171,7 @@ async function runSeed(user) {
     const dead = () => chkResp.resultCode === -516 || /登录/.test(chkMsg);
     if (dead()) {
         const extra = state.lastOk ? `，上次成功 ${seedAge(nowSec - Number(state.lastOk))} 前` : '';
-        say(`[豆苗] ticket 已失效（${chkMsg || '登录已失效'}，已服役 ${seedAge(ageSec)}${extra}）——开着获取Cookie在 App 里点任意一页重抓`);
+        say(`[豆苗] ticket 已失效（${chkMsg || '登录已失效'}，已服役 ${seedAge(ageSec)}${extra}）——它撑不过几小时，开着获取Cookie在 App 里点任意一页重抓`);
         return lines;
     }
     state.lastOk = nowSec;

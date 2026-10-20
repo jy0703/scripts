@@ -655,7 +655,7 @@
           "name": "AI豆苗养成记",
           "val": false,
           "type": "boolean",
-          "desc": "移动爱购 AI豆苗：每日签到 + 浏览/分享任务 + 领取阳光值。凭证只需长效 ticket（App 大网 SSO 的整串会话 Cookie）：开着获取Cookie在 App 里点任意一页，抓到 client.app.coc.10086.cn 的 Cookie 头即入库该账号 coc3Ticket；没单独抓到时会回落用账号自己的 App 票据 token。每次运行拿 ticket 现签短效 phone 头，不用再去豆苗活动页抓 phone（同步上游 d967d65）"
+          "desc": "移动爱购 AI豆苗：每日签到 + 浏览/分享任务 + 领取阳光值。凭证只需长效 ticket（App 大网 SSO 的整串会话 Cookie）：开着获取Cookie在 App 里点任意一页，抓到 client.app.coc.10086.cn 的 Cookie 头即入库该账号 coc3Ticket；没单独抓到时会回落用账号自己的 App 票据 token。每次运行拿 ticket 现签短效 phone 头，不用再去豆苗活动页抓 phone。注意 ticket 本身会随 App 重新登录轮换，实测抓下 19 分钟仍可签、放几小时即失效，长时间不开 App 时需重抓（同步上游 d967d65）"
         },
         {
           "id": "cmcc_seed_channel",
