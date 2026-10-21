@@ -4,7 +4,9 @@
  * 脚本说明：支持多账号多品牌，账号走 code 服务(YYB Go)静默登录，token 按「品牌+ref」缓存复用、失效自动重登；签到 activityId 自动发现
  *          打开 milk_tea_probe 开关则变只读探测：逐品牌报告入会状态/当期活动/阶段门槛，不发签到请求
  * 环境变量：MILK_TEA_REF、MILK_TEA_BRANDS、milk_tea_probe、milk_tea_cache、milk_tea_debug（code 服务地址与令牌用 @wxCode.address / @wxCode.token）
- * 更新时间：2026-10-15
+ * 风控字段：签到前按「品牌 appid + ref」向 code 服务(/wx/getlatestuserkey，内部 1133)现取会话密钥，
+ *          自动生成 body 的 data/version；取不到就只发 signature（服务端不强制 data）。探测模式不发
+ * 更新时间：2026-10-21
 
 ------------------ Surge 配置 ------------------
 
@@ -258,6 +260,7 @@ async function loginByRef(brand, ref) {
             $.log('✅ [缓存] token 有效');
             item.userName = me.data.name || me.data.nickName || maskPhone(me.data.mobilePhone) || item.label || '';
             $.refLabel = item.label || '';
+            item.ref = ref;   // 取风控密钥要按 ref 找微信账号
             return item;
         }
         $.log('⚠️ [缓存] token 已失效，重新登录');
@@ -291,6 +294,7 @@ async function loginByRef(brand, ref) {
     };
     $.log(`✅ [登录] 会员 ${item.userName || '(无昵称)'} userId=${item.userId} token ${mask(item.token)}`);
     item.memberSince = await memberSince(brand, item);
+    item.ref = ref;
     cache[ck] = item;
     $.setdata($.toStr(cache), CACHE_KEY);
     return item;
@@ -352,6 +356,7 @@ async function doSign(brand, user) {
             $.stat.done++;
             msg = `📝 今日已签 · ${statLine(st)}`;
         } else {
+            await ensureUserKey(brand, user);
             const timestamp = String(Date.now());
             const body = {
                 activityId: user.activityId,
@@ -361,6 +366,7 @@ async function doSign(brand, user) {
                 signature: makeSignature({ activityId: user.activityId, storeId: user.storeId, timestamp, userId: user.userId }),
                 v: 1,
             };
+            attachRiskData(user, body);
             const res = parseOk(await qmPost(brand, user, '/web/cmk-center/sign/takePartInSign', body));
             if (res.code !== 0) {
                 // 状态查询偶发不准，服务端说已签就当已签，不报失败
@@ -419,13 +425,99 @@ function statLine(st) {
     return s;
 }
 
-// 企迈 v2 风控签名: 参数字典序拼接 + 反转 activityId 作 key 后 md5 取大写
-// 抓包里的 data/version 是微信 getUserCryptoManager().getLatestUserKey() 的密钥加密整包 body 得到的，脱离小程序运行时拿不到；
-// 实测(林里)只发 signature 签到照常成功并发奖，上游 teaMilk.js 同样从不发 data
+// 企迈 v1 风控签名: 参数字典序拼接 + 反转 activityId 作 key 后 md5 取大写
+// 抓包里的 data/version 是把"追加 data 之前的整个 body"按 JSON.stringify 原序序列化后，用
+// wx.getUserCryptoManager().getLatestUserKey() 下发的会话密钥做 AES-CBC/PKCS7/base64 得到的。
+// 密钥按 (微信账号, 小程序 appid) 现取、约 1 小时轮换，走 code 服务的 /wx/getlatestuserkey(内部 1133)；
+// 取不到就不发 data（实测服务端不强制 data，林里/茉莉奶白只发 signature 也照常成功发奖）
 function makeSignature({ activityId, storeId, timestamp, userId }) {
     const params = { activityId: String(activityId), sellerId: String(storeId), timestamp: String(timestamp), userId: String(userId) };
     const str = Object.keys(params).sort().map(k => `${k}=${params[k]}`).join('&');
     return Crypt('md5', `${str}&key=${String(activityId).split('').reverse().join('')}`).toUpperCase();
+}
+
+// 密钥字符串: "encryptKey|iv|version|过期时间戳ms"，也接受同结构的 JSON
+function parseUserKey(user) {
+    const raw = user.userKey;
+    if (!raw) return null;
+    let k = raw;
+    if (typeof raw === 'string') {
+        if (/^\s*\{/.test(raw)) k = $.toObj(raw);
+        else {
+            const parts = raw.trim().split(/[|:]/).filter(Boolean);
+            if (parts.length >= 2) k = { encryptKey: parts[0], iv: parts[1], version: parts[2], expireAt: parts[3] };
+        }
+    }
+    if (!k || !k.encryptKey || !k.iv) {
+        $.log('⚠️ [风控] userKey 格式不对(需 encryptKey|iv|version[|过期时间戳])，本次跳过 data');
+        return null;
+    }
+    const expireAt = k.expireAt != null && k.expireAt !== '' ? Number(k.expireAt) : null;
+    if (expireAt && Date.now() > expireAt) {
+        $.log(`⚠️ [风控] userKey 已过期 ${Math.round((Date.now() - expireAt) / 1000)}s，本次跳过 data`);
+        return null;
+    }
+    return { encryptKey: String(k.encryptKey), iv: String(k.iv), version: k.version != null && k.version !== '' ? Number(k.version) : null, expireAt };
+}
+
+// 就地给 body 追加 data/version；没有可用密钥时保持原样（服务端不强制）
+function attachRiskData(user, body) {
+    const k = parseUserKey(user);
+    if (!k) return;
+    const plain = JSON.stringify(body);   // 必须是被加密前那份、键序不变的 body
+    const data = Crypt('aes-cbc', plain, k.encryptKey, k.iv);
+    if (!data) {
+        $.log('⚠️ [风控] data 加密失败，本次不发 data');
+        return;
+    }
+    body.data = data;
+    if (k.version != null) body.version = k.version;
+    $.log(`🔐 [风控] data 已生成 (明文 ${plain.length}B → 密文 ${data.length}B base64, version=${k.version})`);
+}
+
+// 向 code 服务现取该品牌该账号的会话密钥。响应形状(实测 2026-10-21):
+// {code:0, data:{openid, result:{data:"<JSON字符串>", err_no:0}}}，内层 {encrypt_key, iv, version, expire_in, create_time}
+async function fetchUserKey(brand, user) {
+    if (!$.codeServer || !user.ref) return null;
+    const headers = { 'Content-Type': 'application/json' };
+    if ($.yybToken) headers['Authorization'] = `Bearer ${$.yybToken}`;
+    const resp = await Request({
+        url: `${$.codeServer}/wx/getlatestuserkey`,
+        headers,
+        body: { ref: String(user.ref), app_id: brand.appid, payload: { api_name: 'webapi_getuserencryptkey', data: {}, env: 1 } },
+        _timeout: 30000,
+    });
+    if (!resp || Number(resp.code) !== 0) {
+        $.log(`⚠️ [风控] 取密钥失败(${resp ? resp.code : '无响应'}) ${resp && resp.msg ? resp.msg : ''}，本次不发 data`);
+        return null;
+    }
+    const result = (resp.data && resp.data.result) || {};
+    let inner = result.data != null ? result.data : result;
+    if (typeof inner === 'string') inner = $.toObj(inner);
+    if (!inner || typeof inner !== 'object') {
+        $.log('⚠️ [风控] 取密钥响应结构不认识，本次不发 data');
+        return null;
+    }
+    const encryptKey = String(inner.encrypt_key || inner.encryptKey || '');
+    const iv = String(inner.iv || '');
+    if (!encryptKey || !iv) {
+        $.log('⚠️ [风控] 响应里缺 encrypt_key/iv，本次不发 data');
+        return null;
+    }
+    const version = inner.version != null ? Number(inner.version) : '';
+    const expireIn = Number(inner.expire_in != null ? inner.expire_in : inner.expireIn) || 3600;
+    const created = Number(inner.create_time) || Math.floor(Date.now() / 1000);
+    return `${encryptKey}|${iv}|${version}|${(created + expireIn) * 1000}`;
+}
+
+// 每个品牌是不同小程序，密钥按 appid 各自一把，所以签到前按品牌现取
+async function ensureUserKey(brand, user) {
+    const fresh = await fetchUserKey(brand, user);
+    if (fresh) {
+        user.userKey = fresh;
+        const k = parseUserKey(user);
+        $.log(`🔑 [风控] ${brand.name} 会话密钥 version=${k && k.version}，约 ${k && k.expireAt ? Math.max(0, Math.round((k.expireAt - Date.now()) / 1000)) : '?'}s 后失效`);
+    }
 }
 
 // 抓包里的 {status,code} 中 code 有 "0" 与 0 两种形态，统一成数字再判

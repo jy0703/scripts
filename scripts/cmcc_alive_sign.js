@@ -5,26 +5,26 @@
  * 为什么要有：「AI豆苗养成记」每次运行都要用同一条 token 现签 phone 头（上游 d967d65 的 coc3_ticket 就是它），
  *       而实测 jwt 不能单独换票（只发 jwtToken 必回「APP登录状态已过期」），必须 jwt + token 同发；
  *       定时同发既保住 jwt 持续续期，也能在票据被 App 重新登录顶掉的第一时间报出来。
- * 通知：按要求只写日志，成功失败都不推送 Bark。
+ * 通知：保活成功只写日志、不推送；失败推送一条（同一账号当天只提醒一次，因为定时是半小时一次）。
  * 环境变量：cmcc_data（与签到脚本共用，勿手填）/ cmcc_alive_act（选填：换票要落地的活动页 URL）/
  *          cmcc_activity_id、cmcc_channel_id（选填，与签到脚本一致，默认 1021122301 / P00000109876）/
  *          cmcc_alive_state（脚本自动维护的保活记录）/ cmcc_alive_debug（填 true 打请求详情）
- * 更新时间：2026-10-21 新建
+ * 更新时间：2026-10-21 新建；定时改为每半小时一次(0,30 * * * *)；失败改为推送通知
 
 ------------------ Surge 配置 ------------------
 
 [Script]
-中国移动票据保活 = type=cron,cronexp="0 1,7,13,19 * * *",wake-system=1,timeout=120,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_alive_sign.js,script-update-interval=0
+中国移动票据保活 = type=cron,cronexp="0,30 * * * *",wake-system=1,timeout=120,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_alive_sign.js,script-update-interval=0
 
 ------------------- Loon 配置 -------------------
 
 [Script]
-cron "0 1,7,13,19 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_alive_sign.js, timeout=120, tag=中国移动票据保活
+cron "0,30 * * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_alive_sign.js, timeout=120, tag=中国移动票据保活
 
 --------------- Quantumult X 配置 ---------------
 
 [task_local]
-0 1,7,13,19 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_alive_sign.js, tag=中国移动票据保活, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/cmcc.png, enabled=true
+0,30 * * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_alive_sign.js, tag=中国移动票据保活, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/cmcc.png, enabled=true
  */
 
 const $ = new Env('中国移动票据保活');
@@ -88,6 +88,8 @@ const dayText = ms => ((Date.now() - Number(ms)) / 86400000).toFixed(1);
         return;
     }
     const state = $.toObj($.getdata(STATE_KEY), {}) || {};
+    const today = $.time('yyyyMMdd');
+    const pushList = [];
     let dirty = false, ok = 0, bad = 0;
     for (let i = 0; i < users.length; i++) {
         const u = users[i], tag = u.userName || `账号${i + 1}`, k = u.userCheckId || tag;
@@ -101,13 +103,19 @@ const dayText = ms => ((Date.now() - Number(ms)) / 86400000).toFixed(1);
             $.log(`✅ ${tag}: 票据有效，jwt 已续期（${r.via}${r.jwt ? '' : '，本次未回新 jwt'}；凭证链已 ${dayText(u.jwt_first || Date.now())} 天）`);
         } else {
             bad++;
-            state[k] = { lastOk: st.lastOk || null, fails: (Number(st.fails) || 0) + 1, err: r.err };
+            state[k] = { lastOk: st.lastOk || null, fails: (Number(st.fails) || 0) + 1, err: r.err, notifiedDay: st.notifiedDay || '' };
             $.log(`❌ ${tag}: 换票失败 ${r.err} —— 票据多半已被 App 重新登录顶掉，需重抓（上次成功 ${st.lastOk ? dayText(st.lastOk) + ' 天前' : '从未'}，已连续失败 ${state[k].fails} 次）`);
+            if (state[k].notifiedDay !== today) {
+                state[k].notifiedDay = today;
+                pushList.push(`❌ ${tag}: 连续失败 ${state[k].fails} 次，上次成功 ${st.lastOk ? dayText(st.lastOk) + ' 天前' : '从未'}\n${r.err}`);
+            }
         }
     }
     if (dirty) $.setdata($.toStr(users, '[]'), DATA_KEY);
     $.setdata($.toStr(state, '{}'), STATE_KEY);
-    $.log(`保活完成：${ok} 个有效 / ${bad} 个失败，共 ${users.length} 个账号（不推送通知）`);
+    $.log(`保活完成：${ok} 个有效 / ${bad} 个失败，共 ${users.length} 个账号`);
+    // 成功不推送；失败推送一条，同一账号当天只提醒一次（定时是半小时一次，不能每次都轰）
+    if (pushList.length) $.msg('中国移动票据保活', `⚠️ ${bad} 个账号换票失败，需重抓 App 票据`, pushList.join('\n\n'));
 })().catch(e => $.log('❗️保活异常: ' + ((e && e.message) || e))).finally(() => $.done());
 
 function debug(content, title = 'debug') {
