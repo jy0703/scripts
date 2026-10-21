@@ -5,11 +5,12 @@
  * 为什么要有：「AI豆苗养成记」每次运行都要用同一条 token 现签 phone 头（上游 d967d65 的 coc3_ticket 就是它），
  *       而实测 jwt 不能单独换票（只发 jwtToken 必回「APP登录状态已过期」），必须 jwt + token 同发；
  *       定时同发既保住 jwt 持续续期，也能在票据被 App 重新登录顶掉的第一时间报出来。
- * 通知：保活成功只写日志、不推送；失败推送一条（同一账号当天只提醒一次，因为定时是半小时一次）。
+ * 通知：与签到脚本同一套 sendMsg —— Node/青龙 走 ./sendNotify，NE 端走 $.msg。成功只写日志不推送；
+ *       失败才进 Messages，且同一账号当天只提醒一次（定时是半小时一次，不能每次都轰）。
  * 环境变量：cmcc_data（与签到脚本共用，勿手填）/ cmcc_alive_act（选填：换票要落地的活动页 URL）/
  *          cmcc_activity_id、cmcc_channel_id（选填，与签到脚本一致，默认 1021122301 / P00000109876）/
  *          cmcc_alive_state（脚本自动维护的保活记录）/ cmcc_alive_debug（填 true 打请求详情）
- * 更新时间：2026-10-21 新建；定时改为每半小时一次(0,30 * * * *)；失败改为推送通知
+ * 更新时间：2026-10-21 新建；定时改为每半小时一次(0,30 * * * *)；失败改为推送通知，并把收尾改回与 cmcc_sign 同框架（$.Messages 累积 + sendMsg + finally），因为 Env.msg 在 Node 分支是空实现，青龙上必须走 sendNotify 才出得来
 
 ------------------ Surge 配置 ------------------
 
@@ -28,6 +29,7 @@ cron "0,30 * * * *", script-path=https://raw.githubusercontent.com/jy0703/script
  */
 
 const $ = new Env('中国移动票据保活');
+$.Messages = [];  // 与签到脚本同一套通知累积（成功不进，只有需要提醒的失败进）
 
 const DATA_KEY = 'cmcc_data';
 const STATE_KEY = 'cmcc_alive_state';
@@ -89,7 +91,6 @@ const dayText = ms => ((Date.now() - Number(ms)) / 86400000).toFixed(1);
     }
     const state = $.toObj($.getdata(STATE_KEY), {}) || {};
     const today = $.time('yyyyMMdd');
-    const pushList = [];
     let dirty = false, ok = 0, bad = 0;
     for (let i = 0; i < users.length; i++) {
         const u = users[i], tag = u.userName || `账号${i + 1}`, k = u.userCheckId || tag;
@@ -107,16 +108,38 @@ const dayText = ms => ((Date.now() - Number(ms)) / 86400000).toFixed(1);
             $.log(`❌ ${tag}: 换票失败 ${r.err} —— 票据多半已被 App 重新登录顶掉，需重抓（上次成功 ${st.lastOk ? dayText(st.lastOk) + ' 天前' : '从未'}，已连续失败 ${state[k].fails} 次）`);
             if (state[k].notifiedDay !== today) {
                 state[k].notifiedDay = today;
-                pushList.push(`❌ ${tag}: 连续失败 ${state[k].fails} 次，上次成功 ${st.lastOk ? dayText(st.lastOk) + ' 天前' : '从未'}\n${r.err}`);
+                $.Messages.push(`🔹 账号 ${i + 1} ${tag}: 票据已失效，需重抓（连续失败 ${state[k].fails} 次，上次成功 ${st.lastOk ? dayText(st.lastOk) + ' 天前' : '从未'}）\n${r.err}`);
             }
         }
     }
     if (dirty) $.setdata($.toStr(users, '[]'), DATA_KEY);
     $.setdata($.toStr(state, '{}'), STATE_KEY);
     $.log(`保活完成：${ok} 个有效 / ${bad} 个失败，共 ${users.length} 个账号`);
-    // 成功不推送；失败推送一条，同一账号当天只提醒一次（定时是半小时一次，不能每次都轰）
-    if (pushList.length) $.msg('中国移动票据保活', `⚠️ ${bad} 个账号换票失败，需重抓 App 票据`, pushList.join('\n\n'));
-})().catch(e => $.log('❗️保活异常: ' + ((e && e.message) || e))).finally(() => $.done());
+    // 成功不进 Messages（即不推送）；只有"当天首次换票失败"的账号进 —— 定时是半小时一次，不能每次都轰
+})().catch((e) => $.Messages.push(e.message || e) && $.logErr(e))
+    .finally(async () => {
+        await sendMsg($.Messages.join('\n').trimStart().trimEnd());  // 推送通知
+        $.done();
+    });
+
+// 发送消息（与签到脚本同一实现：Node/青龙 走 sendNotify，NE 端走 $.msg）
+async function sendMsg(message) {
+    if (!message) return;
+    try {
+        if ($.isNode()) {
+            try {
+                var notify = require('./sendNotify');
+            } catch (e) {
+                var notify = require('./utils/sendNotify');
+            }
+            await notify.sendNotify($.name, message);
+        } else {
+            $.msg($.name, '', message);
+        }
+    } catch (e) {
+        $.log(`\n\n----- ${$.name} -----\n${message}`);
+    }
+}
 
 function debug(content, title = 'debug') {
     let start = `\n----- ${title} -----\n`;
