@@ -3,39 +3,42 @@
  * 活动规则：中国移动「签到领流量/话费」活动(1021122301) 的 App 端 mark31 签到，每天一次；另有 AI豆任务(mark/task) 与秒杀抢券(markSeckill：触发时刻早于 11:00 不执行，开抢早于 11:00 的场次也不抢，某一期抢中后本周内不再打、下周继续)；开关 cmcc_video 后追加「追剧领福利」页(1126082530) 的每日打卡 + 代币任务 + 周日抽奖；开关 cmcc_seed 后追加「AI豆苗养成记」(coc 独立域，凭证即 cmcc_data 的 token，每次现签 phone 头；票据只在 App 刚登录后短期内有效)；开关 cmcc_gold 后追加签到专属 AI豆兑换话费券(按 5/2/1.5/1 元顶格兑，默认关)；开关 cmcc_wed 后追加「周三充值日」(hlwyxhdhub/wedrecharge) 的做任务挣次数 + 抽拼图集话费券（每天做，攒碎片），cmcc_wed_sk 再打场次秒杀(drawPrize，仅北京时间周三开火，当天打过一次即收工；场次时间默认听服务端 rec_login 的 seckillTime)
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。账号参数（App 票据/省市编码等）由本脚本 GetCookie 抓取后存入 cmcc_data
  * 环境变量：cmcc_data / cmcc_claim(默认开，填 false 才关) / cmcc_task / cmcc_seckill / cmcc_sk_min(每日秒杀的北京时间下限，默认 11:00，填 00:00 不受限) / cmcc_video / cmcc_seed(凭证即各账号 cmcc_data 的 token（大网会话串），不单列变量、不额外抓包) / cmcc_seed_channel / cmcc_gold(兑换会真扣 AI 豆，默认关) / cmcc_wed / cmcc_wed_sk / cmcc_wed_sk_at(留空=服务端下发场次自动选最近未开始的一场) / cmcc_task_skip_days；cmcc_task_fail 为脚本自动维护的任务黑名单
- * 更新时间：2026-10-12 新增周三充值日(hlwyxhdhub wedrecharge)：任务代做 + 抽拼图 + 集齐领取 + 场次秒杀，开关 cmcc_wed / cmcc_wed_sk；AI豆任务同步上游：握手会话整轮复用、taskToken 任务直接握手、外部合作区跳过、status=1 遗留补领、公众号类即弃、停留与间隔提速；连签奖励改为只要开了就查一遍代领（不再要求当天由脚本签到），展示改用响应里的 prizeName/prizeValue。2026-10-13 每日秒杀加 11:00 触发门控(cmcc_sk_min)与"按周去重"(skWinDay 记抢中那期的日期，比较时换算成该周周一：本周不再打，下周自动恢复)；服务端回"已领取/限领"也按同样口径落盘，覆盖在 App 里领过的情况；邀好友/助力类任务与外部合作区一样常驻跳过；周三场次秒杀加"当天打过即收工"(wedSkDay，发过 drawPrize 才记)。2026-10-18 同步上游：追剧新增看精彩视频每日任务(queryDiyVideoTask + getYDRZToken + cmlive 两步，每完成 +1 抽奖次数、周日 2 次)；新增 AI豆苗养成记(cmcc_seed)；周三场次秒杀同步 rec_login 下发场次 + 等待期会话重建与开火前强刷。2026-10-19 同步上游 d967d65：豆苗凭证改为每次运行用 userLoginV2 现签短效 phone 头，ticket 直接复用 cmcc_data 各账号的 token(即上游那份 coc3_ticket，同一条大网会话串，不设独立抓取)；新增上游 1753cf1 签到专属 AI豆兑换话费券(cmcc_gold，默认关)；phone 与 ticket 的独立抓取入口全部下线，凭证只复用 cmcc_data 的 token。2026-10-21 真机 HAR 四条对照：appTokenLogin 只发 jwtToken 必回「APP登录状态已过期」，jwt+token 同发才 SUCCESS 且每次换发新 jwt，故 exchangeSession 改为首选同发、被拒再回落单发票据；豆苗 ticket 时效语义写清(现签可用窗口只有 App 登录后几小时，40006 表示同账号会话被 App 重新顶掉)；另配独立保活脚本 cmcc_alive_sign.js(只做换票、只写日志、不推送)，配合其插件每 6 小时续一次 jwt
+ * 更新时间：2026-10-12 新增周三充值日(hlwyxhdhub wedrecharge)：任务代做 + 抽拼图 + 集齐领取 + 场次秒杀，开关 cmcc_wed / cmcc_wed_sk；AI豆任务同步上游：握手会话整轮复用、taskToken 任务直接握手、外部合作区跳过、status=1 遗留补领、公众号类即弃、停留与间隔提速；连签奖励改为只要开了就查一遍代领（不再要求当天由脚本签到），展示改用响应里的 prizeName/prizeValue。2026-10-13 每日秒杀加 11:00 触发门控(cmcc_sk_min)与"按周去重"(skWinDay 记抢中那期的日期，比较时换算成该周周一：本周不再打，下周自动恢复)；服务端回"已领取/限领"也按同样口径落盘，覆盖在 App 里领过的情况；邀好友/助力类任务与外部合作区一样常驻跳过；周三场次秒杀加"当天打过即收工"(wedSkDay，发过 drawPrize 才记)。2026-10-18 同步上游：追剧新增看精彩视频每日任务(queryDiyVideoTask + getYDRZToken + cmlive 两步，每完成 +1 抽奖次数、周日 2 次)；新增 AI豆苗养成记(cmcc_seed)；周三场次秒杀同步 rec_login 下发场次 + 等待期会话重建与开火前强刷。2026-10-19 同步上游 d967d65：豆苗凭证改为每次运行用 userLoginV2 现签短效 phone 头，ticket 直接复用 cmcc_data 各账号的 token(即上游那份 coc3_ticket，同一条大网会话串，不设独立抓取)；新增上游 1753cf1 签到专属 AI豆兑换话费券(cmcc_gold，默认关)；phone 与 ticket 的独立抓取入口全部下线，凭证只复用 cmcc_data 的 token。2026-10-21 真机 HAR 四条对照：appTokenLogin 只发 jwtToken 必回「APP登录状态已过期」，jwt+token 同发才 SUCCESS 且每次换发新 jwt，故 exchangeSession 改为首选同发、被拒再回落单发票据；豆苗 ticket 时效语义写清(现签可用窗口只有 App 登录后几小时，40006 表示同账号会话被 App 重新顶掉)；票据续期由本脚本在过期时调 @tools.address 的 /api/cmcc/refresh 现换（独立保活脚本已删）
 
 
 ------------------ Surge 配置 ------------------
 
 [Script]
 中国移动获取Cookie = type=http-request,pattern=^https?:\/\/wx\.10086\.cn\/qwhdsso\/appTokenLogin,requires-body=1,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,script-update-interval=0
+中国移动抓autoLoginSeed = type=http-request,pattern=^https?:\/\/client\.app\.coc\.10086\.cn\/.*uamrandcodelogin\/autoLogin,requires-body=1,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,script-update-interval=0
 
 中国移动签到 = type=cron,cronexp="0 1 * * *",wake-system=1,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,script-update-interval=0
 
 [MITM]
-hostname = wx.10086.cn
+hostname = wx.10086.cn, client.app.coc.10086.cn
 
 ------------------- Loon 配置 -------------------
 
 [Script]
 http-request ^https?:\/\/wx\.10086\.cn\/qwhdsso\/appTokenLogin script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,requires-body=true,timeout=600,tag=中国移动获取Cookie
+http-request ^https?:\/\/client\.app\.coc\.10086\.cn\/.*uamrandcodelogin\/autoLogin script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,requires-body=true,timeout=600,tag=中国移动抓autoLogin传参
 
 cron "0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js, timeout=600, tag=中国移动签到
 
 [MITM]
-hostname = wx.10086.cn
+hostname = wx.10086.cn, client.app.coc.10086.cn
 
 --------------- Quantumult X 配置 ---------------
 
 [rewrite_local]
 ^https?:\/\/wx\.10086\.cn\/qwhdsso\/appTokenLogin url script-request-body https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js
+^https?:\/\/client\.app\.coc\.10086\.cn\/.*uamrandcodelogin\/autoLogin url script-request-body https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js
 
 [task_local]
 "0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js, tag=中国移动签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/cmcc.png, enabled=true
 
 [MITM]
-hostname = wx.10086.cn
+hostname = wx.10086.cn, client.app.coc.10086.cn
 
  */
 
@@ -51,6 +54,10 @@ const SSO_LOGIN = BASE + '/qwhdsso/login';
 const API_MARK = BASE + '/qwhdhub/api/mark';
 const ACTIVITY_ID = getEnv('cmcc_activity_id') || '1021122301';
 const CHANNEL_ID = getEnv('cmcc_channel_id') || 'P00000109876';
+// 可选：把"取大网票据(App ck)"外包给 tools 服务（/api/cmcc/refresh 做 autoLogin 重放）。
+// 地址与 token 都取公共分区 @tools.address / @tools.token；留空=纯用本地抓包票据，服务对所有 /api/* 都查 token。
+const TOOLS_API = (getEnv('TOOLS_API', '@tools.address') || '').replace(/\/+$/, '');
+const TOOLS_API_TOKEN = getEnv('TOOLS_API_TOKEN', '@tools.token') || '';
 const CLAIM_AWARD = getEnv('cmcc_claim') !== 'false';  // 累计/连签奖励代领：默认开（达标后服务端不自动发放，一直挂着），显式填 false 才不领
 const RUN_TASKS = getEnv('cmcc_task') === 'true';   // 签到页 AI豆任务(小程序端 mark/task 体系)
 const SECKILL = getEnv('cmcc_seckill') === 'true';  // 签到有礼秒杀抢券(同活动 1021122301)
@@ -205,6 +212,25 @@ function GetCookie() {
     }
 }
 
+// autoLogin 传参（密文 body + ua + x-qen）存进 cmcc_autologin_data，票据过期时交给 @tools.address 的 /api/cmcc/refresh 现换新票
+function GetSeed() {
+    try {
+        const req = $request || {};
+        const body = req.body || '';
+        if (!body) return;
+        const h = ObjectKeys2LowerCase(req.headers || {});
+        const seed = { url: req.url, ua: h['user-agent'] || '', x_qen: h['x-qen'] || '14', body: String(body) };
+        const old = $.getdata('cmcc_autologin_data');
+        if (old && $.toObj(old, {}) && $.toObj(old, {}).body === seed.body) return;      // 同一个值不重复提醒
+        seed.capturedAt = new Date().toISOString();
+        $.setdata($.toStr(seed), 'cmcc_autologin_data');
+        $.Messages.push('🎉已抓到 autoLogin 传参');
+        $.log('🎉已抓到 autoLogin 传参');
+    } catch (e) {
+        $.log('❌ autoLogin 传参获取失败'), $.log(e);
+    }
+}
+
 // 任务: 建会话 → App 端签到 → (可选)连签奖励/AI豆任务/追剧领福利/周三充值日 → (可选)抢券
 // 当天签到完成后(user.signDay)，再次执行本脚本只跑抢券(签到页秒杀/周三场次秒杀)，不再签到/领奖/任务/追剧/拼图；本周已抢中的账号连抢券请求也不发
 // 结果边产生边 $.log（say），通知内容仍攒在 lines 里最后一起推送
@@ -356,6 +382,36 @@ async function openCtx(user) {
 // 凭证策略（2026-10-21 真机 HAR 四条对照实测）：appTokenLogin 必须带上大网票据 token ——
 // 只发 jwtToken（token 留空）必回「APP登录状态已过期」，连刚换发出来的新 jwt 单发也不例外；
 // jwtToken + token 同发则 SUCCESS 且每次都换发新 jwt。故首选同发，token 缺失时才单发 jwt。
+// 向 @tools.address 要一份新鲜的 App 票据（服务端不落盘：把 loon 重写抓存的 autoLogin 传参原样传进去现换）。
+// seed 来自 boxjs `cmcc_autologin_data`（cmcc_sign.lpx 写入）。成功则覆盖 user.token 并落盘，返回 true。
+async function refreshAppTokenFromApi(user) {
+    if (!TOOLS_API) return false;
+    if (!TOOLS_API_TOKEN) { $.log('配了 @tools.address 但没填 @tools.token，服务端所有 /api/* 都要带 token，已跳过刷新'); return false; }
+    let seed = getEnv('cmcc_autologin_data') || user.seed || '';
+    if (typeof seed === 'string') seed = $.toObj(seed, null);
+    if (!seed || !seed.url || !seed.body) { $.log('没有 cmcc_autologin_data(未抓 autoLogin)，无法刷新票据'); return false; }
+    try {
+        const r = await Request({
+            url: `${TOOLS_API}/api/cmcc/refresh`, method: 'post',
+            headers: { 'content-type': 'application/json', 'x-token': TOOLS_API_TOKEN },
+            body: seed, _timeout: 30000,
+        });
+        if (!r || r.error || !r.token) { $.log(`@tools 刷新票据失败：${(r && r.error) || '无 token'}`); return false; }
+        if (r.userCheckId && user.userCheckId && r.userCheckId !== user.userCheckId) {
+            $.log(`@tools 返回的票据属于 ${r.userCheckId}，与当前账号 ${user.userCheckId} 不符，已跳过`);
+            return false;
+        }
+        user.token = r.token;
+        if (r.provinceCode && !user.provinceCode) user.provinceCode = r.provinceCode;
+        if (r.cityCode && !user.cityCode) user.cityCode = r.cityCode;
+        saveUsers();
+        return true;
+    } catch (e) {
+        $.log(`@tools 请求异常：${e.message || e}`);
+        return false;
+    }
+}
+
 async function exchangeSession(user, entryUrl) {
     const jar = {};
     const ua = user.userAgent || USER_AGENT;
@@ -391,11 +447,17 @@ async function exchangeSession(user, entryUrl) {
 
     // ③ 回落：只用 App 票据引导登录（jwt 缺失或同发被拒）
     if (!resp) {
+        if (!user.token) await refreshAppTokenFromApi(user);   // 配了 @tools 就先去要一份新票据
         if (!user.token) throw new Error(user.jwt ? '同发被拒且没有 App 票据可引导：打开 App 进一次签到页重新抓包' : 'App 票据(token)为空，请重新抓包更新凭证');
         resp = await Request({ url: loginUrl, method: 'post', headers: baseHeaders(jar, ua), body: Object.assign({}, baseBody, { jwtToken: null, token: user.token }), _timeout: 30000 });
         if (!resp || resp.code !== 'SUCCESS') {
-            // App 票据失效是脚本唯一的"需要人工介入"场景
-            throw new Error(`appTokenLogin 失败: ${resp && resp.code} ${resp && resp.msg} —— 通常是 App 票据过期，请打开 App 签到页重新抓包`);
+            // 票据可能已过期/被顶：配了 @tools 就刷新后重试一次
+            if (TOOLS_API && await refreshAppTokenFromApi(user)) {
+                resp = await Request({ url: loginUrl, method: 'post', headers: baseHeaders(jar, ua), body: Object.assign({}, baseBody, { jwtToken: null, token: user.token }), _timeout: 30000 });
+            }
+            if (!resp || resp.code !== 'SUCCESS') {
+                throw new Error(`appTokenLogin 失败: ${resp && resp.code} ${resp && resp.msg} —— 通常是 App 票据过期，请打开 App 签到页重新抓包`);
+            }
         }
     }
 
@@ -1918,10 +1980,11 @@ async function sendMsg(message) {
     }
 }
 
-// 脚本执行入口: $request 存在 → 抓取模式, 否则 → 定时任务模式
+// 脚本执行入口: $request 存在 → 抓取模式(按 URL 分流), 否则 → 定时任务模式
 !(async () => {
     if (typeof $request !== `undefined`) {
-        GetCookie();
+        if (/uamrandcodelogin\/autoLogin/i.test($request.url || '')) GetSeed();
+        else GetCookie();
     } else {
         await main();  // 主函数
     }

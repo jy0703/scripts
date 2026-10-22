@@ -2,11 +2,11 @@
  * 脚本名称：夸克网盘签到
  * 活动规则：一个脚本跑两个活动 —— ① 夸克网盘每日签到领空间容量，连签达目标有额外奖励；② 夸克 App 内「扫描王签到」每日签到领金币，金币可兑扫描王 VIP（30 天一期）
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。每次运行用缓存里的 service_ticket/uid/昵称现算 vcode/sign_wg，不依赖抓到的旧签名；扫描王的公参 ut 也是现算（keyNo3 加密账号固化的 utdid）；请求 UA 跟着账号走（quark_data 里的 ua），没写就用内置那条
- * 环境变量：quark_data、quark_debug、quark_api、quark_api_token
- * 凭证来源：只有 quark_data 一个入口 —— 用本地取凭证网页 quark-api/（手机验证码登录）点「复制 全部账号（票+UA+设备）」，把 {手机号:{service_ticket,kps_wg,ua,utdid,ve}} 整段粘进去；旧的手填数组写法仍能读，回写时统一成按手机号的 map；账号项没有 utdid 时扫描王那段跳过、不影响网盘签到
+ * 环境变量：quark_data、quark_debug；换票服务地址与 token 用公共分区 @tools.address / @tools.token（Node 用 TOOLS_API / TOOLS_API_TOKEN）
+ * 凭证来源：只有 quark_data 一个入口 —— 用本地取凭证网页 tools 的 /quark 页（手机验证码登录，只允许内网打开）点「复制 全部账号（票+UA+设备）」，把 {手机号:{service_ticket,kps_wg,ua,utdid,ve}} 整段粘进去；旧的手填数组写法仍能读，回写时统一成按手机号的 map；账号项没有 utdid 时扫描王那段跳过、不影响网盘签到
  * 扫描王接口：POST https://order-api.sm.cn/api/sd6hJds8SIgn/<op>，参数（ve/sv/ut/kp/fr/pr/chid/timestamp/product/token）全在 JSON body、不吃 cookie；身份 kp 与网盘的 kps_wg 是同一张票
- * 换票：配了 quark_api（内网 http://192.168.1.10:8787，公网用 https 隧道地址）时，每次运行先 POST /api/refresh 向那个服务要一张有效票，票或昵称变了就写回 quark_data；服务不通就用缓存里的票继续，票真作废才报错要求重新登录。脚本自身不含账号网关代码，也不抓包
- * quark_api_token：服务与服务端不在同一内网时必填，作为 X-Quark-Token 送出（服务端非内网来源只放行 /api/refresh 并校验它）
+ * 换票：配了 @tools.address（内网 http://192.168.1.10:8787，公网用 https 隧道地址）并配 @tools.token 时，每次运行先 POST /api/quark/refresh 向那个服务要一张有效票，票或昵称变了就写回 quark_data；服务不通就用缓存里的票继续，票真作废才报错要求重新登录。脚本自身不含账号网关代码，也不抓包
+ * @tools.token：必填。服务端对所有 /api/* 都校验 X-Token（本机/内网也不例外），没填就跳过换票、用 quark_data 里的本地票
  * 更新时间：2026-10-21
 
 ------------------ Surge 配置 ------------------
@@ -49,10 +49,10 @@ const DEFAULT_VE = '10.18.6.1161';
 // 主函数
 async function main() {
     const accounts = loadAccounts();
-    if (!accounts.length) throw new Error(`未配置账号：用取凭证网页（quark-api/）的「复制 全部账号（票+UA）」把 JSON 粘进 ${DATA_KEY} ❌`);
-    const api = (getEnv('quark_api', 'QUARK_API') || '').trim();
-    const apiToken = (getEnv('quark_api_token', 'QUARK_API_TOKEN') || '').trim();
-    if (api) $.log(`🔌 换票服务：${api}${apiToken ? '（带 token）' : ''}`);
+    if (!accounts.length) throw new Error(`未配置账号：用取凭证网页（tools/）的「复制 全部账号（票+UA）」把 JSON 粘进 ${DATA_KEY} ❌`);
+    const api = (getEnv('TOOLS_API', '@tools.address') || '').trim();
+    const apiToken = (getEnv('TOOLS_API_TOKEN', '@tools.token') || '').trim();
+    if (api) $.log(apiToken ? `🔌 换票服务：${api}（带 token）` : `⚠️ 换票服务：${api} 未填 @tools.token，跳过换票用本地票`);
     $.log(`\n🌀 找到 ${accounts.length} 个夸克账号`);
 
     let ok = 0, fail = 0;
@@ -161,19 +161,20 @@ function maskMobile(value) {
     return /^1\d{10}$/.test(s) ? `${s.slice(0, 3)}****${s.slice(-4)}` : s;
 }
 
-// 向本地取凭证服务换票（POST /api/refresh）：账号网关的加密都在服务那边，脚本只发这一个请求
+// 向本地取凭证服务换票（POST /api/quark/refresh）：账号网关的加密都在服务那边，脚本只发这一个请求
 // 票真作废（50051 系）就直接失败并要求重新登录；服务不通/其它错误就用本地票继续跑
 async function refreshTicket(acc, api, apiToken) {
-    const url = api.replace(/\/+$/, '') + '/api/refresh';
+    if (!apiToken) { $.log('⚠️ 服务端对所有 /api/* 都要求 X-Token，请在「取凭证网关(tools)」里填 @tools.token；本次改用本地票'); return; }
+    const url = api.replace(/\/+$/, '') + '/api/quark/refresh';
     const headers = { 'User-Agent': acc.ua || DEFAULT_UA };
-    if (apiToken) headers['X-Quark-Token'] = apiToken;      // 服务不在内网时靠它挡一下
+    headers['X-Token'] = apiToken;
     let payload;
     try {
         const resp = await Request({
             url, method: 'post', headers, body: { uid: acc.uid }, _respType: 'all', _timeout: 20000,
         });
         const status = Number(resp && (resp.statusCode || resp.status)) || 0;
-        if (status === 403) throw new Error(`服务拒绝访问（${$.toObj(resp.body, {}).error || '403'}），检查 quark_api_token 或服务是否只允许内网`);
+        if (status === 403) throw new Error(`服务拒绝访问（${$.toObj(resp.body, {}).error || '403'}），检查 @tools.token 是否填了完整值`);
         if (status !== 200) throw new Error(`HTTP ${status || '网络失败'}`);
         payload = $.toObj(resp.body, null);
         if (!payload) throw new Error('返回不是 JSON');
@@ -463,7 +464,7 @@ async function sendMsg(message) {
     }
 }
 
-// 脚本执行入口: 只有定时任务模式（凭证由 quark-api/ 取凭证网页产出，不再抓包）
+// 脚本执行入口: 只有定时任务模式（凭证由 tools 的 /quark 取凭证页产出，不再抓包）
 !(async () => {
     await main();
 })()

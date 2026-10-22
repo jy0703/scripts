@@ -391,8 +391,7 @@
       "descs_html": [
         "调用 YYB Go 服务 POST /wxapp/getCode 获取小程序 code，供印享星/途虎/海底捞/永旺/WPS 等脚本使用；/wxapp/getPhoneNumber 取手机号授权 code，供柠季等按手机号认会员的脚本使用",
         "本处只填服务器地址与 token(请求头 Authorization: Bearer，对应服务端 YYB_PROTOCOL_TOKEN)",
-        "app_id 由各脚本内置，账号 ref 填在各脚本自己的 boxjs 区域，本处不填 ref",
-        "mtgsig 为自建美团签名服务地址(POST /sign)，只给需要 mtgsig 的脚本用，留空则这些脚本不签名；鉴权复用下面的 token"
+        "app_id 由各脚本内置，账号 ref 填在各脚本自己的 boxjs 区域，本处不填 ref"
       ],
       "icons": [
         "https://raw.githubusercontent.com/FoKit/Scripts/main/images/WeChat.png",
@@ -401,8 +400,7 @@
       "keys": [
         "@wxCode.open",
         "@wxCode.address",
-        "@wxCode.token",
-        "@wxCode.mtgsig"
+        "@wxCode.token"
       ],
       "settings": [
         {
@@ -429,15 +427,46 @@
           "autoGrow": true,
           "rows": 1,
           "desc": "接口鉴权 token, 请求头 Authorization: Bearer <token>, 对应服务端环境变量 YYB_PROTOCOL_TOKEN"
-        },
+        }
+      ]
+    },
+    {
+      "id": "tools",
+      "name": "取凭证网关(tools)",
+      "author": "@Feng",
+      "descs_html": [
+        "自建服务 D:/scripts/tools 的地址与 token，三个接口都从这里取：夸克换票 POST /api/quark/refresh、中国移动大网票据 POST /api/cmcc/refresh、美团签名 POST /api/mtgsig/sign",
+        "本处只填服务地址与 token，路径写在各脚本里；token 作为请求头 X-Token 送出，服务端对所有 /api/* 都校验它（本机/内网也不例外），留空则脚本跳过这些功能并降级用本地数据",
+        "token 在服务启动日志里打印，也存在 tools/data/config.json（环境变量 TOOLS_API_TOKEN 可覆盖）；取凭证页在 http://<地址>/quark，只允许本机/内网打开",
+        "账号数据仍填在各脚本自己的区域（quark_data / cmcc_data / cmcc_autologin_data），本处不放账号"
+      ],
+      "icons": [
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/quark.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/quark.png"
+      ],
+      "keys": [
+        "@tools.address",
+        "@tools.token"
+      ],
+      "settings": [
         {
-          "id": "@wxCode.mtgsig",
-          "name": "签名服务地址",
+          "id": "@tools.address",
+          "name": "服务器地址",
           "val": "",
           "type": "textarea",
           "autoGrow": true,
           "rows": 1,
-          "desc": "美团 mtgsig 签名服务地址, 不包含/, 如 http://192.168.2.5:8010；留空则不签名"
+          "placeholder": "http://192.168.1.10:8787",
+          "desc": "填写服务地址, 不包含/, 如 http://192.168.1.10:8787；走隧道就填 https 域名"
+        },
+        {
+          "id": "@tools.token",
+          "name": "token",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "desc": "接口鉴权 token, 请求头 X-Token；值在服务启动日志里(也存 tools/data/config.json)。配了地址就必须配它，否则脚本会跳过换票/换票据"
         }
       ]
     },
@@ -573,7 +602,8 @@
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js",
       "descs_html": [
         "中国移动「签到领流量/话费」(活动 1021122301) App 端签到，每天一次，支持多账号",
-        "抓取：开启「中国移动获取Cookie」→ 打开中国移动 App「我」-「签到」进入活动页；豆苗不需要任何额外抓取（它用的就是这里抓到的 token），想让票据长期有效就再开一个「中国移动票据保活」；cmcc_data 里的 jwt 每次换票都会续期",
+        "票据服务地址与 token 统一填在「取凭证网关(tools)」分区(@tools.address / @tools.token)，本区不再单独配；两个都填了才会在票据过期时把 cmcc_autologin_data 交给 /api/cmcc/refresh 现换",
+        "抓取：开启「中国移动获取Cookie」→ 打开中国移动 App「我」-「签到」进入活动页；豆苗不需要任何额外抓取（它用的就是这里抓到的 token）；cmcc_data 里的 jwt 每次换票都会续期",
         "开关：连签奖励(默认开) / AI豆任务 / AI豆兑换话费券(默认关，真扣豆、每商品每期限兑一次) / 秒杀抢券(11:00 前触发的运行不执行，抢中一次本周收工、下周继续，定时设在开抢前 1~2 分钟) / 追剧领福利(打卡与任务挣抽奖次数，仅周日开放抽奖) / 周三充值日(每天做任务抽拼图集话费券，只有场次秒杀限周三)",
         "周三充值日的任务与拼图每天跟签到一起做；场次秒杀另开 cmcc_wed_sk，按北京时间判定、非周三直接跳过，场次时间 cmcc_wed_sk_at(默认 08:00:00)，定时必须设在开场前 1~2 分钟，否则本次不等待直接跳过。",
         "当天签到完成后再次执行只跑抢券(签到页秒杀、周三场次秒杀)，签到、任务、追剧、拼图都不再跑"
@@ -599,7 +629,8 @@
         "cmcc_task_skip_days",
         "cmcc_activity_id",
         "cmcc_channel_id",
-        "cmcc_debug"
+        "cmcc_debug",
+        "cmcc_autologin_data"
       ],
       "settings": [
         {
@@ -655,7 +686,7 @@
           "name": "AI豆苗养成记",
           "val": false,
           "type": "boolean",
-          "desc": "移动爱购 AI豆苗：每日签到 + 浏览/分享任务 + 领取阳光值。凭证不需要单独抓：入口 userLoginV2 用的 ticket 就是 cmcc_data 里该账号的 token（同一条大网 SSO 会话串），每次运行现签短效 phone 头。token 会随 App 重新登录被顶掉（实测抓下 20 分钟内可签、被顶后即刻失效），要长期有效请配合「中国移动票据保活」定时换票（同步上游 d967d65）"
+          "desc": "移动爱购 AI豆苗：每日签到 + 浏览/分享任务 + 领取阳光值。凭证不需要单独抓：入口 userLoginV2 用的 ticket 就是 cmcc_data 里该账号的 token（同一条大网 SSO 会话串），每次运行现签短效 phone 头。token 会随 App 重新登录被顶掉（实测抓下 20 分钟内可签、被顶后即刻失效），被顶掉后开着「捕获 Cookie」进一次签到页重抓即可"
         },
         {
           "id": "cmcc_seed_channel",
@@ -743,6 +774,13 @@
           "val": false,
           "type": "boolean",
           "desc": "逐条打印请求/响应(含全部头)，排查会话建立失败用；日志会带票据等敏感内容，看完即关"
+        },
+        {
+          "id": "cmcc_autologin_data",
+          "name": "autoLogin抓包(只读)",
+          "val": "",
+          "type": "text",
+          "desc": "「中国移动」插件里打开「捕获 autoLogin」后由签到脚本自动写入的 autoLogin 传参(密文body/ua/x-qen)，无需手填；cmcc_sign 换票时把它传给 /api/cmcc/refresh 现场换成新票据"
         }
       ]
     },
@@ -1150,7 +1188,7 @@
         "柠季柠檬茶专门店(美团 CRM)小程序每日签到得积分，连签若干天额外送优惠券；通知里带本月/累计签到天数、本次得到的券、积分余额与券包张数",
         "依赖「Code Server」分组中「获取小程序code」(@wxCode.address/token)，取号走 /wxapp/getPhoneNumber(会员按手机号认人，账号需已绑手机号)，账号 ref 填本区域 NJ_REF，支持多账号",
         "登录态 UNI-TOKEN 服务端只给 2 小时，脚本缓存 100 分钟后自动重新取号登录，无需抓包",
-        "活动接口的 mtgsig 调自建签名服务生成(地址填 Code Server 分组的 @wxCode.mtgsig, 鉴权复用 @wxCode.token)，留空或调用失败会自动降级为不签名"
+        "活动接口的 mtgsig 调「取凭证网关(tools)」的 POST /api/mtgsig/sign 生成(地址与 token 填 @tools.address / @tools.token，请求头 X-Token)，留空或调用失败会自动降级为不签名"
       ],
       "icons": [
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/nj.png",
@@ -1476,9 +1514,9 @@
       "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/quark_sign.js",
       "descs_html": [
         "一个脚本跑两个活动：① 夸克网盘每日签到领空间容量，连签达目标有额外奖励；② 夸克 App 内「扫描王签到」每日领金币、金币可兑扫描王 VIP（30 天一期）。两个活动都支持多账号",
-        "唯一入口还是 quark_data：在本地取凭证网页 quark-api/（手机验证码登录）点「复制 全部账号（票+UA+设备）」，把 {手机号:{service_ticket,kps_wg,ua,utdid,ve}} 粘进来。uid/昵称由脚本从 kps_wg 现解，网盘的 vcode/sign_wg 与扫描王的公参 ut（keyNo3 加密 utdid）每次现算，凭证可长期复用；UA 跟账号走",
+        "唯一入口还是 quark_data：在本地取凭证网页 tools 的 /quark（手机验证码登录，仅内网可开）点「复制 全部账号（票+UA+设备）」，把 {手机号:{service_ticket,kps_wg,ua,utdid,ve}} 粘进来。uid/昵称由脚本从 kps_wg 现解，网盘的 vcode/sign_wg 与扫描王的公参 ut（keyNo3 加密 utdid）每次现算，凭证可长期复用；UA 跟账号走",
         "扫描王那条链路是 POST https://order-api.sm.cn/api/sd6hJds8SIgn/<op>，参数全在 JSON body、不吃 cookie，身份 kp 与网盘的 kps_wg 就是同一张票，不用另外登录；账号项里没 utdid 就跳过扫描王、只跑网盘",
-        "换票可选：填 quark_api（走公网再加 quark_api_token）后每次运行先 POST /api/refresh 要一张有效票，票或昵称变了写回 quark_data；服务不通照样用缓存签到，只有报「票已失效」才需要重新登录",
+        "换票可选：地址与 token 填在「取凭证网关(tools)」分区（@tools.address / @tools.token，走公网也一样要填 token），两个都填了每次运行才先 POST /api/quark/refresh 要一张有效票，票或昵称变了写回 quark_data；只填地址没填 token、或服务不通，都照样用缓存票签到，只有报「票已失效」才需要重新登录",
         "当天已签过不会重复发奖：网盘侧直接不发 POST，扫描王按回包里的 cached=true 报「今日已签到」。网盘 HTTP 500+code=15000＝票已作废或参数不全；「只支持密钥表里的 keyNo」＝那份 kps_wg 来自 DEV/其它构建；扫描王回 2001＝kp 与 utdid 不同源，去网页重新整份复制",
         "quark_data 里的 service_ticket 等同登录凭证，不要提交到仓库或截图外传"
       ],
@@ -1488,8 +1526,6 @@
       ],
       "keys": [
         "quark_data",
-        "quark_api",
-        "quark_api_token",
         "quark_debug"
       ],
       "settings": [
@@ -1502,22 +1538,6 @@
           "rows": 5,
           "placeholder": "",
           "desc": "账号唯一入口，推荐直接粘取凭证网页「复制 全部账号（票+UA+设备）」的 {\"13800000000\":{\"service_ticket\":\"…\",\"kps_wg\":\"…\",\"ua\":\"…\",\"utdid\":\"…\",\"ve\":\"…\"}}（手机号即通知里的备注，uid/昵称由脚本从 kps_wg 解出）；扫描王签到要用 utdid 现算公参 ut，老的导出里没有 utdid 就只跑网盘签到。旧的数组写法 [{st,uid,nick,ua,user}] 仍能读，但一旦换票回写就统一成按手机号的 map；ua 缺省时用脚本内置的那条，删掉某个键即停用该账号"
-        },
-        {
-          "id": "quark_api",
-          "name": "取凭证服务地址",
-          "val": "",
-          "type": "text",
-          "placeholder": "http://192.168.1.10:8787",
-          "desc": "选填。填了则每次运行先向那个 quark-api 服务 POST /api/refresh 换一张有效票（网盘与扫描王共用这张票），票或昵称变了会写回 quark_data；留空就只用 quark_data 里的票，服务不通也只降级不报错"
-        },
-        {
-          "id": "quark_api_token",
-          "name": "换票服务 token",
-          "val": "",
-          "type": "text",
-          "placeholder": "填服务启动日志里那个完整 token",
-          "desc": "非内网访问服务时必填（值在服务启动日志打印，也存 data/config.json），作为 X-Quark-Token 送出；只在家里局域网用可以留空。公网链路请走 https/隧道，别裸 HTTP 转发"
         },
         {
           "id": "quark_debug",
@@ -1597,58 +1617,6 @@
           "type": "boolean",
           "desc": "逐条打印请求/响应明细，排查问题用；日志可能含 token 等敏感信息，看完记得关掉"
         }
-      ]
-    },
-    {
-      "id": "cmcc_alive_sign",
-      "name": "中国移动票据保活",
-      "author": "@Feng",
-      "icon": "https://raw.githubusercontent.com/jy0703/scripts/main/icons/cmcc.png",
-      "repo": "https://github.com/jy0703/scripts",
-      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_alive_sign.js",
-      "last_update": "2026-10-21",
-      "keys": [
-        "cmcc_data",
-        "cmcc_alive_act",
-        "cmcc_alive_state"
-      ],
-      "settings": [
-        {
-          "id": "cmcc_data",
-          "name": "中国移动数据",
-          "val": "",
-          "type": "textarea",
-          "autoGrow": true,
-          "rows": 5,
-          "placeholder": "",
-          "desc": "与「中国移动」签到脚本共用同一个变量，由签到脚本抓取写入，这里只读复用、不要手填"
-        },
-        {
-          "id": "cmcc_alive_act",
-          "name": "换票入口页",
-          "val": "",
-          "type": "textarea",
-          "autoGrow": true,
-          "rows": 2,
-          "placeholder": "https://wx.10086.cn/qwhdhub/qwhdmark/1021122301?channelId=P00000109876",
-          "desc": "留空即用签到活动页（与签到脚本同一入口）。换票需要一个 actUrl，一般不用改"
-        },
-        {
-          "id": "cmcc_alive_state",
-          "name": "保活记录",
-          "val": "",
-          "type": "textarea",
-          "autoGrow": true,
-          "rows": 3,
-          "placeholder": "",
-          "desc": "脚本自动维护（各账号上次成功时间、连续失败次数、当天是否已提醒），只用于日志与通知措辞，勿手填"
-        }
-      ],
-      "descs_html": [
-        "只做一件事：拿 cmcc_data 里各账号的 jwt + token 走一遍主厅 SSO 换票（appTokenLogin），把换发的新 jwt 写回同一个变量。不签到、不做任务、不抢券、不进活动页",
-        "为什么要它：AI豆苗养成记每次运行要用同一条 token 现签 phone 头；实测只发 jwt 必回「APP登录状态已过期」，所以一律 jwt + token 同发，被拒再退成只发票据引导",
-        "定时每半小时一次（0,30 * * * *）。成功只写日志、不推送；失败推一条通知，且同一账号当天只提醒一次，免得半小时一次变成轰炸",
-        "票据被 App 重新登录顶掉时通知里会出「❌ 尾号 XXXX: 连续失败 N 次，上次成功 X 天前」，这时开着获取Cookie进一次签到页重抓即可，豆苗会跟着一起恢复；换票成功后当天再失败会重新提醒"
       ]
     }
   ]

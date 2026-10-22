@@ -7,5 +7,9 @@
 /.probe/
 
 # 网页取凭证换到的 service_ticket 等本地账号数据，绝不入库
-/quark-api/
+/tools/
 /tmp/
+
+# 本地跑的 Inception 聊天反代（依赖本机 Chrome+CDP 代发，入库对别人没用）
+/inception-proxy/
+/cmcc/

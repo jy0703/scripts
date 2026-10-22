@@ -5,8 +5,8 @@
  *          美团 CRM member/login(verifyType=3, identificationAuthParseCode=1) 换 UNI-TOKEN(JWT,
  *          服务端只给 2 小时) → 查本月签到记录 → sign-in/participate 签到，
  *          token 缓存复用、失效自动重登。支持 Node.js / Quantumult X / Loon / Surge / Stash。
- *          活动接口(campaign/*)的 mtgsig 调自建签名服务生成(服务端跑美团 @mtfe/wx-jsguard 抽取库,
- *          仓库里不放该库), 地址填 @wxCode.mtgsig、鉴权复用 @wxCode.token; 留空或调用失败则不签名。
+ *          活动接口(campaign/*)的 mtgsig 调取凭证网关(tools) POST /api/mtgsig/sign 生成,
+ *          地址与 token 填 boxjs「取凭证网关(tools)」分区 @tools.address / @tools.token(请求头 X-Token); 留空或调用失败则不签名。
  *          member/login 与 queryMemberId 按小程序行为本来就不带 mtgsig。
  *          实测 poiId/poiType/tenantId/orgId 缺一会静默回"未签到"; 带被篡改的 mtgsig 会被网关 Forbidden。
  *          柠季会员按手机号认人，故取号走手机号授权而非 wx.login code。
@@ -61,8 +61,9 @@ async function main() {
     $.codeServer = (getEnv('WX_CODE_ADDRESS', '@wxCode.address') || '').replace(/\/+$/, '');
     $.yybToken = getEnv('WX_CODE_TOKEN', '@wxCode.token') || '';
     $.campaignId = getEnv('NJ_CAMPAIGN_ID') || DEFAULT_CAMPAIGN_ID;
-    // 签名服务地址, 复用 @wxCode.token 做 Bearer 鉴权; 留空则全程不带 mtgsig(实测接口也放行)
-    $.mtgsigApi = (getEnv('MTGSIG_API', '@wxCode.mtgsig') || '').replace(/\/+$/, '');
+    // mtgsig 走取凭证网关(tools)；地址与 token 留空则全程不带 mtgsig(实测接口也放行)
+    $.toolsApi = (getEnv('TOOLS_API', '@tools.address') || '').replace(/\/+$/, '');
+    $.toolsToken = getEnv('TOOLS_API_TOKEN', '@tools.token') || '';
 
     const refs = (getEnv('NJ_REF') || '').split(/[,，\s\n]+/).filter(Boolean);
     if (!refs.length) throw new Error('未配置账号：请在 boxjs「柠季签到」填写 NJ_REF ❌');
@@ -311,17 +312,17 @@ function rmsHeaders(account) {
 
 // 给 campaign/* 与 rms 会员资产接口签名(与小程序行为一致: member/login 和 queryMemberId 本来就不带 mtgsig)
 async function mtgsigOf(url, headers, data) {
-    if ($.mtgsigDead || !$.mtgsigApi) return '';
+    if ($.mtgsigDead || !$.toolsApi || !$.toolsToken) return '';
     const resp = await Request({
-        url: `${$.mtgsigApi}/sign`,
-        headers: $.yybToken ? { Authorization: `Bearer ${$.yybToken}` } : {},
+        url: `${$.toolsApi}/api/mtgsig/sign`,
+        headers: { 'X-Token': $.toolsToken },
         body: { appid: APPID, url, method: 'POST', header: headers, data },
         _timeout: 10000,
     });
-    const sig = resp?.data?.mtgsig;
-    if (resp?.code !== 0 || !sig) {
+    const sig = resp?.mtgsig ? resp.mtgsig : (resp?.data?.mtgsig || '');
+    if (!sig) {
         $.mtgsigDead = true;
-        $.log(`⚠️ [mtgsig] 签名服务不可用, 本次运行不签名: ${resp?.msg || resp?.error || $.toStr(resp) || '无响应'}`);
+        $.log(`⚠️ [mtgsig] 签名服务不可用, 本次运行不签名: ${resp?.error || $.toStr(resp) || '无响应'}`);
         return '';
     }
     return sig;
