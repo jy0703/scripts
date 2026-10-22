@@ -10,7 +10,7 @@
 
 [Script]
 中国移动获取Cookie = type=http-request,pattern=^https?:\/\/wx\.10086\.cn\/qwhdsso\/appTokenLogin,requires-body=1,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,script-update-interval=0
-中国移动抓autoLoginSeed = type=http-request,pattern=^https?:\/\/client\.app\.coc\.10086\.cn\/.*uamrandcodelogin\/autoLogin,requires-body=1,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,script-update-interval=0
+中国移动抓autoLogin传参 = type=http-request,pattern=^https?:\/\/client\.app\.coc\.10086\.cn\/.*uamrandcodelogin\/autoLogin,requires-body=1,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,script-update-interval=0
 
 中国移动签到 = type=cron,cronexp="0 1 * * *",wake-system=1,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,script-update-interval=0
 
@@ -213,17 +213,17 @@ function GetCookie() {
 }
 
 // autoLogin 传参（密文 body + ua + x-qen）存进 cmcc_autologin_data，票据过期时交给 @tools.address 的 /api/cmcc/refresh 现换新票
-function GetSeed() {
+function GetAutoLogin() {
     try {
         const req = $request || {};
         const body = req.body || '';
         if (!body) return;
         const h = ObjectKeys2LowerCase(req.headers || {});
-        const seed = { url: req.url, ua: h['user-agent'] || '', x_qen: h['x-qen'] || '14', body: String(body) };
+        const autologin = { url: req.url, ua: h['user-agent'] || '', x_qen: h['x-qen'] || '14', body: String(body) };
         const old = $.getdata('cmcc_autologin_data');
-        if (old && $.toObj(old, {}) && $.toObj(old, {}).body === seed.body) return;      // 同一个值不重复提醒
-        seed.capturedAt = new Date().toISOString();
-        $.setdata($.toStr(seed), 'cmcc_autologin_data');
+        if (old && $.toObj(old, {}) && $.toObj(old, {}).body === autologin.body) return;      // 同一个值不重复提醒
+        autologin.capturedAt = new Date().toISOString();
+        $.setdata($.toStr(autologin), 'cmcc_autologin_data');
         $.Messages.push('🎉已抓到 autoLogin 传参');
         $.log('🎉已抓到 autoLogin 传参');
     } catch (e) {
@@ -383,31 +383,35 @@ async function openCtx(user) {
 // 只发 jwtToken（token 留空）必回「APP登录状态已过期」，连刚换发出来的新 jwt 单发也不例外；
 // jwtToken + token 同发则 SUCCESS 且每次都换发新 jwt。故首选同发，token 缺失时才单发 jwt。
 // 向 @tools.address 要一份新鲜的 App 票据（服务端不落盘：把 loon 重写抓存的 autoLogin 传参原样传进去现换）。
-// seed 来自 boxjs `cmcc_autologin_data`（cmcc_sign.lpx 写入）。成功则覆盖 user.token 并落盘，返回 true。
+// autologin 来自 boxjs `cmcc_autologin_data`（本脚本抓取模式的 GetAutoLogin 写入）。成功则覆盖 user.token 并落盘，返回 true。
 async function refreshAppTokenFromApi(user) {
     if (!TOOLS_API) return false;
-    if (!TOOLS_API_TOKEN) { $.log('配了 @tools.address 但没填 @tools.token，服务端所有 /api/* 都要带 token，已跳过刷新'); return false; }
-    let seed = getEnv('cmcc_autologin_data') || user.seed || '';
-    if (typeof seed === 'string') seed = $.toObj(seed, null);
-    if (!seed || !seed.url || !seed.body) { $.log('没有 cmcc_autologin_data(未抓 autoLogin)，无法刷新票据'); return false; }
+    const tag = `[票据 ${phoneTail(user)}]`;
+    if (!TOOLS_API_TOKEN) { $.log(`${tag} 配了 @tools.address 但没填 @tools.token，服务端所有 /api/* 都要带 token，已跳过刷新`); return false; }
+    let autologin = getEnv('cmcc_autologin_data') || '';
+    if (typeof autologin === 'string') autologin = $.toObj(autologin, null);
+    if (!autologin || !autologin.url || !autologin.body) { $.log(`${tag} 没有 cmcc_autologin_data(开着「捕获 autoLogin」进一次 App 即可)，无法刷新票据`); return false; }
+    const t0 = Date.now();
+    $.log(`${tag} 向 ${TOOLS_API} 要新票据（抓于 ${(autologin.capturedAt || '未知').slice(0, 16).replace('T', ' ')}，密文 body ${(String(autologin.body) || '').length} 字符）`);
     try {
         const r = await Request({
             url: `${TOOLS_API}/api/cmcc/refresh`, method: 'post',
             headers: { 'content-type': 'application/json', 'x-token': TOOLS_API_TOKEN },
-            body: seed, _timeout: 30000,
+            body: autologin, _timeout: 30000,
         });
-        if (!r || r.error || !r.token) { $.log(`@tools 刷新票据失败：${(r && r.error) || '无 token'}`); return false; }
+        if (!r || r.error || !r.token) { $.log(`${tag} 刷新失败（${Date.now() - t0}ms）：${(r && r.error) || '服务端没回 token'}`); return false; }
         if (r.userCheckId && user.userCheckId && r.userCheckId !== user.userCheckId) {
-            $.log(`@tools 返回的票据属于 ${r.userCheckId}，与当前账号 ${user.userCheckId} 不符，已跳过`);
+            $.log(`${tag} 服务端回的票据属于 ${phoneTail({ userCheckId: r.userCheckId })}，与当前账号不符，已跳过`);
             return false;
         }
         user.token = r.token;
         if (r.provinceCode && !user.provinceCode) user.provinceCode = r.provinceCode;
         if (r.cityCode && !user.cityCode) user.cityCode = r.cityCode;
         saveUsers();
+        $.log(`${tag} 已换新票据（${Date.now() - t0}ms，${String(r.token).length} 字符，末4位 ${String(r.token).slice(-4)}，手机号 ${maskMobile(r.phone)}${r.provinceCode ? `，省市 ${r.provinceCode}/${r.cityCode || ''}` : ''}）`);
         return true;
     } catch (e) {
-        $.log(`@tools 请求异常：${e.message || e}`);
+        $.log(`${tag} 请求异常（${Date.now() - t0}ms）：${e.message || e}`);
         return false;
     }
 }
@@ -447,11 +451,12 @@ async function exchangeSession(user, entryUrl) {
 
     // ③ 回落：只用 App 票据引导登录（jwt 缺失或同发被拒）
     if (!resp) {
-        if (!user.token) await refreshAppTokenFromApi(user);   // 配了 @tools 就先去要一份新票据
+        if (!user.token) { $.log(`[票据 ${phoneTail(user)}] 本地没有 App 票据，先向网关换一张`); await refreshAppTokenFromApi(user); }
         if (!user.token) throw new Error(user.jwt ? '同发被拒且没有 App 票据可引导：打开 App 进一次签到页重新抓包' : 'App 票据(token)为空，请重新抓包更新凭证');
         resp = await Request({ url: loginUrl, method: 'post', headers: baseHeaders(jar, ua), body: Object.assign({}, baseBody, { jwtToken: null, token: user.token }), _timeout: 30000 });
         if (!resp || resp.code !== 'SUCCESS') {
             // 票据可能已过期/被顶：配了 @tools 就刷新后重试一次
+            if (TOOLS_API) $.log(`[票据 ${phoneTail(user)}] appTokenLogin 被拒(${resp && resp.code} ${resp && resp.msg})，刷新票据后重试`);
             if (TOOLS_API && await refreshAppTokenFromApi(user)) {
                 resp = await Request({ url: loginUrl, method: 'post', headers: baseHeaders(jar, ua), body: Object.assign({}, baseBody, { jwtToken: null, token: user.token }), _timeout: 30000 });
             }
@@ -1837,6 +1842,11 @@ function prizeText(p) {
 }
 
 // 手机号十六进制(userCheckId) -> 尾号
+function maskMobile(v) {
+    const s = String(v || '');
+    return /^1\d{10}$/.test(s) ? `${s.slice(0, 3)}****${s.slice(-4)}` : (s || '未知');
+}
+
 function phoneTail(user) {
     try {
         return String(Number('0x' + user.userCheckId)).slice(-4);
@@ -1983,7 +1993,7 @@ async function sendMsg(message) {
 // 脚本执行入口: $request 存在 → 抓取模式(按 URL 分流), 否则 → 定时任务模式
 !(async () => {
     if (typeof $request !== `undefined`) {
-        if (/uamrandcodelogin\/autoLogin/i.test($request.url || '')) GetSeed();
+        if (/uamrandcodelogin\/autoLogin/i.test($request.url || '')) GetAutoLogin();
         else GetCookie();
     } else {
         await main();  // 主函数

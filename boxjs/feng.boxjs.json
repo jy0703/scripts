@@ -437,12 +437,12 @@
       "descs_html": [
         "自建服务 D:/scripts/tools 的地址与 token，三个接口都从这里取：夸克换票 POST /api/quark/refresh、中国移动大网票据 POST /api/cmcc/refresh、美团签名 POST /api/mtgsig/sign",
         "本处只填服务地址与 token，路径写在各脚本里；token 作为请求头 X-Token 送出，服务端对所有 /api/* 都校验它（本机/内网也不例外），留空则脚本跳过这些功能并降级用本地数据",
-        "token 在服务启动日志里打印，也存在 tools/data/config.json（环境变量 TOOLS_API_TOKEN 可覆盖）；取凭证页在 http://<地址>/quark，只允许本机/内网打开",
+        "token 在服务启动日志里打印，也存在 tools/shared/config.json（环境变量 TOOLS_API_TOKEN 可覆盖）；取凭证页在 http://<地址>/quark，只允许本机/内网打开",
         "账号数据仍填在各脚本自己的区域（quark_data / cmcc_data / cmcc_autologin_data），本处不放账号"
       ],
       "icons": [
-        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/quark.png",
-        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/quark.png"
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/tools.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/tools.png"
       ],
       "keys": [
         "@tools.address",
@@ -466,7 +466,7 @@
           "type": "textarea",
           "autoGrow": true,
           "rows": 1,
-          "desc": "接口鉴权 token, 请求头 X-Token；值在服务启动日志里(也存 tools/data/config.json)。配了地址就必须配它，否则脚本会跳过换票/换票据"
+          "desc": "接口鉴权 token, 请求头 X-Token；值在服务启动日志里(也存 tools/shared/config.json)。配了地址就必须配它，否则脚本会跳过换票/换票据"
         }
       ]
     },
