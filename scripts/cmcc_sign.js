@@ -378,32 +378,32 @@ async function openCtx(user) {
 
 async function refreshAppTokenFromApi(user) {
     if (!TOOLS_API) return false;
-    const tag = `[票据 ${phoneTail(user)}]`;
-    if (!TOOLS_API_TOKEN) { $.log(`${tag} 配了 @tools.address 但没填 @tools.token，服务端所有 /api/* 都要带 token，已跳过刷新`); return false; }
+    const tag = '[换票]';
+    if (!TOOLS_API_TOKEN) { $.log(`${tag} 没填 @tools.token，跳过`); return false; }
     let autologin = getEnv('cmcc_autologin_data') || '';
     if (typeof autologin === 'string') autologin = $.toObj(autologin, null);
-    if (!autologin || !autologin.url || !autologin.body) { $.log(`${tag} 没有 cmcc_autologin_data(开着「捕获 autoLogin」进一次 App 即可)，无法刷新票据`); return false; }
+    if (!autologin || !autologin.url || !autologin.body) { $.log(`${tag} 没有 cmcc_autologin_data（开「捕获 autoLogin」进一次 App 即可）`); return false; }
     const t0 = Date.now();
-    $.log(`${tag} 向 ${TOOLS_API} 要新票据（抓于 ${(autologin.capturedAt || '未知').slice(0, 16).replace('T', ' ')}，密文 body ${(String(autologin.body) || '').length} 字符）`);
+    $.log(`${tag} 向网关要新票据…`);
     try {
         const r = await Request({
             url: `${TOOLS_API}/api/cmcc/refresh`, method: 'post',
             headers: { 'content-type': 'application/json', 'x-token': TOOLS_API_TOKEN },
             body: autologin, _timeout: 30000,
         });
-        if (!r || r.error || !r.token) { $.log(`${tag} 刷新失败（${Date.now() - t0}ms）：${(r && r.error) || '服务端没回 token'}`); return false; }
+        if (!r || r.error || !r.token) { $.log(`${tag} 失败：${shortMsg((r && r.error) || '服务端没回 token')}`); return false; }
         if (r.userCheckId && user.userCheckId && r.userCheckId !== user.userCheckId) {
-            $.log(`${tag} 服务端回的票据属于 ${phoneTail({ userCheckId: r.userCheckId })}，与当前账号不符，已跳过`);
+            $.log(`${tag} 换回的票据不属于当前账号，跳过`);
             return false;
         }
         user.token = r.token;
         if (r.provinceCode && !user.provinceCode) user.provinceCode = r.provinceCode;
         if (r.cityCode && !user.cityCode) user.cityCode = r.cityCode;
         saveUsers();
-        $.log(`${tag} 已换新票据（${Date.now() - t0}ms，${String(r.token).length} 字符，末4位 ${String(r.token).slice(-4)}，手机号 ${maskMobile(r.phone)}${r.provinceCode ? `，省市 ${r.provinceCode}/${r.cityCode || ''}` : ''}）`);
+        $.log(`${tag} 已换到新票据（${((Date.now() - t0) / 1000).toFixed(1)}s）`);
         return true;
     } catch (e) {
-        $.log(`${tag} 请求异常（${Date.now() - t0}ms）：${e.message || e}`);
+        $.log(`${tag} 请求异常：${shortMsg(e.message || e)}`);
         return false;
     }
 }
@@ -434,26 +434,26 @@ async function exchangeSession(user, entryUrl) {
     if (user.jwt) {
         resp = await Request({ url: loginUrl, method: 'post', headers: baseHeaders(jar, ua), body: Object.assign({}, baseBody, { jwtToken: user.jwt, token: user.token || '' }), _timeout: 30000 });
         if (resp && resp.code === 'SUCCESS') {
-            $.log(`jwt 续期成功（${user.token ? 'jwt + App 票据同发' : '仅 jwt，未带票据'}，凭证链已 ${((Date.now() - (user.jwt_first || Date.now())) / 86400000).toFixed(1)} 天）`);
+            $.log(`jwt 续期成功（凭证链已 ${((Date.now() - (user.jwt_first || Date.now())) / 86400000).toFixed(1)} 天）`);
         } else {
-            $.log(`jwt 续期失败(${resp && resp.code} ${resp && resp.msg})，回落 App 票据引导`);
+            $.log(`jwt 续期失败：${shortMsg(resp && resp.msg)}，回落票据引导`);
             resp = null;
         }
     }
 
     // ③ 回落：只用 App 票据引导登录（jwt 缺失或同发被拒）
     if (!resp) {
-        if (!user.token) { $.log(`[票据 ${phoneTail(user)}] 本地没有 App 票据，先向网关换一张`); await refreshAppTokenFromApi(user); }
+        if (!user.token) { $.log('[换票] 本地没有 App 票据，先向网关换一张'); await refreshAppTokenFromApi(user); }
         if (!user.token) throw new Error(user.jwt ? '同发被拒且没有 App 票据可引导：打开 App 进一次签到页重新抓包' : 'App 票据(token)为空，请重新抓包更新凭证');
         resp = await Request({ url: loginUrl, method: 'post', headers: baseHeaders(jar, ua), body: Object.assign({}, baseBody, { jwtToken: null, token: user.token }), _timeout: 30000 });
         if (!resp || resp.code !== 'SUCCESS') {
             // 票据可能已过期/被顶：配了 @tools 就刷新后重试一次
-            if (TOOLS_API) $.log(`[票据 ${phoneTail(user)}] appTokenLogin 被拒(${resp && resp.code} ${resp && resp.msg})，刷新票据后重试`);
+            if (TOOLS_API) $.log(`票据引导被拒：${shortMsg(resp && resp.msg)}，换票后重试`);
             if (TOOLS_API && await refreshAppTokenFromApi(user)) {
                 resp = await Request({ url: loginUrl, method: 'post', headers: baseHeaders(jar, ua), body: Object.assign({}, baseBody, { jwtToken: null, token: user.token }), _timeout: 30000 });
             }
             if (!resp || resp.code !== 'SUCCESS') {
-                throw new Error(`appTokenLogin 失败: ${resp && resp.code} ${resp && resp.msg} —— 通常是 App 票据过期，请打开 App 签到页重新抓包`);
+                throw new Error(`appTokenLogin 失败：${shortMsg(resp && resp.msg)}（App 票据可能已过期，请重新抓包）`);
             }
         }
     }
@@ -1823,9 +1823,10 @@ function prizeText(p) {
 }
 
 // 手机号十六进制(userCheckId) -> 尾号
-function maskMobile(v) {
-    const s = String(v || '');
-    return /^1\d{10}$/.test(s) ? `${s.slice(0, 3)}****${s.slice(-4)}` : (s || '未知');
+// 服务端 msg 常带超长错误码方括号，日志里去掉并截断
+function shortMsg(v, max = 40) {
+    const t = String(v || '').replace(/错误码:\[[^\]]*\]/g, '').replace(/\s+/g, ' ').trim();
+    return t.length > max ? t.slice(0, max) + '…' : t;
 }
 
 function phoneTail(user) {
