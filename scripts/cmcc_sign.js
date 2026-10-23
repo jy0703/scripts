@@ -1,9 +1,11 @@
 /**
  * 脚本名称：中国移动签到
- * 活动规则：中国移动「签到领流量/话费」活动(1021122301) 的 App 端 mark31 签到，每天一次；另有 AI豆任务(mark/task) 与秒杀抢券(markSeckill：触发时刻早于 11:00 不执行，开抢早于 11:00 的场次也不抢，某一期抢中后本周内不再打、下周继续)；开关 cmcc_video 后追加「追剧领福利」页(1126082530) 的每日打卡 + 代币任务 + 周日抽奖；开关 cmcc_seed 后追加「AI豆苗养成记」(coc 独立域，凭证即 cmcc_data 的 token，每次现签 phone 头；票据只在 App 刚登录后短期内有效)；开关 cmcc_gold 后追加签到专属 AI豆兑换话费券(按 5/2/1.5/1 元顶格兑，默认关)；开关 cmcc_wed 后追加「周三充值日」(hlwyxhdhub/wedrecharge) 的做任务挣次数 + 抽拼图集话费券（每天做，攒碎片），cmcc_wed_sk 再打场次秒杀(drawPrize，仅北京时间周三开火，当天打过一次即收工；场次时间默认听服务端 rec_login 的 seckillTime)
- * 脚本说明：支持多账号，支持 NE / Node.js 环境。账号参数（App 票据/省市编码等）由本脚本 GetCookie 抓取后存入 cmcc_data
- * 环境变量：cmcc_data / cmcc_claim(默认开，填 false 才关) / cmcc_task / cmcc_seckill / cmcc_sk_min(每日秒杀的北京时间下限，默认 11:00，填 00:00 不受限) / cmcc_video / cmcc_seed(凭证即各账号 cmcc_data 的 token（大网会话串），不单列变量、不额外抓包) / cmcc_seed_channel / cmcc_gold(兑换会真扣 AI 豆，默认关) / cmcc_wed / cmcc_wed_sk / cmcc_wed_sk_at(留空=服务端下发场次自动选最近未开始的一场) / cmcc_task_skip_days；cmcc_task_fail 为脚本自动维护的任务黑名单
- * 更新时间：2026-10-12 新增周三充值日(hlwyxhdhub wedrecharge)：任务代做 + 抽拼图 + 集齐领取 + 场次秒杀，开关 cmcc_wed / cmcc_wed_sk；AI豆任务同步上游：握手会话整轮复用、taskToken 任务直接握手、外部合作区跳过、status=1 遗留补领、公众号类即弃、停留与间隔提速；连签奖励改为只要开了就查一遍代领（不再要求当天由脚本签到），展示改用响应里的 prizeName/prizeValue。2026-10-13 每日秒杀加 11:00 触发门控(cmcc_sk_min)与"按周去重"(skWinDay 记抢中那期的日期，比较时换算成该周周一：本周不再打，下周自动恢复)；服务端回"已领取/限领"也按同样口径落盘，覆盖在 App 里领过的情况；邀好友/助力类任务与外部合作区一样常驻跳过；周三场次秒杀加"当天打过即收工"(wedSkDay，发过 drawPrize 才记)。2026-10-18 同步上游：追剧新增看精彩视频每日任务(queryDiyVideoTask + getYDRZToken + cmlive 两步，每完成 +1 抽奖次数、周日 2 次)；新增 AI豆苗养成记(cmcc_seed)；周三场次秒杀同步 rec_login 下发场次 + 等待期会话重建与开火前强刷。2026-10-19 同步上游 d967d65：豆苗凭证改为每次运行用 userLoginV2 现签短效 phone 头，ticket 直接复用 cmcc_data 各账号的 token(即上游那份 coc3_ticket，同一条大网会话串，不设独立抓取)；新增上游 1753cf1 签到专属 AI豆兑换话费券(cmcc_gold，默认关)；phone 与 ticket 的独立抓取入口全部下线，凭证只复用 cmcc_data 的 token。2026-10-21 真机 HAR 四条对照：appTokenLogin 只发 jwtToken 必回「APP登录状态已过期」，jwt+token 同发才 SUCCESS 且每次换发新 jwt，故 exchangeSession 改为首选同发、被拒再回落单发票据；豆苗 ticket 时效语义写清(现签可用窗口只有 App 登录后几小时，40006 表示同账号会话被 App 重新顶掉)；票据续期由本脚本在过期时调 @tools.address 的 /api/cmcc/refresh 现换（独立保活脚本已删）
+ * 活动：签到(mark31) 每日一次；可选 AI豆任务(mark/task)、签到页秒杀(markSeckill)、追剧领福利(1126082530)、
+ *      AI豆苗养成记、AI豆兑换话费券、周三充值日(wedrecharge，含场次秒杀)，开关见环境变量
+ * 环境：NE / Node.js，多账号；账号参数(App 票据/省市)由本脚本 GetCookie 抓取后存入 cmcc_data
+ * 环境变量：cmcc_data / cmcc_claim(默认开) / cmcc_task / cmcc_seckill / cmcc_sk_min(默认 11:00) / cmcc_video /
+ *          cmcc_seed / cmcc_seed_channel / cmcc_gold(默认关，会真扣 AI 豆) / cmcc_wed / cmcc_wed_sk /
+ *          cmcc_wed_sk_at(留空=听服务端场次) / cmcc_task_skip_days / cmcc_debug；cmcc_task_fail 自动维护
 
 
 ------------------ Surge 配置 ------------------
@@ -48,7 +50,7 @@ $.userInfo = getEnv('cmcc_data') || '';  // 获取账号
 $.userArr = $.toObj($.userInfo) || [];  // 用户信息
 $.Messages = [];
 
-// 业务常量 (照 py/抓包搬运)
+// 业务常量
 const BASE = 'https://wx.10086.cn';
 const SSO_LOGIN = BASE + '/qwhdsso/login';
 const API_MARK = BASE + '/qwhdhub/api/mark';
@@ -62,7 +64,7 @@ const CLAIM_AWARD = getEnv('cmcc_claim') !== 'false';  // 累计/连签奖励代
 const RUN_TASKS = getEnv('cmcc_task') === 'true';   // 签到页 AI豆任务(小程序端 mark/task 体系)
 const SECKILL = getEnv('cmcc_seckill') === 'true';  // 签到有礼秒杀抢券(同活动 1021122301)
 const TASK_API = API_MARK + '/task';
-// 周三充值日活动页：既是该活动自己的入口，也是开放任务握手入口（上游 8d3e280 把两者统一到这个地址，落 HLWHD_SESSION_TOKEN）
+// 周三充值日的活动页，同时是开放任务握手入口（落 HLWHD_SESSION_TOKEN）
 const WED_ENTRY = BASE + '/hlwyxhdhub/act-wedrecharge/1024101716?pageId=1849008675699650560&channelId=P00000093619';
 // taskInfo 下发 taskToken 的任务、以及 finishTask 提示"特殊处理"时，到该 hub 换会话做 openFinish 握手
 const OPEN_TASK_ENTRY = WED_ENTRY;
@@ -75,16 +77,13 @@ const DIY_TASK_API = BASE + '/qwhdhub/diyTask';
 const DIY_LOTTERY_API = BASE + '/qwhdhub/diyLottery';
 // 该活动的任务与抽奖共用同一个 componentId：任务 earnOpportunity 加的就是抽奖次数
 const VIDEO_COMPONENT = '4EC96l0-9btuobajC9Yu';
-const VIDEO_DRAW_WEEKDAY = 0;  // 抽奖开放日(北京时间周日)：实测非周日回 FAILED「抽奖时间为周日，请确认~」，且次数过期作废
-// 追剧「看精彩视频」每日任务（上游 53079e4）：视频站 cmlive 与 qwhdhub 是两套会话，
-// QWHD 会话只能经 getYDRZToken 换 YDRZ 票据，再调 cmpassLoginByCmToken 换视频站 JWT。
-// sourceId 必须是 017027（App 原生用的值），抓包实测 001191 会被视频站拒绝。
+const VIDEO_DRAW_WEEKDAY = 0;  // 抽奖只在北京时间周日开放（非周日回 FAILED，次数会过期作废）
+// 视频站 cmlive 与 qwhdhub 是两套会话：QWHD → getYDRZToken → cmpassLoginByCmToken 换视频站 JWT；sourceId 必须 017027
 const VIDEO_TASK_API = BASE + '/qwhdhub/api/diyVideoDayRedesign/task';
 const CMLIVE_BASE = 'https://v.cmcc-cs.cn/cmlive/api';
 const CMLIVE_SOURCE_ID = '017027';
 const CMLIVE_REFERER = 'https://v.cmcc-cs.cn/cmlive/live/feed?id=102518&cmliveChannelId=203&belongChannelId=203&secondChannel=spr&openSelfResearch=1&tagId=157&jtCode=1';
-// AI豆苗养成记（移动爱购 activityId 17692，dev.coc.10086.cn 独立域）：签到 + 浏览/分享任务 + 领阳光值。
-// 凭证就是各账号 cmcc_data 的 token（同一条大网 SSO 会话串，抓签到包时已带回），每次运行现签短效 phone 头（上游 d967d65）。
+// AI豆苗养成记（activityId 17692，dev.coc.10086.cn 独立域）：凭证= cmcc_data 的 token，每次现签短效 phone 头
 const RUN_SEED = getEnv('cmcc_seed') === 'true';
 const SEED_BASE = 'https://dev.coc.10086.cn/coc3/coc3-market-activity';
 const SEED_LOGIN_API = 'https://dev.coc.10086.cn/coc3/gr/login/ssoRights';
@@ -116,15 +115,14 @@ const WED_RECEIVE_LABEL = { r6: '95折话费券', r5: '9折话费券', r4: '8折
 const WED_SKIP = { yqyh: '需邀请真实用户助力', czhf: '需真实充值满10元', llym: '需在 App 内浏览签到页', dlhd: '进页自动完成' };
 const WED_MAX_DRAWS = 30;     // 单次执行最多抽这么多发
 const WED_DAY = 3;            // 场次秒杀只在北京时间周三打（任务/拼图每天都做）
-// 周三场次秒杀参数（照 py 默认值）
-// 留空 = 用服务端 rec_login 下发的 seckillTime 自动选最近一个未开始场次；填了则强制该时刻（上游 ac50860）
+// 场次秒杀参数；cmcc_wed_sk_at 留空=按 rec_login 下发的 seckillTime 自动选最近未开始场次
 const WSK_AT_CFG = getEnv('cmcc_wed_sk_at') || '';
 const WSK_LEAD = 400;         // 提前开火(ms)
 const WSK_INTERVAL = 350;     // 连发间隔(ms)
 const WSK_MAX_ATTEMPTS = 200;
 const WSK_MAX_WAIT = 300000;  // 距开场超过该时长就不干等，本次跳过(ms)
 const WSK_STOP = { '160002': '无库存' };
-// 秒杀抢券参数 (照 py 默认值)
+// 秒杀抢券参数
 const SK_API = API_MARK + '/markSeckill';
 const SK_INTERVAL = 350;      // 重试间隔(ms)
 const SK_LEAD = 400;          // 提前开火(ms)，抵消网络延迟
@@ -139,7 +137,7 @@ const SK_STOP = {
     PRIZE_LIMIT_DAY: '当日中奖次数已用完',
     PRIZE_LIMIT_MONTH: '当月中奖次数已用完',
     PRIZE_RESTRIC_LIMIT: '活动期间中奖次数已达上限',
-    WORK_ORDER_RESTRIC_LIMIT: '工单受限（实测多因"已领取过，限领一次"）',
+    WORK_ORDER_RESTRIC_LIMIT: '工单受限（多为"已领取过，限领一次"）',
 };
 // 与抓包完全一致的 App WebView UA（服务端校验 leadeon 标识）
 const USER_AGENT = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148/wkwebview leadeon/12.5.2/CMCCIT';
@@ -324,7 +322,7 @@ async function doSign(user) {
                 }
             }
 
-            // AI豆兑换话费券复用签到会话（上游放在攒豆之后）：空跑只写日志，兑到/失败才进通知
+            // AI豆兑换话费券复用签到会话：空跑只写日志，兑到/失败才进通知
             if (RUN_GOLD) {
                 try {
                     lines.push(...await runGold(ctx, user));
@@ -378,12 +376,6 @@ async function openCtx(user) {
     }
 }
 
-// 走 SSO 换取活动会话（QWHD_SESSION_TOKEN 落在 jar 里），返回 { jar, ua, referer }
-// 凭证策略（2026-10-21 真机 HAR 四条对照实测）：appTokenLogin 必须带上大网票据 token ——
-// 只发 jwtToken（token 留空）必回「APP登录状态已过期」，连刚换发出来的新 jwt 单发也不例外；
-// jwtToken + token 同发则 SUCCESS 且每次都换发新 jwt。故首选同发，token 缺失时才单发 jwt。
-// 向 @tools.address 要一份新鲜的 App 票据（服务端不落盘：把 loon 重写抓存的 autoLogin 传参原样传进去现换）。
-// autologin 来自 boxjs `cmcc_autologin_data`（本脚本抓取模式的 GetAutoLogin 写入）。成功则覆盖 user.token 并落盘，返回 true。
 async function refreshAppTokenFromApi(user) {
     if (!TOOLS_API) return false;
     const tag = `[票据 ${phoneTail(user)}]`;
@@ -501,7 +493,7 @@ async function doMark(ctx, date) {
     return await Request({ url: `${API_MARK}/mark31/domark`, method: 'post', headers: apiHeaders(ctx), body: { date }, _timeout: 30000 });
 }
 
-// 领取 taskAwardChance 里的累计/连签奖励（同步上游 7c2dcdb：热门奖品可能回 PRIZE_NO_STOCK，属正常）
+// 领取 taskAwardChance 里的累计/连签奖励（热门奖品可能回 PRIZE_NO_STOCK，属正常）
 // 门槛达标后服务端不会自动发放，只把它放进 taskAwardChance；领成功后条目即从清单消失，天然幂等
 async function claimTaskAwards(ctx, statusData) {
     // 任务ID -> 奖品名（可领清单条目自身 prize 为 null，只能去另外两个池子反查）
@@ -560,10 +552,7 @@ function writeTaskFails(user, fails) {
     $.setdata($.toStr(store), TASK_FAIL_KEY);
 }
 
-// 签到页 AI豆任务（与签到页同一套 mark/task 接口，会话通用）
-// 通知里只留成功项与一行汇总，逐条结果实时 $.log
-// 同步上游 8d3e280：外部合作区与邀好友/助力类整类不做；上次遗留的"已完成待领奖"先补领；
-// hlwyxhdhub 握手会话整轮复用（换票最贵，逐任务换会被限频）；任务间隔降到 0.2~0.6s
+
 async function doMarkTasks(ctx, user) {
     const lines = [];
     const say = t => { lines.push(t); $.log(t); };
@@ -643,10 +632,7 @@ function elapsedSec(t0) {
     return ((Date.now() - t0) / 1000).toFixed(0);
 }
 
-// 单个任务：taskInfo → (开放平台握手 | finishTask 阶梯) → getTaskAward，只有完成才去领奖
-// 顺序照上游 8d3e280：taskInfo 带 taskToken 的视频/浏览类握手即完成；其余先直接上报，
-// 失败才到访目标页(停留 scanTime，封顶 15s)并带该页 Referer 重试；提示"特殊处理"再握手
-// taskType/scanTime 只取 taskInfo —— taskList 里的 taskType 是另一套枚举，混用会被拒
+
 async function finishOneTask(ctx, task, user, cache) {
     const tid = String(task.taskId);
     const info = await Request({ url: `${TASK_API}/taskInfo`, method: 'post', headers: apiHeaders(ctx), body: { taskId: tid }, _timeout: 30000 });
@@ -701,7 +687,7 @@ async function taskAward(ctx, tid) {
     return { ok: false, code: (aw && aw.code) || 'NO_RESP', msg: (aw && aw.msg) || '' };
 }
 
-// hlwyxhdhub 开放平台握手（参考 yupaiLy/cmcc-auto-checkin 实测链路）：
+// hlwyxhdhub 开放平台握手：
 // getOneTaskInfo 取 cToken → 停留 scanTime → openFinish；成功后由调用方回主站领奖
 async function openHubHandshake(user, cache, jt, scan) {
     if (!jt) return false;
@@ -742,7 +728,7 @@ async function openHubSession(user, cache) {
     throw last;
 }
 
-// ---------- 追剧领福利（diy-client 1126082530，参考 yupaiLy/cmcc-auto-checkin 的 cmcc_extra.py）----------
+// ---------- 追剧领福利（diy-client 1126082530）----------
 
 // 独立活动：换该活动页会话 → 每日打卡 → diyTask 任务(挣抽奖次数) → 视频日任务(挣抽奖次数) → 抽奖
 // 返回结果行，由 main() 拼进本账号通知
@@ -866,7 +852,7 @@ async function queryVideoTaskList(ctx) {
 }
 
 // 单个视频任务：登记浏览入口 → getFiveMinuteTaskInfo 取 cToken → fiveMinuteTaskFinish 上报
-// 前端有 300s 倒计时，实测拿到 cToken 可直接上报，所以不等倒计时
+// 拿到 cToken 即可上报，不必等前端 300s 倒计时
 async function completeVideoTask(ctx, jwt, task) {
     const name = task.name || '看精彩视频';
     let jt = String(task.param || '');
@@ -902,7 +888,7 @@ async function completeVideoTask(ctx, jwt, task) {
 }
 
 // 视频日任务：每完成一个 +1 抽奖机会（每周上限 8 次，周日可做 2 次）
-// 每轮重新拉清单——完成一个后服务端才放出下一个，最多 5 轮防异常循环（上游 f136786）
+// 每轮重新拉清单（完成一个才放出下一个），最多 5 轮防异常循环
 async function runVideoDay(ctx) {
     const lines = [];
     const say = t => { lines.push(t); $.log(t); };
@@ -1007,7 +993,7 @@ function skWindowOpen() {
     return beijingMinuteOfDay(Date.now()) >= SK_MIN_OPEN;
 }
 
-// ---------- AI豆苗养成记（dev.coc.10086.cn，参考 yupaiLy/cmcc-auto-checkin 的 cmcc_seed.py）----------
+// ---------- AI豆苗养成记（dev.coc.10086.cn）----------
 
 // 该域只认请求头 phone，绝不带主站 Cookie；channelCode/wtAc 是活动侧固定标识
 function seedHeaders(cred) {
@@ -1059,8 +1045,7 @@ function seedAge(sec) {
     return `${m} 分钟`;
 }
 
-// 每日签到：本地状态 + accumulateCount 双重判断。首次运行时 count 已 >0 说明可能是在 App 里签的，
-// 保守只记录不重复签（照抄上游，避免把连续签到周期打断）
+// 本地状态 + accumulateCount 双重判断；count 已 >0 时只记录不重复签（避免打断连签）
 async function seedSign(cred, state, today) {
     const info = await seedPost(cred, '/cmpp-manage/task/getTaskSignInfo', { taskId: SEED_SIGN_TASK_ID, needQyCredits: 1, needLimit: 0 });
     if (info.resultCode !== 0) return `签到信息获取失败: ${info.resultCode} ${info.msg || ''}`;
@@ -1090,8 +1075,7 @@ async function seedSign(cred, state, today) {
     return `签到失败: ${resp.resultCode} ${msg}`;
 }
 
-// 可代做任务：type 2 走 share，其余走 visit(目标页)；上报被接受即算完成，
-// 最后统一复查一次（上游做法：不逐个等待复查）
+// 可代做任务：type 2 走 share，其余走 visit(目标页)；上报被接受即算完成，最后统一复查
 async function seedTasks(cred) {
     const r = await seedPost(cred, '/cmpp-manage/task/getGrowthTaskList', { taskListId: SEED_TASK_LIST_ID });
     if (r.resultCode !== 0) return { lines: [`任务清单获取失败: ${r.resultCode} ${r.msg || ''}`], done: 0 };
@@ -1154,8 +1138,7 @@ async function seedClaim(cred) {
     return { lines, got };
 }
 
-// ticket → phone 现签（上游 d967d65）：ticket 就是 App 大网 SSO 的整串会话 Cookie，
-// 与 cmcc_data 各账号的 token 同物同值，因此不另设抓取入口（上游 d967d65 的 coc3_ticket 就是这一串）
+// ticket = App 大网 SSO 的整串会话 Cookie，与 cmcc_data 的 token 同值，不另设抓取入口
 async function seedTicketSign(user) {
     const ticket = user.token || '';
     if (!ticket) return { token: '', ticket: '', err: '无 App 票据(token)' };
@@ -1179,8 +1162,7 @@ async function seedTicketSign(user) {
 }
 
 // 主流程：用 ticket 现签 phone → 探活 → 签到 → 任务 → 领取 → 余额前后对比
-// ticket 只在 App 刚登录后几小时内可签（实测抓下 19 分钟仍签得出 phone，放几小时即 40006；
-// App 重新 autoLogin 会轮换掉旧的），签不出就提示重抓，不缓存 phone 也不留兜底分支。
+// ticket 只在 App 登录后几小时内可用（放几小时即 40006，App 重登会轮换），签不出就提示重抓，不缓存 phone
 async function runSeed(user) {
     const lines = [];
     const say = t => { lines.push(t); $.log(t); };
@@ -1227,7 +1209,7 @@ async function runSeed(user) {
     return lines;
 }
 
-// ---------- 签到专属 AI豆兑换话费券（qwhdhub/api/mark/task，参考 yupaiLy/cmcc-auto-checkin 的 cmcc_gold.py / issue #12）----------
+// ---------- 签到专属 AI豆兑换话费券（qwhdhub/api/mark/task）----------
 
 // 话费券每日限量、先到先得；AI豆 1:1 抵扣。只兑话费券，按面额从高到低顶格，
 // 0.5 元档与「充值加赠券」一律不兑；单商品每期限兑一次（兑过 status=USED），重复运行幂等。
@@ -1285,7 +1267,7 @@ async function runGold(ctx, user) {
     });
 
     const got = [], bad = [];
-    // 碰过壁的档本次不再重试：列表每轮都从服务端重取，只改本地对象挡不住下一轮（上游是同档重复打满 8 轮）
+    // 碰过壁的档本次不再重试（列表每轮重取，只改本地对象挡不住）
     const skipIds = new Set();
     for (let round = 0; round < GOLD_MAX_ROUNDS; round++) {
         const cur = await goldState(ctx);
@@ -1316,7 +1298,7 @@ async function runGold(ctx, user) {
     return lines;
 }
 
-// ---------- 周三充值日（hlwyxhdhub/wedrecharge，参考 yupaiLy/cmcc-auto-checkin 的 cmcc_wed.py）----------
+// ---------- 周三充值日（hlwyxhdhub/wedrecharge）----------
 
 // 该 hub 的成功码是字符串 "0"（区别于 qwhdhub 的 SUCCESS），非 0 一律按失败抛出
 async function wedApi(ctx, path, payload) {
@@ -1659,7 +1641,6 @@ function wedQuotaLeft(t) {
     return null;
 }
 
-// 北京时间 HH:MM:SS 对应的时间戳；已过 1 小时以上算明天（照 py 的处理）
 // 签到结果统一格式: <端> <状态>（<天数>）[，获得: X][，备注]
 function markLine(who, ok, days, prize, note) {
     return `${who} ${ok ? '签到成功' : '今日已签'}${days ? `（${days}）` : ''}${prize ? `，获得: ${prize}` : ''}${note ? `，${note}` : ''}`;
