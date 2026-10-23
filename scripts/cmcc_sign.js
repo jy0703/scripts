@@ -222,7 +222,7 @@ function GetAutoLogin() {
         if (old && $.toObj(old, {}) && $.toObj(old, {}).body === autologin.body) return;      // 同一个值不重复提醒
         autologin.capturedAt = new Date().toISOString();
         $.setdata($.toStr(autologin), 'cmcc_autologin_data');
-        $.Messages.push('🎉已抓到 autoLogin 传参');
+        $.Messages.push(`🎉已抓到 autoLogin 传参`);
         $.log('🎉已抓到 autoLogin 传参');
     } catch (e) {
         $.log('❌ autoLogin 传参获取失败'), $.log(e);
@@ -376,25 +376,31 @@ async function openCtx(user) {
     }
 }
 
+// 最近一次换票失败的原因，appTokenLogin 报错时带上：免得把「没配网关地址」说成「票据过期，请重新抓包」
+let refreshNote = '';
+
 async function refreshAppTokenFromApi(user) {
-    if (!TOOLS_API) return false;
     const tag = '[换票]';
-    if (!TOOLS_API_TOKEN) { $.log(`${tag} 没填 @tools.token，跳过`); return false; }
+    refreshNote = '';
+    const fail = (msg) => { refreshNote = msg; $.log(`${tag} ${msg}`); return false; };
+    if (!TOOLS_API) return fail('未填 @tools.address（boxjs「取凭证网关(tools)」分区）');
+    if (!TOOLS_API_TOKEN) return fail('填了 @tools.address 但没填 @tools.token');
     let autologin = getEnv('cmcc_autologin_data') || '';
     if (typeof autologin === 'string') autologin = $.toObj(autologin, null);
-    if (!autologin || !autologin.url || !autologin.body) { $.log(`${tag} 没有 cmcc_autologin_data（开「捕获 autoLogin」进一次 App 即可）`); return false; }
+    if (!autologin || !autologin.url || !autologin.body) return fail('没有 cmcc_autologin_data：打开 App 进一次签到页（或触发自动登录）抓 autoLogin 传参');
     const t0 = Date.now();
-    $.log(`${tag} 向网关要新票据…`);
+    const capAt = Date.parse(autologin.capturedAt || '');
+    // 抓太久更可能是被顶号，日志里带上抓取年龄
+    $.log(`${tag} 向网关要新票据${capAt ? `（autoLogin 抓于 ${((Date.now() - capAt) / 86400000).toFixed(1)} 天前）` : ''}…`);
     try {
         const r = await Request({
             url: `${TOOLS_API}/api/cmcc/refresh`, method: 'post',
             headers: { 'content-type': 'application/json', 'x-token': TOOLS_API_TOKEN },
             body: autologin, _timeout: 30000,
         });
-        if (!r || r.error || !r.token) { $.log(`${tag} 失败：${shortMsg((r && r.error) || '服务端没回 token')}`); return false; }
+        if (!r || r.error || !r.token) return fail(`网关未回票据：${shortMsg((r && r.error) || '响应为空')}`);
         if (r.userCheckId && user.userCheckId && r.userCheckId !== user.userCheckId) {
-            $.log(`${tag} 换回的票据不属于当前账号，跳过`);
-            return false;
+            return fail(`换回的票据是尾号 ${phoneTail({ userCheckId: r.userCheckId })}，与当前账号尾号 ${phoneTail(user)} 不符`);
         }
         user.token = r.token;
         if (r.provinceCode && !user.provinceCode) user.provinceCode = r.provinceCode;
@@ -403,8 +409,7 @@ async function refreshAppTokenFromApi(user) {
         $.log(`${tag} 已换到新票据（${((Date.now() - t0) / 1000).toFixed(1)}s）`);
         return true;
     } catch (e) {
-        $.log(`${tag} 请求异常：${shortMsg(e.message || e)}`);
-        return false;
+        return fail(`请求网关异常：${shortMsg(e.message || e)}`);
     }
 }
 
@@ -443,17 +448,20 @@ async function exchangeSession(user, entryUrl) {
 
     // ③ 回落：只用 App 票据引导登录（jwt 缺失或同发被拒）
     if (!resp) {
-        if (!user.token) { $.log('[换票] 本地没有 App 票据，先向网关换一张'); await refreshAppTokenFromApi(user); }
-        if (!user.token) throw new Error(user.jwt ? '同发被拒且没有 App 票据可引导：打开 App 进一次签到页重新抓包' : 'App 票据(token)为空，请重新抓包更新凭证');
-        resp = await Request({ url: loginUrl, method: 'post', headers: baseHeaders(jar, ua), body: Object.assign({}, baseBody, { jwtToken: null, token: user.token }), _timeout: 30000 });
+        if (!user.token) { $.log('[换票] 本地没有 App 票据，先换一张'); await refreshAppTokenFromApi(user); }
+        if (!user.token) throw new Error(`没有可用的 App 票据：${refreshNote || '请打开 App 签到页重新抓包更新凭证'}`);
+        const sendTokenLogin = () => Request({ url: loginUrl, method: 'post', headers: baseHeaders(jar, ua), body: Object.assign({}, baseBody, { jwtToken: null, token: user.token }), _timeout: 30000 });
+        resp = await sendTokenLogin();
         if (!resp || resp.code !== 'SUCCESS') {
-            // 票据可能已过期/被顶：配了 @tools 就刷新后重试一次
-            if (TOOLS_API) $.log(`票据引导被拒：${shortMsg(resp && resp.msg)}，换票后重试`);
-            if (TOOLS_API && await refreshAppTokenFromApi(user)) {
-                resp = await Request({ url: loginUrl, method: 'post', headers: baseHeaders(jar, ua), body: Object.assign({}, baseBody, { jwtToken: null, token: user.token }), _timeout: 30000 });
-            }
+            // 票据可能已过期/被顶：换新票后重试一次，换不成就把原因并进报错
+            const why = shortMsg(resp && resp.msg);
+            $.log(`票据引导被拒(${why})，尝试换票重试`);
+            const refreshed = await refreshAppTokenFromApi(user);
+            if (refreshed) resp = await sendTokenLogin();
             if (!resp || resp.code !== 'SUCCESS') {
-                throw new Error(`appTokenLogin 失败：${shortMsg(resp && resp.msg)}（App 票据可能已过期，请重新抓包）`);
+                throw new Error(refreshed
+                    ? `appTokenLogin 失败：${shortMsg(resp && resp.msg) || why} —— 换到的新票据仍被拒，App 会话已被顶号，需重新抓包`
+                    : `appTokenLogin 失败：${why} —— 换票未生效：${refreshNote}`);
             }
         }
     }

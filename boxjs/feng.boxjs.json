@@ -457,7 +457,7 @@
           "autoGrow": true,
           "rows": 1,
           "placeholder": "http://192.168.1.10:8787",
-          "desc": "填写服务地址, 不包含/, 如 http://192.168.1.10:8787；走隧道就填 https 域名"
+          "desc": "填写服务地址, 不包含/, 如 http://192.168.1.10:8787；走隧道就填 https 域名。"
         },
         {
           "id": "@tools.token",
