@@ -807,18 +807,29 @@ async function getWxCode(ref) {
         body: { ref, app_id: APPLET_APP_ID }
     };
     if ($.yybToken) options.headers['Authorization'] = `Bearer ${$.yybToken}`;
-    const resp = await Request(options);
-    if (!resp || resp.code !== 0 || !resp?.data?.result) {
-        $.log(`❌ 获取小程序code失败: ${$.toStr(resp)}\n`);
-        return null;
+    // code 服务偶发网络抖动：最多试 3 次（1s/2s 退避），都失败才报错
+    let resp = null, result = null, errText = '';
+    for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+            resp = await Request(options);
+            if (resp && resp.code === 0 && resp?.data?.result) {
+                result = typeof resp.data.result === 'string' ? $.toObj(resp.data.result) : resp.data.result;
+                if (result && result.code) {
+                    $.log(`✅ 获取code成功: ${result.code}\n`);
+                    return String(result.code);
+                }
+            }
+            errText = $.toStr(result || resp);
+        } catch (e) {
+            errText = (e && e.message) || String(e);
+        }
+        if (attempt < 3) {
+            $.log(`⚠️ 获取小程序code失败，${attempt}s 后重试（${attempt}/3）：${errText}\n`);
+            await $.wait(1000 * attempt);
+        }
     }
-    const result = typeof resp.data.result === 'string' ? $.toObj(resp.data.result) : resp.data.result;
-    if (!result || !result.code) {
-        $.log(`❌ 获取小程序code为空: ${$.toStr(result)}\n`);
-        return null;
-    }
-    $.log(`✅ 获取code成功: ${result.code}\n`);
-    return String(result.code);
+    $.log(`❌ 获取小程序code失败: ${errText}\n`);
+    return null;
 }
 
 async function doSvipApplet() {

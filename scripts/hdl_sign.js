@@ -171,14 +171,27 @@ async function getWxCode(ref) {
         body: { ref, app_id: APPID }
     };
     if ($.yybToken) options.headers['Authorization'] = `Bearer ${$.yybToken}`;
-    const resp = await Request(options);
-    if (!resp || resp.code !== 0 || !resp?.data?.result?.code) {
-        $.messages.push(`❌ 授权: code 获取失败 ${$.toStr(resp)}`);
-        return null;
+    // code 服务偶发网络抖动：最多试 3 次（1s/2s 退避），都失败才报错
+    let resp = null, errText = '';
+    for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+            resp = await Request(options);
+            if (resp && resp.code === 0 && resp?.data?.result?.code) {
+                $.refLabel = resp.data.account?.remark || resp.data.account?.nickname || resp.data.account?.alias || $.refLabel || '';
+                $.log(`✅ [授权] code 获取成功: ${resp.data.result.code}`);
+                return String(resp.data.result.code);
+            }
+            errText = $.toStr(resp);
+        } catch (e) {
+            errText = (e && e.message) || String(e);
+        }
+        if (attempt < 3) {
+            $.log(`⚠️ [授权] code 获取失败，${attempt}s 后重试（${attempt}/3）：${errText}`);
+            await $.wait(1000 * attempt);
+        }
     }
-    $.refLabel = resp.data.account?.remark || resp.data.account?.nickname || resp.data.account?.alias || $.refLabel || '';
-    $.log(`✅ [授权] code 获取成功: ${resp.data.result.code}`);
-    return String(resp.data.result.code);
+    $.messages.push(`❌ 授权: code 获取失败 ${errText}`);
+    return null;
 }
 
 // code → 海底捞侧 openid / unionId; unionId 即 wechatLogin 的 uid 字段
