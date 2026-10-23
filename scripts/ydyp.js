@@ -2493,6 +2493,30 @@ class YP {
         await this.cleanupUploadedFiles(uploadInfo);
     }
 
+    async receiveOneCloud(record) {
+        const receiveData = await this.requestJson({
+            url: `${MARKET_BASE_URL}/ycloud/signin/page/receiveV3`,
+            headers: this.buildReceiveHeaders(),
+            cookies: this.marketCookies,
+            data: {
+                client: 'app',
+                cloudId: record.recordId,
+                cloudType: record.cloudType === undefined ? 0 : record.cloudType,
+                deviceId: this.getMarketDeviceId(),
+            },
+            method: 'POST',
+        });
+        if (receiveData && receiveData.code === 0) {
+            const result = receiveData.result || {};
+            return { ok: true, num: typeof result.receive === 'number' ? result.receive : (record.cloudNum || 0), total: result.total };
+        }
+        return {
+            ok: false,
+            code: receiveData ? receiveData.code : -1,
+            msg: receiveData ? (receiveData.msg || '未知错误') : '接口无响应',
+        };
+    }
+
     async receive() {
         const prizeUrl = `https://caiyun.feixin.10086.cn/market/prizeApi/checkPrize/getUserPrizeLogPage?currPage=1&pageSize=15&_=${this.cookies['sensors_stay_time']}`;
         await this.prepareSigninCenterSession(true);
@@ -2509,38 +2533,72 @@ class YP {
         const pendingAmount = infoResult.toReceive || 0;
         let totalAmount = infoResult.total === undefined ? '' : infoResult.total;
         if (pendingAmount) {
-            const receiveData = await this.requestJson({
-                url: `${MARKET_BASE_URL}/market/signin/page/receiveV2`,
-                params: { client: 'app' },
-                headers: this.buildReceiveHeaders(),
-                cookies: this.marketCookies,
-            });
-            if (!receiveData) {
-                this.log('领取云朵失败: 接口无响应');
-                this.log(`-当前待领取:${pendingAmount}云朵`);
-            } else if (receiveData.code === 0) {
-                const receiveResult = receiveData.result || {};
-                this.log(`-领取云朵:${receiveResult.receive === undefined ? pendingAmount : receiveResult.receive}云朵`);
-                if (receiveResult.total !== undefined) totalAmount = receiveResult.total;
-            } else {
-                const latestInfoData = await this.requestMarketJson(`${MARKET_BASE_URL}/market/signin/page/infoV3`, { params: { client: 'app' } });
-                const latestResult = (latestInfoData && latestInfoData.code === 0) ? (latestInfoData.result || {}) : {};
-                const latestPending = latestResult.toReceive === undefined ? pendingAmount : latestResult.toReceive;
-                const latestTotal = latestResult.total === undefined ? totalAmount : latestResult.total;
-                const pendingDelta = (typeof pendingAmount === 'number' && typeof latestPending === 'number') ? pendingAmount - latestPending : 0;
-                const totalDelta = (typeof totalAmount === 'number' && typeof latestTotal === 'number') ? latestTotal - totalAmount : 0;
-                const claimedAmount = totalDelta || pendingDelta || (latestPending === 0 ? pendingAmount : 0);
-                if (claimedAmount > 0) {
-                    this.log(`-领取云朵:${claimedAmount}云朵`);
-                    totalAmount = latestTotal;
-                } else {
-                    this.log(`领取云朵失败: ${receiveData.msg || '未知错误'}`);
-                    if ([614, 615].includes(receiveData.code) && !getEnvDeviceId() && !getDeviceId(this.account)) {
-                        this.log('-当前账号尚未填写 deviceId，请在 ydyp_data 账号项或 ydyp_device_id 变量中抓包补充');
+            const totalBefore = totalAmount;
+            // 新版 H5 按 receiveList 逐条领(receiveV3)，py 的一次性 receiveV2 会报"锁定失败"
+            const receiveList = toArray(infoResult.receiveList);
+            let claimedAmount = 0;
+            let lastError = '';
+            let deviceBlocked = false;
+
+            for (const record of receiveList) {
+                if (!record || record.recordId === undefined || record.recordId === null) continue;
+                let outcome = await this.receiveOneCloud(record);
+                if (!outcome.ok) {
+                    lastError = outcome.msg;
+                    if ([614, 615].includes(outcome.code)) {
+                        deviceBlocked = true;
+                    } else {
+                        await this.sleep(2, 3);   // 抢锁失败稍后再试一次
+                        outcome = await this.receiveOneCloud(record);
                     }
-                    this.log(`-当前待领取:${pendingAmount}云朵`);
+                }
+                if (outcome.ok) {
+                    claimedAmount += outcome.num;
+                    if (outcome.total !== undefined) totalAmount = outcome.total;
+                } else {
+                    lastError = outcome.msg || lastError;
+                    if ([614, 615].includes(outcome.code)) deviceBlocked = true;
+                }
+                await $.wait(300);
+                if (deviceBlocked) break;
+            }
+
+            if (!receiveList.length) {
+                // 老账号没有 receiveList，回落到 py 的 receiveV2 单次领取
+                const receiveData = await this.requestJson({
+                    url: `${MARKET_BASE_URL}/market/signin/page/receiveV2`,
+                    params: { client: 'app' },
+                    headers: this.buildReceiveHeaders(),
+                    cookies: this.marketCookies,
+                });
+                if (!receiveData) {
+                    lastError = '接口无响应';
+                } else if (receiveData.code === 0) {
+                    const receiveResult = receiveData.result || {};
+                    claimedAmount = receiveResult.receive === undefined ? pendingAmount : receiveResult.receive;
+                    if (receiveResult.total !== undefined) totalAmount = receiveResult.total;
+                } else {
+                    lastError = receiveData.msg || '未知错误';
+                    if ([614, 615].includes(receiveData.code)) deviceBlocked = true;
                 }
             }
+
+            const latestInfoData = await this.requestMarketJson(`${MARKET_BASE_URL}/market/signin/page/infoV3`, { params: { client: 'app' } });
+            const latestResult = (latestInfoData && latestInfoData.code === 0) ? (latestInfoData.result || {}) : {};
+            const latestPending = latestResult.toReceive === undefined ? pendingAmount : latestResult.toReceive;
+            if (latestResult.total !== undefined) totalAmount = latestResult.total;
+            if (!claimedAmount) {
+                // 逐条接口都没回成功，但服务端总数涨了(首包可能已发放)，按差值兜底
+                const totalDelta = (typeof totalBefore === 'number' && typeof totalAmount === 'number') ? totalAmount - totalBefore : 0;
+                if (totalDelta > 0) claimedAmount = totalDelta;
+            }
+
+            if (claimedAmount) this.log(`-领取云朵:${claimedAmount}云朵`);
+            else this.log(`领取云朵失败: ${lastError || '未知错误'}`);
+            if (deviceBlocked && !getEnvDeviceId() && !getDeviceId(this.account)) {
+                this.log('-当前账号尚未填写 deviceId，请在 ydyp_data 账号项或 ydyp_device_id 变量中抓包补充');
+            }
+            if (latestPending > 0) this.log(`-当前待领取:${latestPending}云朵`);
         } else {
             this.log('-当前待领取:0云朵');
         }
