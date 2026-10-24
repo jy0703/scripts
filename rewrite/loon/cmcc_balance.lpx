@@ -1,0 +1,13 @@
+#!name = 移动余额套餐
+#!desc = 查询中国移动 10086+ 小程序的话费余额、主套餐与流量/语音/短信余量，每天推一条汇总；账号通过 Code Server 服务获取，支持多账号
+#!author = Fengzzzz
+#!homepage = https://github.com/jy0703/scripts
+#!icon = https://raw.githubusercontent.com/jy0703/scripts/main/icons/cmcc.png
+#!tag = 查询,自动化
+#!type = normal
+
+[Argument]
+cronExpression = input,"10 9 * * *",tag=定时参数,desc=这里需要输入符合 CRON 表达式的参数
+
+[Script]
+cron {cronExpression} script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_balance.js,timeout=600,tag=移动余额套餐,enable=true

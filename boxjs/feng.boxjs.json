@@ -1618,6 +1618,57 @@
           "desc": "逐条打印请求/响应明细，排查问题用；日志可能含 token 等敏感信息，看完记得关掉"
         }
       ]
+    },
+    {
+      "id": "cmcc_balance",
+      "name": "移动余额套餐",
+      "author": "@Feng",
+      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_balance.js",
+      "descs_html": [
+        "查中国移动 10086+ 小程序的话费（可用余额/本月实时话费）、主套餐、流量/语音/短信余量，每天推一条汇总；只读查询，不签到、不改业务",
+        "账号走「Code Server」分组的 @wxCode.address/token 取小程序 code，ref 填本区域 CMCC_BALANCE_REF，一个 ref 一个微信身份；该微信需已在 10086+ 小程序里登录并绑定手机号",
+        "登录链路：code → GET /wmhnewcenter/wechat86-applet/login 换 sessionId → 带 X-WECHAT86-APPLET-JWT 调 uniApi/newdirect。响应是 AES-128-CBC 密文（uniApi 回 hex、newdirect 回双层 base64 的 encryptData），密钥来自小程序包内置常量，本地解密",
+        "sessionId 缓存在 cmcc_balance_cache，2 小时内复用；查询报登录失效会自动重取 code 重登",
+        "流量单位 03=MB/04=GB 已统一换算成 GB；定向流量（如咪咕视频）单列，不计入通用流量"
+      ],
+      "icons": [
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/cmcc.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/cmcc.png"
+      ],
+      "keys": [
+        "CMCC_BALANCE_REF",
+        "cmcc_balance_cache",
+        "cmcc_balance_debug"
+      ],
+      "settings": [
+        {
+          "id": "CMCC_BALANCE_REF",
+          "name": "账号 ref",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "",
+          "desc": "code 服务的账号 ID/UIN/openid, 多个以英文逗号隔开, 一个 ref 一个微信身份"
+        },
+        {
+          "id": "cmcc_balance_cache",
+          "name": "小程序会话缓存",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 3,
+          "placeholder": "",
+          "desc": "脚本自动写入（ref → sessionId/省份/尾号，2 小时有效）；换 code 服务或想强制重登就清空它"
+        },
+        {
+          "id": "cmcc_balance_debug",
+          "name": "调试模式",
+          "val": false,
+          "type": "boolean",
+          "desc": "逐条打印请求/响应明细，排查问题用；日志可能含 sessionId 等敏感信息，看完记得关掉"
+        }
+      ]
     }
   ]
 }
