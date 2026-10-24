@@ -20,3 +20,10 @@ export function clock(ms: number): string {
     const d = new Date(ms);
     return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
+
+// 拆成「数值 + 单位」，给单位徽章用
+export function flowParts(gb: number): { value: string; unit: string } {
+    const v = Number.isFinite(gb) ? gb : 0;
+    if (v >= 1) return { value: v.toFixed(2), unit: "GB" };
+    return { value: String(Math.round(v * 1024)), unit: "MB" };
+}

@@ -43,6 +43,10 @@ export type CmccData = {
     sms: { remain: number; total: number } | null;
     updatedAt: string;
     updatedAtMs: number;
+    flowTitle?: string;   // App 数据源会返回「套外已用 / 国内已用」等标题
+    voiceTitle?: string;
+    flowAlert?: boolean;
+    voiceAlert?: boolean;
 };
 
 export function baseHeaders() {
