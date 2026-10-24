@@ -1,6 +1,6 @@
 import { HStack, Spacer, Text, VStack, Widget } from "scripting";
 import type { CmccData } from "../util/cmcc_core";
-import { Balance, FlowBar, Logo, clock } from "./comp";
+import { Balance, FlowBar, Logo, RefreshIcon, clock } from "./comp";
 
 export function View({ data }: { data: CmccData }) {
     const flow = data.flow;
@@ -12,6 +12,7 @@ export function View({ data }: { data: CmccData }) {
                 <Text font={"caption2"} foregroundStyle={"secondaryLabel"} monospacedDigit={true}>
                     {clock(data.updatedAtMs)}
                 </Text>
+                <RefreshIcon />
             </HStack>
             <Spacer minLength={6} />
             <Balance data={data} size={"largeTitle"} />

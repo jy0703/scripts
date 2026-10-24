@@ -1,8 +1,18 @@
-import { HStack, Image, Path, Rectangle, Script, Spacer, Text, VStack, ZStack } from "scripting";
+import { Button, HStack, Image, Path, Rectangle, Script, Spacer, Text, VStack, ZStack } from "scripting";
+import { ReloadIntent } from "../app_intents";
 import { formatFlow, clock, money } from "../util/format";
 import type { CmccData } from "../util/cmcc_core";
 
 export { formatFlow, clock, money };
+
+// 小组件里的刷新按钮：点一下让系统重跑 widget.tsx（会重新请求数据）
+export function RefreshIcon({ size = 12 }: { size?: number }) {
+    return (
+        <Button intent={ReloadIntent(undefined)} buttonStyle={"plain"}>
+            <Image systemName={"arrow.clockwise"} font={{ name: "system", size }} foregroundStyle={"secondaryLabel"} />
+        </Button>
+    );
+}
 
 // 用包里的移动图标，别用 SF Symbol
 export function Logo({ size = 20 }: { size?: number }) {
