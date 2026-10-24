@@ -1,5 +1,5 @@
-// 把 scripting/<name>/ 打成标准 zip（store，正斜杠路径）并命名为 <name>.scripting
-// 用法: node scripting/build_scripting.cjs cmcc_balance
+// 把 scripting/<name>/ 打成标准 zip（store，正斜杠路径），输出到同目录 <name>.scripting
+// 用法: node scripting/build_scripting.cjs cmcc
 const fs = require('fs');
 const path = require('path');
 
@@ -9,7 +9,7 @@ if (!name) {
     process.exit(1);
 }
 const root = path.join(__dirname, name);
-const out = path.join(__dirname, `${name}.scripting`);
+const out = path.join(root, `${name}.scripting`);
 
 const CRC_TABLE = (() => {
     const t = new Uint32Array(256);
@@ -36,7 +36,8 @@ function walk(dir, base = '') {
         if (e.isDirectory()) {
             entries.push({ name: `${rel}/`, dir: true });
             entries.push(...walk(path.join(dir, e.name), rel));
-        } else {
+        } else if (!/.(scripting|zip)$/i.test(e.name)) {
+            // 跳过产物本身，免得越打越大
             entries.push({ name: rel, file: path.join(dir, e.name) });
         }
     }
