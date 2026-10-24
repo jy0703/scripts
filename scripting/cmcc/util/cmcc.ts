@@ -16,6 +16,7 @@ export type Config = {
     ref: string;
     source: "wechat" | "app";   // 数据来源：小程序 / App(10086 模块)
     autologin: string;          // App 方式的 autoLogin 传参 JSON（url/body/x_qen）
+    proxyApi: string;           // 代理 App 的 HTTP API（key@ip:port），用于从 BoxJS/持久化里直接读取传参
     // 渲染配置
     showPercent: boolean;       // 条形图右侧显示剩余百分比
     smallStyle: "摘要" | "紧凑清单" | "进度清单";
@@ -56,7 +57,7 @@ async function fetchText(label: string, url: string, init?: any): Promise<{ text
 
 class CMCC {
     config: Config = {
-        address: "", token: "", ref: "", source: "wechat", autologin: "",
+        address: "", token: "", ref: "", source: "wechat", autologin: "", proxyApi: "",
         showPercent: false, smallStyle: "紧凑清单", showDir: true, mediumCards: "四卡",
         cacheEnabled: true, intervalMin: 180,
     };
@@ -74,6 +75,7 @@ class CMCC {
         this.config.token = String(this.config.token || "").trim();
         this.config.source = this.config.source === "app" ? "app" : "wechat";
         this.config.autologin = String(this.config.autologin || "").trim();
+        this.config.proxyApi = String(this.config.proxyApi || "").trim();
         this.config.showPercent = !!this.config.showPercent;
         this.config.showDir = this.config.showDir !== false;
         this.config.cacheEnabled = this.config.cacheEnabled !== false;
@@ -135,6 +137,7 @@ class CMCC {
         let auth: any = null;
         try {
             auth = typeof raw === "string" ? JSON.parse(raw) : raw;
+            if (typeof auth === "string") auth = JSON.parse(auth);
         } catch {
             throw new Error("autoLogin 传参不是合法 JSON（应为 {url,body,x_qen}）");
         }

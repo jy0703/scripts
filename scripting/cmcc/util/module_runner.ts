@@ -39,6 +39,25 @@ function code() {
     return moduleCode;
 }
 
+// 校验粘贴进来的传参：解 q14 密文拿手机号/抓取时间，给页面展示用
+export function inspectAutoLogin(raw: string): { ok: boolean; phone: string; capturedAt: string; error: string } {
+    try {
+        let j = typeof raw === "string" ? JSON.parse(raw) : raw;
+        if (typeof j === "string") j = JSON.parse(j);   // BoxJS 里偶尔是二次编码的字符串
+        if (!j || !j.body || !j.url) return { ok: false, phone: "", capturedAt: "", error: "缺少 url 或 body" };
+        const phone = String(j.phone || "");
+        let tel = phone;
+        if (!tel) {
+            const plain = bytesToUtf8(aesCbcDecrypt(base64ToBytes(String(j.body).trim()), ascii(Q14_KEY), ascii(Q14_IV)));
+            tel = String(JSON.parse(plain).tel || "");
+        }
+        if (!tel) return { ok: false, phone: "", capturedAt: "", error: "密文里没解出手机号" };
+        return { ok: true, phone: tel, capturedAt: String(j.capturedAt || ""), error: "" };
+    } catch (e: any) {
+        return { ok: false, phone: "", capturedAt: "", error: String(e && e.message ? e.message : e) };
+    }
+}
+
 export async function runModule(auth: AutoLogin, timeoutMs = 25000): Promise<any> {
     if (!auth || !auth.body || !auth.url) throw new Error("缺少 autoLogin 传参（url/body）");
     const phone = phoneOf(auth);
