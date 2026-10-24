@@ -23,13 +23,15 @@ export function View() {
     const data = useObservable<CmccData | null>(null);
     const error = useObservable<string>("");
     const loading = useObservable<boolean>(false);
+    const step = useObservable<string>("");
 
     const refresh = async () => {
         loading.setValue(true);
         error.setValue("");
+        step.setValue("准备");
         try {
             cmcc.save();
-            data.setValue(await cmcc.getData());
+            data.setValue(await cmcc.getData((s) => step.setValue(s)));
             try { Widget.reloadUserWidgets(); } catch {}
         } catch (e) {
             error.setValue(String(e));
@@ -55,7 +57,7 @@ export function View() {
                     ],
                 }}>
                 <Section title={"数据"}>
-                    <DataRows data={data} error={error} loading={loading} />
+                    <DataRows data={data} error={error} loading={loading} step={step} />
                 </Section>
                 <Section
                     title={"配置"}
@@ -82,12 +84,12 @@ function ConfigField({ title, field, placeholder }: { title: string; field: stri
     return <TextField title={title} value={value} placeholder={placeholder} />;
 }
 
-function DataRows({ data, error, loading }: { data: any; error: any; loading: any }) {
+function DataRows({ data, error, loading, step }: { data: any; error: any; loading: any; step: any }) {
     if (error.value) return <Text foregroundStyle={"systemRed"}>{error.value}</Text>;
     const d: CmccData | null = data.value;
     if (!d) {
         return loading.value
-            ? <Text foregroundStyle={"secondaryLabel"}>正在获取…</Text>
+            ? <Text foregroundStyle={"secondaryLabel"}>正在获取…{step.value ? `（${step.value}）` : ""}</Text>
             : <Text foregroundStyle={"secondaryLabel"}>还没有数据，点右上角刷新</Text>;
     }
     const flow = d.flow ? formatGB(d.flow.remainGB) : null;
