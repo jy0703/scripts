@@ -171,12 +171,13 @@ async function queryAndReport(session) {
     const tail = session.phone ? `尾号 ${session.phone.slice(-4)}` : '尾号 ????';
     const lines = [`📱 ${tail}${session.provinceCode ? ` · 省份 ${session.provinceCode}` : ''}`];
 
-    // 话费
+    // 话费：curFee 才是「话费余额」（小程序余额页按它判「余额不足/已欠费」，<10 元报警），realFee 是本月实时话费
     const f = (fee && (fee.object?.resultData || fee.resultData)) || null;
     if (f) {
-        const balance = pick(f, ['leftMoney', 'cashBalance', 'userSpecBalance']);
-        const parts = [`本月话费 ${yuan(f.realFee)}`];
-        if (balance) parts.unshift(`可用余额 ${yuan(balance)}`);
+        const balance = pick(f, ['curFee', 'cashBalance', 'userSpecBalance', 'leftMoney']);
+        const parts = [];
+        if (balance !== '') parts.push(`余额 ${yuan(balance)}`);
+        if (f.realFee !== undefined) parts.push(`本月话费 ${yuan(f.realFee)}`);
         if (Number(f.oweFee) > 0) parts.push(`欠费 ${yuan(f.oweFee)}`);
         if (f.payType) parts.push(f.payType);
         lines.push(`💴 话费: ${parts.join(' · ')}`);
