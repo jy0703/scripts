@@ -1,11 +1,19 @@
-import { HStack, Image, Rectangle, Spacer, Text, VStack, ZStack } from "scripting";
+import { HStack, Image, Path, Rectangle, Script, Spacer, Text, VStack, ZStack } from "scripting";
 import { formatFlow, clock, money } from "../util/format";
 import type { CmccData } from "../util/cmcc_core";
 
 export { formatFlow, clock, money };
 
+// 用包里的移动图标，别用 SF Symbol
 export function Logo({ size = 20 }: { size?: number }) {
-    return <Image systemName={"antenna.radiowaves.left.and.right"} font={{ name: "system", size }} foregroundStyle={"systemBlue"} />;
+    return (
+        <Image
+            filePath={Path.join(Script.directory, "image/cmcc.min.png")}
+            resizable={true}
+            scaleToFit={true}
+            frame={{ width: size, height: size }}
+        />
+    );
 }
 
 // 余额大数字：低于 10 元标红（和小程序「余额不足」阈值一致）
@@ -21,6 +29,7 @@ export function Balance({ data, size }: { data: CmccData; size: any }) {
     );
 }
 
+// 进度条按「剩余占比」画；剩余不足 10% 变红
 export function FlowBar({
     label,
     remainGB,
@@ -34,8 +43,8 @@ export function FlowBar({
     color: any;
     showTotal?: boolean;
 }) {
-    const used = Math.max(totalGB - remainGB, 0);
-    const frac = totalGB > 0 ? Math.min(used / totalGB, 1) : 0;
+    const ratio = totalGB > 0 ? Math.min(Math.max(remainGB / totalGB, 0), 1) : 0;
+    const fill = ratio < 0.1 ? "systemRed" : color;
     return (
         <VStack alignment={"leading"} spacing={4}>
             <HStack font={"caption"} fontWeight={"semibold"}>
@@ -52,9 +61,9 @@ export function FlowBar({
                 />
                 <Rectangle
                     frame={{ height: 6 }}
-                    fill={color}
+                    fill={fill}
                     clipShape={{ type: "capsule", style: "continuous" }}
-                    scaleEffect={{ x: frac, y: 1, anchor: "leading" }}
+                    scaleEffect={{ x: ratio, y: 1, anchor: "leading" }}
                 />
             </ZStack>
         </VStack>
@@ -69,18 +78,24 @@ export function Chip({ icon, label, value }: { icon: string; label: string; valu
             background={{ color: "tertiarySystemFill" }}
             clipShape={{ type: "capsule", style: "continuous" }}>
             <Image systemName={icon} font={{ name: "system", size: 11 }} foregroundStyle={"secondaryLabel"} />
-            <Text font={"caption2"} foregroundStyle={"secondaryLabel"}>{label}</Text>
-            <Text font={"caption2"} fontWeight={"semibold"} monospacedDigit={true}>{value}</Text>
+            {label ? (
+                <Text font={"caption2"} foregroundStyle={"secondaryLabel"}>
+                    {label}
+                </Text>
+            ) : null}
+            <Text font={"caption2"} fontWeight={"semibold"} monospacedDigit={true}>
+                {value}
+            </Text>
         </HStack>
     );
 }
 
 export function Chips({ data }: { data: CmccData }) {
     return (
-        <HStack spacing={6}>
+        <VStack alignment={"leading"} spacing={6}>
             {data.voice ? <Chip icon={"phone.fill"} label={"语音"} value={`${data.voice.remain}分`} /> : null}
             {data.points !== null ? <Chip icon={"star.fill"} label={"积分"} value={String(data.points)} /> : null}
-        </HStack>
+        </VStack>
     );
 }
 

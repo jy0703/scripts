@@ -5,7 +5,7 @@ import { Balance, Chips, FlowBar, Logo, MonthLine } from "./comp";
 export function View({ data }: { data: CmccData }) {
     const flow = data.flow;
     return (
-        <HStack padding={true} frame={Widget.displaySize} spacing={16} alignment={"top"}>
+        <HStack padding={true} frame={Widget.displaySize} spacing={14} alignment={"top"}>
             <VStack alignment={"leading"} spacing={0}>
                 <HStack spacing={6}>
                     <Logo size={18} />
@@ -16,7 +16,7 @@ export function View({ data }: { data: CmccData }) {
                 <Spacer minLength={6} />
                 <MonthLine data={data} />
             </VStack>
-            <VStack spacing={10}>
+            <VStack spacing={8}>
                 <Spacer minLength={4} />
                 {flow ? (
                     <FlowBar label={"通用"} remainGB={flow.commonGB} totalGB={flow.commonTotalGB} color={"systemGreen"} />

@@ -5,7 +5,7 @@ import { Balance, Chip, FlowBar, Logo, MonthLine } from "./comp";
 export function View({ data }: { data: CmccData }) {
     const flow = data.flow;
     return (
-        <HStack padding={true} frame={Widget.displaySize} spacing={16} alignment={"top"}>
+        <HStack padding={true} frame={Widget.displaySize} spacing={14} alignment={"top"}>
             <VStack alignment={"leading"} spacing={0}>
                 <HStack spacing={6}>
                     <Logo size={20} />
@@ -16,7 +16,7 @@ export function View({ data }: { data: CmccData }) {
                 <Spacer minLength={12} />
                 <MonthLine data={data} />
             </VStack>
-            <VStack spacing={12}>
+            <VStack alignment={"leading"} spacing={10}>
                 <Spacer minLength={4} />
                 {flow ? (
                     <FlowBar label={"通用"} remainGB={flow.commonGB} totalGB={flow.commonTotalGB} color={"systemGreen"} showTotal={true} />
@@ -25,10 +25,8 @@ export function View({ data }: { data: CmccData }) {
                     <FlowBar label={"定向"} remainGB={flow.dirGB} totalGB={flow.dirTotalGB} color={"systemOrange"} showTotal={true} />
                 ) : null}
                 <Spacer />
-                <HStack spacing={6}>
-                    {data.planName ? <Chip icon={"simcard.fill"} label={""} value={data.planName} /> : null}
-                    {data.points !== null ? <Chip icon={"star.fill"} label={"积分"} value={String(data.points)} /> : null}
-                </HStack>
+                {data.planName ? <Chip icon={"simcard.fill"} label={""} value={data.planName} /> : null}
+                {data.points !== null ? <Chip icon={"star.fill"} label={"积分"} value={String(data.points)} /> : null}
             </VStack>
         </HStack>
     );
