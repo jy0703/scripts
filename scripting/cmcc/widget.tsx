@@ -5,24 +5,21 @@ import { View as AccessoryCircular } from "./widget/circular";
 import { View as SystemSmall } from "./widget/small";
 
 (async () => {
+    const data = await cmcc.getData();
     switch (Widget.family) {
-        case "accessoryCircular": {
-            const data = await cmcc.getData();
+        case "accessoryCircular":
             return Widget.present(
                 <Button intent={ReloadIntent(undefined)} buttonStyle={"plain"}>
                     <AccessoryCircular data={data} />
                 </Button>,
             );
-        }
         case "systemSmall":
-        case "systemMedium": {
-            const data = await cmcc.getData();
+        case "systemMedium":
             return Widget.present(
                 <Button intent={ReloadIntent(undefined)} buttonStyle={"plain"}>
                     <SystemSmall data={data} />
                 </Button>,
             );
-        }
         default:
             throw new Error("未适配的 Widget 尺寸");
     }

@@ -1,4 +1,4 @@
-import { fetch, Storage } from "scripting";
+import { fetch } from "scripting";
 import type { CmccData, Session } from "./cmcc_core";
 import { APPID, BASE, ENDPOINTS, authedHeaders, baseHeaders, checkOk, normalize, parsePayload, shortMsg } from "./cmcc_core";
 
@@ -35,8 +35,8 @@ class CMCC {
     }
 
     async getData(): Promise<CmccData> {
-        if (!this.config.ref) throw new Error("未配置账号 ref");
-        if (!this.config.address) throw new Error("未配置 code 服务地址");
+        if (!this.config.address) throw new Error("未配置服务器地址：先运行脚本，在页面里填好地址/token/ref");
+        if (!this.config.ref) throw new Error("未配置账号 ref：先运行脚本，在页面里填好");
         let session = this.cached();
         if (!session) session = await this.login();
         try {
