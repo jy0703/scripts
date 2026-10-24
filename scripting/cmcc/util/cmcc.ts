@@ -135,16 +135,24 @@ class CMCC {
         const headers = authedHeaders(session);
         const post = (label: string, path: string, body: any) =>
             fetchText(label, BASE + path, { method: "POST", headers, body: JSON.stringify(body) });
-        const [fee, margin, plan] = await Promise.all([
+        const [fee, margin, plan, points] = await Promise.all([
             fetchText("查询话费", BASE + ENDPOINTS.fee, { headers }),
             post("查询流量", ENDPOINTS.margin, {}),
             post("查询套餐", ENDPOINTS.plan, { operation: "queryMainPlanDetailedInfo" }),
+            // 积分拿不到不影响主数据
+            fetchText("查询积分", BASE + ENDPOINTS.points, { headers }).catch(() => null),
         ]);
         const [feeData, marginData, planData] = [fee, margin, plan].map((r) => parsePayload(r.text));
         checkOk(feeData);
         checkOk(marginData);
         checkOk(planData);
-        const data = normalize(feeData, marginData, planData);
+        let pointsData: any = null;
+        try {
+            pointsData = points ? parsePayload(points.text)?.object?.resultData : null;
+        } catch {
+            pointsData = null;
+        }
+        const data = normalize(feeData, marginData, planData, pointsData);
         data.phone = session.phone;
         data.province = session.provinceCode;
         return data;

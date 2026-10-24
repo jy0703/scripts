@@ -114,6 +114,7 @@ function DataRows({ data, error, loading, step }: { data: any; error: any; loadi
                 title={"主套餐"}
                 value={d.planName ? `${d.planName}${d.planPrice ? ` ${money(d.planPrice)} 元/月` : ""}` : "-"}
             />
+            <Row icon={"star.fill"} title={"积分"} value={d.points !== null ? String(d.points) : "-"} />
             <Row icon={"antenna.radiowaves.left.and.right"} title={"流量"} value={flowText} />
             <Row icon={"phone.arrow.up.right"} title={"语音"} value={d.voice ? `${d.voice.remain} / ${d.voice.total} 分钟` : "-"} />
             <Row icon={"message.fill"} title={"短信"} value={d.sms ? `${d.sms.remain} / ${d.sms.total} 条` : "-"} />

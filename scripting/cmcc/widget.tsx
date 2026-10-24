@@ -3,6 +3,8 @@ import { cmcc } from "./util/cmcc";
 import { ReloadIntent } from "./app_intents";
 import { View as AccessoryCircular } from "./widget/circular";
 import { View as SystemSmall } from "./widget/small";
+import { View as SystemMedium } from "./widget/medium";
+import { View as SystemLarge } from "./widget/large";
 
 (async () => {
     const data = await cmcc.getData();
@@ -14,10 +16,21 @@ import { View as SystemSmall } from "./widget/small";
                 </Button>,
             );
         case "systemSmall":
-        case "systemMedium":
             return Widget.present(
                 <Button intent={ReloadIntent(undefined)} buttonStyle={"plain"}>
                     <SystemSmall data={data} />
+                </Button>,
+            );
+        case "systemMedium":
+            return Widget.present(
+                <Button intent={ReloadIntent(undefined)} buttonStyle={"plain"}>
+                    <SystemMedium data={data} />
+                </Button>,
+            );
+        case "systemLarge":
+            return Widget.present(
+                <Button intent={ReloadIntent(undefined)} buttonStyle={"plain"}>
+                    <SystemLarge data={data} />
                 </Button>,
             );
         default:

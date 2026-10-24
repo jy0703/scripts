@@ -29,10 +29,20 @@ export type CmccData = {
     payType: string;
     planName: string;
     planPrice: string;
-    flow: { remainGB: number; totalGB: number; usedGB: number; commonGB: number; dirGB: number } | null;
+    points: number | null;
+    flow: {
+        remainGB: number;
+        totalGB: number;
+        usedGB: number;
+        commonGB: number;
+        commonTotalGB: number;
+        dirGB: number;
+        dirTotalGB: number;
+    } | null;
     voice: { remain: number; total: number } | null;
     sms: { remain: number; total: number } | null;
     updatedAt: string;
+    updatedAtMs: number;
 };
 
 export function baseHeaders() {
@@ -96,7 +106,7 @@ export function checkOk(data: any) {
     return data;
 }
 
-export function normalize(fee: any, margin: any, plan: any): CmccData {
+export function normalize(fee: any, margin: any, plan: any, points: any = null): CmccData {
     const f = fee?.object?.resultData || fee?.resultData || {};
     const m = margin?.data?.resultData || margin?.resultData || {};
     const p = plan?.data?.resultData || plan?.resultData || {};
@@ -121,13 +131,16 @@ export function normalize(fee: any, margin: any, plan: any): CmccData {
         payType: f.payType || "",
         planName: p.curPlanName || "",
         planPrice: p.planPrice !== undefined ? String(p.planPrice) : "",
+        points: points && points.totalPoint !== undefined ? Number(points.totalPoint) : null,
         flow: Number(base.sumNum)
             ? {
                   remainGB: toGB(base.remainNum, base.unit),
                   totalGB: toGB(base.sumNum, base.unit),
                   usedGB: toGB(base.usedNum, base.unit),
                   commonGB: toGB(common.remainNum, common.unit),
+                  commonTotalGB: toGB(common.sumNum, common.unit),
                   dirGB: Number(dir.sumNum) > 0 ? toGB(dir.remainNum, dir.unit) : 0,
+                  dirTotalGB: toGB(dir.sumNum, dir.unit),
               }
             : null,
         voice:
@@ -139,6 +152,7 @@ export function normalize(fee: any, margin: any, plan: any): CmccData {
                 ? { remain: num(smsInfo.remainNum), total: num(smsInfo.sumNum) }
                 : null,
         updatedAt: new Date().toLocaleString(),
+        updatedAtMs: Date.now(),
     };
 }
 
@@ -165,4 +179,5 @@ export const ENDPOINTS = {
     fee: "/wmhnewcenter/wechat86-applet/newdirect/execute?channelMark=wechat&service=esb&operation=getRealFee",
     margin: "/website/uniApi/getNewMarginInfo",
     plan: "/website/uniApi/getMarginQueryInfo",
+    points: "/wmhnewcenter/wechat86-applet/newdirect/execute?channelMark=wechat&service=esb&operation=getPoints",
 };

@@ -8,3 +8,15 @@ export function money(v: string | number): string {
     const n = Number(v);
     return Number.isFinite(n) ? n.toFixed(2) : String(v ?? "");
 }
+
+// 小组件里的流量写法：>=1G 用 G（两位小数），不足 1G 用整数 M
+export function formatFlow(gb: number): string {
+    const v = Number.isFinite(gb) ? gb : 0;
+    if (v >= 1) return `${v.toFixed(2)}G`;
+    return `${Math.round(v * 1024)}M`;
+}
+
+export function clock(ms: number): string {
+    const d = new Date(ms);
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
