@@ -5,7 +5,7 @@
  *   1. smzdm_data：抓包保存的账号数组（推荐）
  *   2. SMZDM_COOKIE：Node/青龙可直接填 Cookie，多账号用 & 或换行分隔
  *   3. SMZDM_SK：可选，签到请求里的 sk，多账号与 Cookie 顺序一致；不填时按 Cookie 的 smzdm_id + device_id 自动计算
- *   4. SMZDM_COMMENT：可选，评论任务文案，需大于 10 个汉字
+ *   4. SMZDM_COMMENT：可选，评论任务文案，每条需大于 10 个汉字，多条用 | 或换行分隔（任务要几条取几条，用过的文案服务端会判重复提交）
  *   5. SMZDM_CROWD_SILVER_5：可选，值 yes 时执行 5 碎银子抽奖任务
  *   6. SMZDM_CROWD_KEYWORD：可选，非免费抽奖时优先匹配的关键词
  * 更新时间：2026-10-09
@@ -62,6 +62,14 @@ const RUNTIME_ENV = {
     SMZDM_CROWD_SILVER_5: getEnv('SMZDM_CROWD_SILVER_5', 'smzdm_crowd_silver_5') || '',
     SMZDM_CROWD_KEYWORD: getEnv('SMZDM_CROWD_KEYWORD', 'smzdm_crowd_keyword') || ''
 };
+
+// 评论文案池：服务端按文案判重（换文章也拦），所以任务要几条就得有几句不同的话
+function getCommentPool() {
+    return String(RUNTIME_ENV.SMZDM_COMMENT || '')
+        .split(/[|\r\n]+/)
+        .map(s => s.trim())
+        .filter(s => s.length > 10);
+}
 
 function randomStr(len = 18) {
     const char = '0123456789';
@@ -453,9 +461,9 @@ async function doTasks(ctx, tasks) {
             handler: doRatingTask
         },
         'interactive.comment': {
-            guard: () => RUNTIME_ENV.SMZDM_COMMENT && String(RUNTIME_ENV.SMZDM_COMMENT).length > 10,
+            guard: () => getCommentPool().length > 0,
             onGuardFail(currentCtx) {
-                currentCtx.$env.log('\u{1F7E1}\u8BF7\u8BBE\u7F6E SMZDM_COMMENT \u73AF\u5883\u53D8\u91CF\u540E\u624D\u80FD\u505A\u8BC4\u8BBA\u4EFB\u52A1\uFF01');
+                currentCtx.$env.log('🟡请设置 SMZDM_COMMENT 环境变量（每条大于 10 个汉字，多条用 | 或换行分隔）后才能做评论任务！');
             },
             handler: doCommentTask
         }
@@ -557,7 +565,12 @@ async function openTaskArticle(ctx, task, article) {
 async function doCommentTask(ctx, task) {
     ctx.$env.log(`开始任务: ${task.task_name}`);
 
-    const articles = await getArticleList(ctx, 20);
+    // 任务文案形如「发表3条评论，每条评论不少于10个字」，只发一条时领奖会被拒：您还未完成
+    const need = Number((String(task.task_description || task.task_name).match(/(\d+)\s*条/) || [])[1]) || 1;
+    const pool = getCommentPool();
+
+    // 多取几篇，尽量让每条评论落在不同文章上
+    const articles = await getArticleList(ctx, Math.min(20, need * 2 + 2));
 
     if (articles.length < 1) {
       return {
@@ -565,36 +578,79 @@ async function doCommentTask(ctx, task) {
       };
     }
 
-    // 随机选一篇文章来评论
-    const article = articles[Math.floor(Math.random() * articles.length)];
+    const commentIds = [];
+    let tried = 0;
 
-    await wait(3, 10);
+    while (commentIds.length < need && tried < pool.length) {
+      const content = pool[tried++];
+      const article = articles[commentIds.length % articles.length];
 
-    const {isSuccess, data } = await submitComment(ctx, {
-      articleId: article.article_id,
-      channelId: article.article_channel_id,
-      content: RUNTIME_ENV.SMZDM_COMMENT
-    });
+      await wait(3, 10);
 
-    if (!isSuccess) {
+      const {isSuccess, data, response} = await submitComment(ctx, {
+        articleId: article.article_id,
+        channelId: article.article_channel_id,
+        content
+      });
+
+      if (!isSuccess) {
+        // 判重是按文案且窗口很长（评论删了也照样拦），换池子里的下一条继续
+        if (/重复提交/.test(response)) {
+          ctx.$env.log(`文案被服务端判重，换下一条: ${content}`);
+          await wait(20, 40);
+          continue;
+        }
+
+        ctx.$env.log(`评论只发成功 ${commentIds.length}/${need} 条，本次不领奖`);
+        await removeComments(ctx, commentIds);
+        return {
+          isSuccess: false
+        };
+      }
+
+      commentIds.push(data.data.comment_ID);
+
+      if (commentIds.length < need) {
+        // 连续提交会触发「您提交评论的速度太快了」
+        await wait(20, 40);
+      }
+    }
+
+    if (commentIds.length < need) {
+      ctx.$env.log(`评论只发成功 ${commentIds.length}/${need} 条，文案池 ${pool.length} 条已试完，记得补新文案`);
+      await removeComments(ctx, commentIds);
       return {
-        isSuccess
+        isSuccess: false
       };
     }
 
-    ctx.$env.log('删除评论');
-    await wait(20, 30);
-
-    const {isSuccess: result } = await removeComment(ctx, data.data.comment_ID);
-
-    if (!result) {
-      ctx.$env.log('再试一次');
-      await wait(10, 20);
-
-      // 不成功再执行一次删除
-      await removeComment(ctx, data.data.comment_ID);
+    // 评论留着让服务端计入任务进度，领完奖再统一清掉
+    try {
+      return await claimTaskReward(ctx, task);
     }
-    return await claimTaskReward(ctx, task);
+    finally {
+      await removeComments(ctx, commentIds);
+    }
+}
+
+async function removeComments(ctx, ids) {
+    // 刚发表的评论立刻删会回「无效的评论ID」，等一会儿才可删
+    if (ids.length) await wait(20, 30);
+
+    for (const id of ids) {
+      ctx.$env.log('删除评论');
+      await wait(5, 10);
+
+      const {isSuccess} = await removeComment(ctx, id);
+
+      if (!isSuccess) {
+        ctx.$env.log('再试一次');
+        await wait(10, 20);
+
+        // 不成功再执行一次删除
+        await removeComment(ctx, id);
+      }
+    }
 }
 
 async function doRatingTask(ctx, task) {
@@ -1323,28 +1379,41 @@ async function shareDailyReward(ctx, channelId) {
 }
 
 async function getArticleList(ctx, num = 1) {
-    const { isSuccess, data, response } = await requestApi('https://article-api.smzdm.com/ranking_list/articles', {
-      headers: getHeaders(ctx),
-      data: {
-        offset: 0,
-        channel_id: 76,
-        tab: 2,
-        order: 0,
-        limit: 20,
-        exclude_article_ids: '',
-        stream: 'a',
-        ab_code: 'b'
-      }
-    });
+    // order 对应页面上的 24H/近一周/近一月三档。服务端已不认以前的 order=0：
+    // 它不再报错，而是回 error_code=0 + rows=[]，任务侧只会看到一个没有原因的失败，所以按 1→2→3 依次取
+    for (const order of [1, 2, 3]) {
+      const { isSuccess, data, response } = await requestApi('https://article-api.smzdm.com/ranking_list/articles', {
+        headers: getHeaders(ctx),
+        data: {
+          offset: 0,
+          channel_id: 76,
+          tab: 2,
+          order,
+          limit: 20,
+          exclude_article_ids: '',
+          stream: 'a',
+          ab_code: 'b'
+        }
+      });
 
-    if (isSuccess) {
-      // 取前 num 个做任务
-      return data.data.rows.slice(0, num);
+      if (!isSuccess) {
+        ctx.$env.log(`获取文章列表失败: ${response}`);
+        return [];
+      }
+
+      const rows = Array.isArray(data?.data?.rows) ? data.data.rows : [];
+      if (rows.length) {
+        if (order != 1) ctx.$env.log(`文章列表取到 order=${order} 这一档`);
+        // 取前 num 个做任务
+        return rows.slice(0, num);
+      }
+
+      ctx.$env.log(`文章列表为空(order=${order})，换下一档`);
+      await wait(2, 4);
     }
-    else {
-      ctx.$env.log(`获取文章列表失败: ${response}`);
-      return [];
-    }
+
+    ctx.$env.log('文章列表为空: order 1/2/3 均无数据');
+    return [];
 }
 
 async function getRobotToken(ctx) {
@@ -1574,8 +1643,10 @@ async function getArticleListFromLanmu(ctx, id, num = 1) {
     });
 
     if (isSuccess) {
+      const rows = Array.isArray(data?.data?.rows) ? data.data.rows : [];
+      if (!rows.length) ctx.$env.log(`文章列表为空: ${response?.slice(0, 150) || $.toStr(data)}`);
       // 取前 num 个做任务
-      return data.data.rows.slice(0, num);
+      return rows.slice(0, num);
     }
     else {
       ctx.$env.log(`获取文章列表失败: ${response}`);
@@ -1719,8 +1790,10 @@ async function getArticleListFromTag(ctx, id, name, num = 1) {
     });
 
     if (isSuccess) {
+      const rows = Array.isArray(data?.data?.rows) ? data.data.rows : [];
+      if (!rows.length) ctx.$env.log(`文章列表为空: ${response?.slice(0, 150) || $.toStr(data)}`);
       // 取前 num 个做任务
-      return data.data.rows.slice(0, num);
+      return rows.slice(0, num);
     }
     else {
       ctx.$env.log(`获取文章列表失败: ${response}`);

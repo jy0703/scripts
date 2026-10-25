@@ -979,7 +979,7 @@
       "descs_html": [
         "什么值得买每日签到 + 完成每日任务（浏览/分享/评论/抽奖），支持多账号",
         "抓取：开启「什么值得买获取Cookie」后打开 App 进入签到页，自动保存 Cookie、User-Agent、sk 到 smzdm_data",
-        "评论任务文案需大于 10 个汉字；SMZDM_CROWD_SILVER_5 填 yes 才会执行 5 碎银子抽奖任务",
+        "评论任务文案每条需大于 10 个汉字，多条用 | 或换行分隔（任务要几条取几条；服务端按文案判重，用过的文案要换掉）；SMZDM_CROWD_SILVER_5 填 yes 才会执行 5 碎银子抽奖任务",
         "SMZDM_COOKIE / SMZDM_SK 为 Node、青龙手工填写兜底，优先级低于 smzdm_data；sk 留空会由 Cookie 自动计算，可不抓"
       ],
       "icons": [
@@ -1032,9 +1032,9 @@
           "val": "",
           "type": "textarea",
           "autoGrow": true,
-          "rows": 2,
+          "rows": 4,
           "placeholder": "",
-          "desc": "需大于 10 个汉字，留空则跳过评论任务"
+          "desc": "每条需大于 10 个汉字，多条用 | 或换行分隔；任务要几条就取几条，服务端按文案判重（评论删了也记住），用过的要换掉；留空则跳过评论任务"
         },
         {
           "id": "SMZDM_CROWD_SILVER_5",
