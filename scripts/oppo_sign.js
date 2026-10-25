@@ -44,6 +44,8 @@ const CACHE_KEY = 'oppo_cache';   // 缓存键: 存 {ref:{sessionId,encryptedSes
 const FALLBACK_SIGN_ACTIVITY_ID = '2061050217641549824';
 const FALLBACK_CREDITS_ADD_ACTION_ID = '1788913e6d9e4683b8b9ab0088733560';
 const SIGN_PAGE = 'https://hd.opposhop.cn/bp/b371ce270f7509f0?nightModelEnable=true&utm_source=huiyuanwx&utm_medium=me_qiandao';
+// 接口 gradeCode → OPPO 官方等级名(官方四档: 普卡/银卡/金卡/钻卡)
+const GRADE_NAMES = { commoncard: '普卡会员' };
 
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) MicroMessenger/3.9.12 MiniProgramEnv/Windows WindowsWechat/WMPF';
 // 抓 H5 页面用手机端微信 UA，跟小程序 web-view 里的环境一致
@@ -81,7 +83,7 @@ async function runAccount(ref) {
     try {
         const member = await queryMember(session);
         if (!$.refLabel && member.userName && member.userName !== '未知') $.refLabel = member.userName;
-        $.messages.push(`👤 会员: ${member.userName} / 等级 ${member.gradeCode}`);
+        $.messages.push(`👤 会员: ${member.userName} / 等级 ${member.gradeName}`);
 
         await queryEntrance(session);
 
@@ -218,9 +220,18 @@ async function queryMember(session) {
     const phone = base.pnumber || '';
     const pointAmount = member.pointAmount ?? 0;
     const growthValue = member.growthValue ?? 0;
-    const gradeCode = member.gradeCode || '未知';
-    $.log(`👤 [会员] 用户: ${userName}，积分: ${pointAmount}，成长值: ${growthValue}，等级: ${gradeCode}${phone ? `，手机号: ${phone}` : ''}`);
-    return { member, userName, pointAmount, gradeCode };
+    const gradeCode = member.gradeCode || '';
+    const gradeName = resolveGradeName(member);
+    $.log(`👤 [会员] 用户: ${userName}，积分: ${pointAmount}，成长值: ${growthValue}，等级: ${gradeName}${gradeCode && gradeCode !== gradeName ? `(${gradeCode})` : ''}${phone ? `，手机号: ${phone}` : ''}`);
+    return { member, userName, pointAmount, gradeCode, gradeName };
+}
+
+// 接口只回 gradeCode(如 commoncard), 展示转成 OPPO 官方等级名
+function resolveGradeName(member) {
+    const code = String(member.gradeCode || '');
+    const name = member.gradeName || member.gradeDesc || member.levelName || member.memberGradeName;
+    if (name) return String(name);
+    return GRADE_NAMES[code] || code || '未知';
 }
 
 async function queryEntrance(session) {
