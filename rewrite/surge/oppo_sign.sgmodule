@@ -1,0 +1,5 @@
+#!name=OPPO会员中心签到
+#!desc=OPPO小程序会员每日积分签到，账号通过 Code Server 服务获取，支持多账号（活动 id 每次运行自动发现，token 缓存失效自动重新登录）
+
+[Script]
+OPPO会员中心签到 = type=cron,cronexp="0 9 * * *",wake-system=1,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/oppo_sign.js,script-update-interval=0

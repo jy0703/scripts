@@ -1669,6 +1669,56 @@
           "desc": "逐条打印请求/响应明细，排查问题用；日志可能含 sessionId 等敏感信息，看完记得关掉"
         }
       ]
+    },
+    {
+      "id": "oppo_sign",
+      "name": "OPPO会员中心签到",
+      "author": "@Feng",
+      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/oppo_sign.js",
+      "descs_html": [
+        "OPPO 小程序会员每日积分签到（cumulativeSignIn），签到前查会员积分/成长值/等级与签到入口，签到后复查积分",
+        "活动 id 每次运行从签到 H5 页自动发现（按月轮换），发现失败才回落内置 id；提示活动已结束通常是新一期还没上",
+        "依赖「Code Server」分组中「获取小程序code」(@wxCode.address/token)，账号 ref 填本区域 oppo_ref",
+        "token 缓存 24 小时并用 /member/info 验活，手机上重新打开 OPPO 小程序可能顶掉脚本 token，下次运行自动重新登录"
+      ],
+      "icons": [
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/oppo.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/oppo.png"
+      ],
+      "keys": [
+        "oppo_ref",
+        "oppo_cache",
+        "oppo_debug"
+      ],
+      "settings": [
+        {
+          "id": "oppo_ref",
+          "name": "账号 ref",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "",
+          "desc": "code 服务的账号 ID/UIN/openid, 多个以英文逗号隔开, 一个 ref 一个微信身份"
+        },
+        {
+          "id": "oppo_cache",
+          "name": "OPPO token 缓存",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 5,
+          "placeholder": "",
+          "desc": "脚本自动维护，勿手填；按 ref 存 sessionId/encryptedSession/openId/label/expireTime"
+        },
+        {
+          "id": "oppo_debug",
+          "name": "调试模式",
+          "val": false,
+          "type": "boolean",
+          "desc": "逐条打印请求/响应明细，排查问题用；日志可能含 sessionId、Cookie 等敏感信息，看完记得关掉"
+        }
+      ]
     }
   ]
 }
