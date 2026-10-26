@@ -565,9 +565,14 @@ async function openTaskArticle(ctx, task, article) {
 async function doCommentTask(ctx, task) {
     ctx.$env.log(`开始任务: ${task.task_name}`);
 
-    // 任务文案形如「发表3条评论，每条评论不少于10个字」，只发一条时领奖会被拒：您还未完成
-    const need = Number((String(task.task_description || task.task_name).match(/(\d+)\s*条/) || [])[1]) || 1;
+    // 任务对象自带进度: task_even_num 为要求条数, task_finished_num 为已完成条数
+    const total = Number(task.task_even_num) || 0;
+    const done = Number(task.task_finished_num) || 0;
+    // 老版本任务没有这两个字段时退回解析文案「发表3条评论，每条评论不少于10个字」
+    const need = total > done ? total - done : Number((String(task.task_description || task.task_name).match(/(\d+)\s*条/) || [])[1]) || 1;
     const pool = getCommentPool();
+
+    if (total) ctx.$env.log(`评论任务进度 ${done}/${total}，本次需发 ${need} 条`);
 
     // 多取几篇，尽量让每条评论落在不同文章上
     const articles = await getArticleList(ctx, Math.min(20, need * 2 + 2));
@@ -622,6 +627,29 @@ async function doCommentTask(ctx, task) {
       return {
         isSuccess: false
       };
+    }
+
+    // 进度由服务端统计，刚发完立刻领奖会回「您还未完成」，先轮询几轮确认进度再领
+    let finished = total ? done : 0;
+
+    if (total) {
+      for (let round = 0; round < 3 && finished < total; round++) {
+        await wait(20, 35);
+
+        const {tasks: latest} = await getTaskList(ctx);
+        const current = latest.find(t => t.task_id === task.task_id);
+        finished = Number(current?.task_finished_num) || 0;
+
+        ctx.$env.log(`评论任务进度 ${finished}/${total}`);
+      }
+
+      if (finished < total) {
+        ctx.$env.log('进度未达标，评论不计入任务，本次不领奖');
+        await removeComments(ctx, commentIds);
+        return {
+          isSuccess: false
+        };
+      }
     }
 
     // 评论留着让服务端计入任务进度，领完奖再统一清掉
