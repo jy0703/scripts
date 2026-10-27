@@ -993,6 +993,7 @@
         "SMZDM_COMMENT",
         "SMZDM_COMMENT_TTL",
         "smzdm_comment_used",
+        "smzdm_commented_articles",
         "SMZDM_CROWD_SILVER_5",
         "SMZDM_CROWD_KEYWORD",
         "smzdm_debug"
@@ -1046,7 +1047,17 @@
           "autoGrow": true,
           "rows": 1,
           "placeholder": "72",
-          "desc": "可选，默认 72 小时；发过或被服务端判重的文案在这段时间内不再使用"
+          "desc": "可选，默认 72 小时；发过的文案和被服务端判重的文案在这段时间内不再使用，评过的好价文章同样按这个时长跳过"
+        },
+        {
+          "id": "smzdm_commented_articles",
+          "name": "已评论文章记录",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 3,
+          "placeholder": "",
+          "desc": "脚本自动维护，形如 {\"7083467433::184356852\":1764000000000}；冷却期内的好价文章不再重复评论，清空可立即解锁"
         },
         {
           "id": "smzdm_comment_used",
