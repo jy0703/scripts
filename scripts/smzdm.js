@@ -585,6 +585,7 @@ async function doCommentTask(ctx, task) {
 
     const commentIds = [];
     let tried = 0;
+    let finished = total ? done : 0;
 
     while (commentIds.length < need && tried < pool.length) {
       const content = pool[tried++];
@@ -615,41 +616,38 @@ async function doCommentTask(ctx, task) {
 
       commentIds.push(data.data.comment_ID);
 
+      // 每条发完立刻查进度: 平台不把这条计入任务时，这里就能看出来
+      if (total) {
+        await wait(10, 20);
+        finished = await getTaskProgress(ctx, task);
+        ctx.$env.log(`第 ${commentIds.length} 条评论后进度 ${finished}/${total}`);
+
+        if (finished >= total) break;
+      }
+
       if (commentIds.length < need) {
         // 连续提交会触发「您提交评论的速度太快了」
         await wait(20, 40);
       }
     }
 
-    if (commentIds.length < need) {
-      ctx.$env.log(`评论只发成功 ${commentIds.length}/${need} 条，文案池 ${pool.length} 条已试完，记得补新文案`);
+    // 服务端统计可能滞后，进度没满再等两轮
+    if (total) {
+      for (let round = 0; round < 2 && finished < total; round++) {
+        await wait(20, 35);
+        finished = await getTaskProgress(ctx, task);
+        ctx.$env.log(`评论任务进度 ${finished}/${total}`);
+      }
+    }
+
+    const complete = total ? finished >= total : commentIds.length >= need;
+
+    if (!complete) {
+      ctx.$env.log(`评论 ${commentIds.length}/${need} 条${total ? `，服务端进度 ${finished}/${total}` : ''}，本次不领奖${commentIds.length < need ? '（文案池已试完，记得补新文案）' : ''}`);
       await removeComments(ctx, commentIds);
       return {
         isSuccess: false
       };
-    }
-
-    // 进度由服务端统计，刚发完立刻领奖会回「您还未完成」，先轮询几轮确认进度再领
-    let finished = total ? done : 0;
-
-    if (total) {
-      for (let round = 0; round < 3 && finished < total; round++) {
-        await wait(20, 35);
-
-        const {tasks: latest} = await getTaskList(ctx);
-        const current = latest.find(t => t.task_id === task.task_id);
-        finished = Number(current?.task_finished_num) || 0;
-
-        ctx.$env.log(`评论任务进度 ${finished}/${total}`);
-      }
-
-      if (finished < total) {
-        ctx.$env.log('进度未达标，评论不计入任务，本次不领奖');
-        await removeComments(ctx, commentIds);
-        return {
-          isSuccess: false
-        };
-      }
     }
 
     // 评论留着让服务端计入任务进度，领完奖再统一清掉
@@ -659,6 +657,13 @@ async function doCommentTask(ctx, task) {
     finally {
       await removeComments(ctx, commentIds);
     }
+}
+
+// 任务进度: task_finished_num 为服务端已认定的完成条数
+async function getTaskProgress(ctx, task) {
+    const {tasks} = await getTaskList(ctx);
+    const current = tasks.find(t => t.task_id === task.task_id);
+    return Number(current?.task_finished_num) || 0;
 }
 
 async function removeComments(ctx, ids) {
