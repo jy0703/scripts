@@ -536,6 +536,54 @@ async function runActionSequence(ctx, steps = [], waitRange = [3, 10]) {
     }
 }
 
+// 好价列表: 首页 feed 里的好价条目 (数字 article_id + channel_id=1)。
+// 评论任务只认好价: 任务图标 pinlunhaojia, App 评完好价进度立刻 +1, 评长图文(channel 11/66)不进进度
+async function getHaojiaArticleList(ctx, num = 1) {
+    const { isSuccess, data, response } = await requestApi('https://homepage-api.smzdm.com/v3/home', {
+      headers: getHeaders(ctx),
+      data: {
+        page: 1,
+        limit: 20,
+        tab_id: 0,
+        past_num: 0,
+        filter_time_flow: 0,
+        time_sort: '',
+        with_filter: 1,
+        is_cache: 0,
+        reflow_page: 1,
+        reflow_position: 1
+      }
+    });
+
+    if (!isSuccess) {
+      ctx.$env.log(`获取好价列表失败: ${response}`);
+      return [];
+    }
+
+    const items = [];
+
+    const walk = (o) => {
+      if (Array.isArray(o)) return o.forEach(walk);
+      if (!o || typeof o !== 'object') return;
+
+      const id = String(o.article_id || '');
+
+      if (/^\d+$/.test(id) && String(o.article_channel_id || '') === '1' && !items.some(x => x.article_id === id)) {
+        items.push({ article_id: id, article_channel_id: '1', article_title: o.article_title || '' });
+      }
+
+      Object.values(o).forEach(walk);
+    };
+
+    walk(data);
+
+    if (!items.length) {
+      ctx.$env.log(`好价列表为空: ${(response || '').slice(0, 150)}`);
+    }
+
+    return items.slice(0, num);
+}
+
 async function getTaskArticles(ctx, task, num, repeatFixedArticle = false) {
     if (task.article_id == '0') {
       const articles = await getArticleList(ctx, num);
@@ -574,8 +622,8 @@ async function doCommentTask(ctx, task) {
 
     if (total) ctx.$env.log(`评论任务进度 ${done}/${total}，本次需发 ${need} 条`);
 
-    // 多取几篇，尽量让每条评论落在不同文章上
-    const articles = await getArticleList(ctx, Math.min(20, need * 2 + 2));
+    // 只评好价: 长图文的评论不计入该任务进度
+    const articles = await getHaojiaArticleList(ctx, Math.min(20, need * 2 + 2));
 
     if (articles.length < 1) {
       return {
@@ -592,6 +640,9 @@ async function doCommentTask(ctx, task) {
       const article = articles[commentIds.length % articles.length];
 
       await wait(3, 10);
+
+      // 照 App 流程先打开好价详情再评论
+      await getHaojiaDetail(ctx, article.article_id);
 
       const {isSuccess, data, response} = await submitComment(ctx, {
         articleId: article.article_id,
