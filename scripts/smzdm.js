@@ -6,8 +6,9 @@
  *   2. SMZDM_COOKIE：Node/青龙可直接填 Cookie，多账号用 & 或换行分隔
  *   3. SMZDM_SK：可选，签到请求里的 sk，多账号与 Cookie 顺序一致；不填时按 Cookie 的 smzdm_id + device_id 自动计算
  *   4. SMZDM_COMMENT：可选，评论任务文案，每条需大于 10 个汉字，多条用 | 或换行分隔（任务要几条取几条，用过的文案服务端会判重复提交）
- *   5. SMZDM_CROWD_SILVER_5：可选，值 yes 时执行 5 碎银子抽奖任务
- *   6. SMZDM_CROWD_KEYWORD：可选，非免费抽奖时优先匹配的关键词
+ *   5. SMZDM_COMMENT_TTL：可选，文案冷却小时数，默认 72；发过或被判重的文案在冷却期内自动跳过，记录存在 smzdm_comment_used
+ *   6. SMZDM_CROWD_SILVER_5：可选，值 yes 时执行 5 碎银子抽奖任务
+ *   7. SMZDM_CROWD_KEYWORD：可选，非免费抽奖时优先匹配的关键词
  * 更新时间：2026-10-09
  *
  * 抓包说明：
@@ -59,16 +60,51 @@ const RE_REV = /rv:([\d.]+)/i;
 const USER_STORAGE_KEY = 'smzdm_data';
 const RUNTIME_ENV = {
     SMZDM_COMMENT: getEnv('SMZDM_COMMENT', 'smzdm_comment') || '',
+    SMZDM_COMMENT_TTL: getEnv('SMZDM_COMMENT_TTL', 'smzdm_comment_ttl') || '',
     SMZDM_CROWD_SILVER_5: getEnv('SMZDM_CROWD_SILVER_5', 'smzdm_crowd_silver_5') || '',
     SMZDM_CROWD_KEYWORD: getEnv('SMZDM_CROWD_KEYWORD', 'smzdm_crowd_keyword') || ''
 };
 
+// 用过的文案服务端会一直判「重复提交」（评论删了也记着），本地记一笔直接跳过，省掉注定失败的提交
+const COMMENT_USED_KEY = 'smzdm_comment_used';
+// 冷却时长默认 72 小时，可用 SMZDM_COMMENT_TTL 按小时覆盖（填 0 表示不冷却，每次都按服务端判重结果现记）
+const COMMENT_TTL_HOURS = String(RUNTIME_ENV.SMZDM_COMMENT_TTL || '').trim() === '' ? 72 : Number(RUNTIME_ENV.SMZDM_COMMENT_TTL) || 0;
+
+function commentKeyPrefix(ctx) {
+    return `${(ctx && ctx.user && ctx.user.uid) || 'default'}::`;
+}
+
+function readUsedComments(ctx) {
+    const all = $.toObj($.getdata(COMMENT_USED_KEY) || '{}', {}) || {};
+    const deadline = Date.now() - COMMENT_TTL_HOURS * 3600 * 1000;
+    const prefix = commentKeyPrefix(ctx);
+
+    return Object.keys(all).reduce((out, key) => {
+      if (key.indexOf(prefix) === 0 && Number(all[key]) > deadline) out[key.slice(prefix.length)] = all[key];
+      return out;
+    }, {});
+}
+
+function markCommentUsed(ctx, text) {
+    const all = $.toObj($.getdata(COMMENT_USED_KEY) || '{}', {}) || {};
+    const deadline = Date.now() - COMMENT_TTL_HOURS * 3600 * 1000;
+
+    Object.keys(all).forEach(key => {
+      if (!(Number(all[key]) > deadline)) delete all[key];
+    });
+
+    all[`${commentKeyPrefix(ctx)}${text}`] = Date.now();
+    $.setdata($.toStr(all), COMMENT_USED_KEY);
+}
+
 // 评论文案池：服务端按文案判重（换文章也拦），所以任务要几条就得有几句不同的话
-function getCommentPool() {
+function getCommentPool(ctx) {
+    const used = readUsedComments(ctx);
+
     return String(RUNTIME_ENV.SMZDM_COMMENT || '')
         .split(/[|\r\n]+/)
         .map(s => s.trim())
-        .filter(s => s.length > 10);
+        .filter(s => s.length > 10 && !used[s]);
 }
 
 function randomStr(len = 18) {
@@ -461,9 +497,9 @@ async function doTasks(ctx, tasks) {
             handler: doRatingTask
         },
         'interactive.comment': {
-            guard: () => getCommentPool().length > 0,
+            guard: (currentTask, currentCtx) => getCommentPool(currentCtx).length > 0,
             onGuardFail(currentCtx) {
-                currentCtx.$env.log('🟡请设置 SMZDM_COMMENT 环境变量（每条大于 10 个汉字，多条用 | 或换行分隔）后才能做评论任务！');
+                currentCtx.$env.log(`🟡没有可用的评论文案（未设置 SMZDM_COMMENT，或都在 ${COMMENT_TTL_HOURS} 小时冷却期内用过），跳过评论任务！`);
             },
             handler: doCommentTask
         }
@@ -618,7 +654,7 @@ async function doCommentTask(ctx, task) {
     const done = Number(task.task_finished_num) || 0;
     // 老版本任务没有这两个字段时退回解析文案「发表3条评论，每条评论不少于10个字」
     const need = total > done ? total - done : Number((String(task.task_description || task.task_name).match(/(\d+)\s*条/) || [])[1]) || 1;
-    const pool = getCommentPool();
+    const pool = getCommentPool(ctx);
 
     if (total) ctx.$env.log(`评论任务进度 ${done}/${total}，本次需发 ${need} 条`);
 
@@ -651,9 +687,10 @@ async function doCommentTask(ctx, task) {
       });
 
       if (!isSuccess) {
-        // 判重是按文案且窗口很长（评论删了也照样拦），换池子里的下一条继续
+        // 走到这里说明本地冷却没覆盖住（刚换设备或 SMZDM_COMMENT_TTL 填短了），再记一次
         if (/重复提交/.test(response)) {
           ctx.$env.log(`文案被服务端判重，换下一条: ${content}`);
+          markCommentUsed(ctx, content);
           await wait(20, 40);
           continue;
         }
@@ -666,6 +703,7 @@ async function doCommentTask(ctx, task) {
       }
 
       commentIds.push(data.data.comment_ID);
+      markCommentUsed(ctx, content);
 
       // 每条发完立刻查进度: 平台不把这条计入任务时，这里就能看出来
       if (total) {
@@ -694,7 +732,7 @@ async function doCommentTask(ctx, task) {
     const complete = total ? finished >= total : commentIds.length >= need;
 
     if (!complete) {
-      ctx.$env.log(`评论 ${commentIds.length}/${need} 条${total ? `，服务端进度 ${finished}/${total}` : ''}，本次不领奖${commentIds.length < need ? '（文案池已试完，记得补新文案）' : ''}`);
+      ctx.$env.log(`评论 ${commentIds.length}/${need} 条${total ? `，服务端进度 ${finished}/${total}` : ''}，本次不领奖${commentIds.length < need ? `（可用文案 ${pool.length} 条已试完，记得补新文案）` : ''}`);
       await removeComments(ctx, commentIds);
       return {
         isSuccess: false

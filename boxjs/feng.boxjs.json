@@ -991,6 +991,8 @@
         "SMZDM_COOKIE",
         "SMZDM_SK",
         "SMZDM_COMMENT",
+        "SMZDM_COMMENT_TTL",
+        "smzdm_comment_used",
         "SMZDM_CROWD_SILVER_5",
         "SMZDM_CROWD_KEYWORD",
         "smzdm_debug"
@@ -1034,7 +1036,27 @@
           "autoGrow": true,
           "rows": 4,
           "placeholder": "",
-          "desc": "每条需大于 10 个汉字，多条用 | 或换行分隔；任务要几条就取几条，服务端按文案判重（评论删了也记住），用过的要换掉；留空则跳过评论任务"
+          "desc": "每条需大于 10 个汉字，多条用 | 或换行分隔；任务要几条就取几条，用过的文案脚本会自动在冷却期内跳过，只管往末尾追加新的；留空则跳过评论任务"
+        },
+        {
+          "id": "SMZDM_COMMENT_TTL",
+          "name": "文案冷却(小时)",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "72",
+          "desc": "可选，默认 72 小时；发过或被服务端判重的文案在这段时间内不再使用"
+        },
+        {
+          "id": "smzdm_comment_used",
+          "name": "已用评论文案记录",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 3,
+          "placeholder": "",
+          "desc": "脚本自动维护，形如 {\"7083467433::文案\":1764000000000}；清空可立刻解锁全部文案，一般不用动"
         },
         {
           "id": "SMZDM_CROWD_SILVER_5",
