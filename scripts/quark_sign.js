@@ -94,7 +94,7 @@ async function driveSign(acc, ua) {
     const sign = buildSign(vcode, acc.st, acc.uid, acc.nick);
 
     const info = await growthInfo({ kps, sign, vcode }, '查询签到状态', ua);
-    acc.vip = info['88VIP'] ? '88VIP' : '普通用户';
+    acc.vip = memberLabel(info);
     const capSign = info.cap_sign;
     if (!capSign || typeof capSign !== 'object') throw new Error('成长信息中缺少 cap_sign 字段');
 
@@ -155,39 +155,54 @@ async function scanSign(acc, ua) {
 
 function push(line) { $.log(line); $.messages.push(line); }
 
+// 会员态只看 member_type：SVIP 号的 data['88VIP'] 同样是 false，拿它判会员会把 SVIP 标成普通用户（实测）
+// 表里没有的类型原样显示，88VIP 作为附加标记（它是另一条权益，不代表网盘等级）
+function memberLabel(info) {
+    const names = { NORMAL: '普通', VIP: 'VIP', SUPER_VIP: 'SVIP', MINI_VIP: '迷你VIP', Z_VIP: 'Z会员' };
+    let label = names[info.member_type] || info.member_type || (info['88VIP'] ? '88VIP' : '');
+    if (info['88VIP'] && label.indexOf('88VIP') < 0) label += '·88VIP';
+    return label;
+}
+
 // 通知里只能用手机号兜底时打掩码（138****0000），手写的中文备注原样显示
 function maskMobile(value) {
     const s = String(value || '');
     return /^1\d{10}$/.test(s) ? `${s.slice(0, 3)}****${s.slice(-4)}` : s;
 }
 
-// 向本地取凭证服务换票（POST /api/quark/refresh）：账号网关的加密都在服务那边，脚本只发这一个请求
-// 票真作废（50051 系）就直接失败并要求重新登录；服务不通/其它错误就用本地票继续跑
+// 向本地取凭证网关换票（POST /api/quark/refresh）：账号网关的加密都在服务那边，脚本只发这一个请求
+// 服务偶发抖动和 code 服务一样重试：最多 3 次（1s/2s 退避）；票真作废（50051 系）直接失败要求重新登录，403 这类重试无意义就只降级一次
 async function refreshTicket(acc, api, apiToken) {
     if (!apiToken) { $.log('⚠️ 服务端对所有 /api/* 都要求 X-Token，请在「取凭证网关(tools)」里填 @tools.token；本次改用本地票'); return; }
     const url = api.replace(/\/+$/, '') + '/api/quark/refresh';
     const headers = { 'User-Agent': acc.ua || DEFAULT_UA };
     headers['X-Token'] = apiToken;
-    let payload;
-    try {
-        const resp = await Request({
-            url, method: 'post', headers, body: { uid: acc.uid }, _respType: 'all', _timeout: 20000,
-        });
-        const status = Number(resp && (resp.statusCode || resp.status)) || 0;
-        if (status === 403) throw new Error(`服务拒绝访问（${$.toObj(resp.body, {}).error || '403'}），检查 @tools.token 是否填了完整值`);
-        if (status !== 200) throw new Error(`HTTP ${status || '网络失败'}`);
-        payload = $.toObj(resp.body, null);
-        if (!payload) throw new Error('返回不是 JSON');
-        if (payload.error) throw new Error(payload.error);
-        if (!payload.service_ticket) throw new Error('服务没返回 service_ticket');
-    } catch (e) {
-        const msg = String(e.message || e);
-        if (/50051|50052|50055|票无效|Invalid service ticket|作废/.test(msg)) {
-            throw new Error(`票已失效（服务回：${msg}），请到取凭证网页重新登录再复制`);
+    let payload = null, msg = '';
+    for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+            const resp = await Request({
+                url, method: 'post', headers, body: { uid: acc.uid }, _respType: 'all', _timeout: 20000,
+            });
+            const status = Number(resp && (resp.statusCode || resp.status)) || 0;
+            if (status === 403) throw new Error(`服务拒绝访问（${$.toObj(resp.body, {}).error || '403'}），检查 @tools.token 是否填了完整值`);
+            if (status !== 200) throw new Error(`HTTP ${status || '网络失败'}`);
+            payload = $.toObj(resp.body, null);
+            if (!payload) throw new Error('返回不是 JSON');
+            if (payload.error) throw new Error(payload.error);
+            if (!payload.service_ticket) throw new Error('服务没返回 service_ticket');
+            break;
+        } catch (e) {
+            msg = String(e.message || e);
+            if (/50051|50052|50055|票无效|Invalid service ticket|作废/.test(msg)) throw new Error(`票已失效（服务回：${msg}），请到取凭证网页重新登录再复制`);
+            payload = null;
+            if (/服务拒绝访问/.test(msg)) break;   // token 不对，重试也是白搭
+            if (attempt < 3) {
+                $.log(`⚠️ [换票] 网关请求失败，${attempt}s 后重试（${attempt}/3）：${msg}`);
+                await $.wait(1000 * attempt);
+            }
         }
-        $.log(`⚠️ 换票服务不可用（${msg}），改用本地票继续`);
-        return;
     }
+    if (!payload) { $.log(`⚠️ 换票服务不可用（${msg}），改用本地票继续`); return; }
     const before = `${acc.st}|${acc.nick}|${acc.ua}`;
     acc.st = payload.service_ticket;
     acc.uid = String(payload.uid || acc.uid);

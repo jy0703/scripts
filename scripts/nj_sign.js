@@ -323,22 +323,37 @@ function rmsHeaders(account) {
 
 // ---------- mtgsig 签名(调自建签名服务, 拿不到就降级为不签名) ----------
 
+// 重试日志只留一行短原因（网关整包响应可能很长）
+function briefMsg(v) { return String(v).replace(/\s+/g, ' ').slice(0, 120); }
+
 // 给 campaign/* 与 rms 会员资产接口签名(与小程序行为一致: member/login 和 queryMemberId 本来就不带 mtgsig)
+// 签名服务走自建网关，和 code 服务一样重试：最多 3 次(1s/2s 退避)，三次都拿不到才本次运行不再签名
 async function mtgsigOf(url, headers, data) {
     if ($.mtgsigDead || !$.toolsApi || !$.toolsToken) return '';
-    const resp = await Request({
-        url: `${$.toolsApi}/api/mtgsig/sign`,
-        headers: { 'X-Token': $.toolsToken },
-        body: { appid: APPID, url, method: 'POST', header: headers, data },
-        _timeout: 10000,
-    });
-    const sig = resp?.mtgsig ? resp.mtgsig : (resp?.data?.mtgsig || '');
-    if (!sig) {
-        $.mtgsigDead = true;
-        $.log(`⚠️ [mtgsig] 签名服务不可用, 本次运行不签名: ${resp?.error || $.toStr(resp) || '无响应'}`);
-        return '';
+    let sig = '', why = '';
+    for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+            const resp = await Request({
+                url: `${$.toolsApi}/api/mtgsig/sign`,
+                headers: { 'X-Token': $.toolsToken },
+                body: { appid: APPID, url, method: 'POST', header: headers, data },
+                _timeout: 10000,
+            });
+            sig = resp?.mtgsig ? resp.mtgsig : (resp?.data?.mtgsig || '');
+            why = resp?.error || $.toStr(resp) || '无响应';
+        } catch (e) {
+            sig = '';
+            why = (e && e.message) || String(e);
+        }
+        if (sig) return sig;
+        if (attempt < 3) {
+            $.log(`⚠️ [mtgsig] 签名服务未出签名，${attempt}s 后重试（${attempt}/3）：${briefMsg(why)}`);
+            await $.wait(1000 * attempt);
+        }
     }
-    return sig;
+    $.mtgsigDead = true;
+    $.log(`⚠️ [mtgsig] 签名服务不可用, 本次运行不签名: ${briefMsg(why)}`);
+    return '';
 }
 
 // ---------- 工具函数 ----------

@@ -393,12 +393,31 @@ async function refreshAppTokenFromApi(user) {
     // 抓太久更可能是被顶号，日志里带上抓取年龄
     $.log(`${tag} 向网关要新票据${capAt ? `（autoLogin 抓于 ${((Date.now() - capAt) / 86400000).toFixed(1)} 天前）` : ''}…`);
     try {
-        const r = await Request({
-            url: `${TOOLS_API}/api/cmcc/refresh`, method: 'post',
-            headers: { 'content-type': 'application/json', 'x-token': TOOLS_API_TOKEN },
-            body: autologin, _timeout: 30000,
-        });
-        if (!r || r.error || !r.token) return fail(`网关未回票据：${shortMsg((r && r.error) || '响应为空')}`);
+        // 网关服务偶发抖动：和 code 服务一样最多试 3 次（1s/2s 退避）；214100/尾号不符这类终态直接收尾不浪费重试
+        let r = null, why = '', netErr = '';
+        for (let attempt = 1; attempt <= 3; attempt++) {
+            netErr = '';
+            try {
+                r = await Request({
+                    url: `${TOOLS_API}/api/cmcc/refresh`, method: 'post',
+                    headers: { 'content-type': 'application/json', 'x-token': TOOLS_API_TOKEN },
+                    body: autologin, _timeout: 30000,
+                });
+            } catch (e) {
+                r = null;
+                netErr = shortMsg(e.message || e);
+            }
+            if (r && r.token) break;
+            why = netErr || shortMsg((r && r.error) || '响应为空');
+            if (!netErr) r = null;
+            if (why.includes('214100')) break;
+            if (attempt < 3) {
+                $.log(`${tag} ⚠️ 网关请求失败，${attempt}s 后重试（${attempt}/3）：${why}`);
+                await $.wait(1000 * attempt);
+            }
+        }
+        if (!r && netErr) return fail(`请求网关异常：${why}`);
+        if (!r) return fail(why.includes('214100') ? `${why} —— App 侧风控要求验证：开着抓取，在 App 里过一遍验证/重新登录再跑` : `网关未回票据：${why}`);
         if (r.userCheckId && user.userCheckId && r.userCheckId !== user.userCheckId) {
             return fail(`换回的票据是尾号 ${phoneTail({ userCheckId: r.userCheckId })}，与当前账号尾号 ${phoneTail(user)} 不符`);
         }
@@ -406,7 +425,7 @@ async function refreshAppTokenFromApi(user) {
         if (r.provinceCode && !user.provinceCode) user.provinceCode = r.provinceCode;
         if (r.cityCode && !user.cityCode) user.cityCode = r.cityCode;
         saveUsers();
-        $.log(`${tag} 已换到新票据（${((Date.now() - t0) / 1000).toFixed(1)}s）`);
+        $.log(`${tag} 已换到新票据（${((Date.now() - t0) / 1000).toFixed(1)}s，cellNum=${r.cellNumMode || 'script'}）`);
         return true;
     } catch (e) {
         return fail(`请求网关异常：${shortMsg(e.message || e)}`);
