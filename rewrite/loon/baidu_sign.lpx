@@ -1,0 +1,18 @@
+#!name = 百度网盘签到
+#!desc = 自动抓取百度网盘 Cookie，每日签到领积分并领取已完成任务奖励，支持多账号（打开百度网盘 APP 任意页面触发 pan.baidu.com 请求即抓取；安装后直接签到/领奖）
+#!author = Fengzzzz
+#!homepage = https://github.com/jy0703/scripts
+#!icon = https://raw.githubusercontent.com/jy0703/scripts/main/icons/baidu.png
+#!tag = 签到,自动化
+#!type = normal
+
+[Argument]
+capture = switch,false,tag=捕获 Cookie,desc=打开后操作百度网盘 APP 触发 pan.baidu.com 请求即抓取，抓取完成后建议关闭
+cronExpression = input,"30 8 * * *",tag=定时参数,desc=这里需要输入符合 CRON 表达式的参数
+
+[Script]
+http-request ^https?:\/\/pan\.baidu\.com\/(coins|api|rest)\/ script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/baidu_sign.js,requires-body=false,timeout=600,tag=百度网盘获取Cookie,enable={capture}
+cron {cronExpression} script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/baidu_sign.js,timeout=600,tag=百度网盘签到,enable=true
+
+[Mitm]
+hostname = pan.baidu.com

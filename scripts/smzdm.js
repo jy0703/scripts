@@ -1,14 +1,17 @@
 /**
  * 脚本名称：什么值得买 - 签到 + 每日任务
  * 脚本说明：参考 lhtj 的单文件框架，合并 smzdm_checkin 与 smzdm_task。
+ * 平台画像：对齐 iOS 11.2.3 (f=iphone, v=11.2.3, rv=174.7)，签名盐取自 iOS 包内常量；
+ *           安卓盐与 iOS 盐服务端按 f 区分，混用会回 check Sign Fail，不要互换。
  * 环境变量：smzdm_debug
  *   1. smzdm_data：抓包保存的账号数组（推荐）
  *   2. SMZDM_COOKIE：Node/青龙可直接填 Cookie，多账号用 & 或换行分隔
  *   3. SMZDM_SK：可选，签到请求里的 sk，多账号与 Cookie 顺序一致；不填时按 Cookie 的 smzdm_id + device_id 自动计算
  *   4. SMZDM_COMMENT：可选，评论任务文案，每条需大于 10 个汉字，多条用 | 或换行分隔（任务要几条取几条，用过的文案服务端会判重复提交）
  *   5. SMZDM_COMMENT_TTL：可选，冷却小时数，默认 72；发过的文案和评过的文章在冷却期内都会自动跳过，记录存在 smzdm_comment_used / smzdm_commented_articles
- *   6. SMZDM_CROWD_SILVER_5：可选，值 yes 时执行 5 碎银子抽奖任务
- *   7. SMZDM_CROWD_KEYWORD：可选，非免费抽奖时优先匹配的关键词
+ *   6. SMZDM_COMMENT_MAX：可选，单次最多发几条评论，默认 3；勋章类任务要求几十条时按天分批补
+ *   7. SMZDM_CROWD_SILVER_5：可选，值 yes 时执行 5 碎银子抽奖任务
+ *   8. SMZDM_CROWD_KEYWORD：可选，非免费抽奖时优先匹配的关键词
  * 更新时间：2026-10-09
  *
  * 抓包说明：
@@ -49,18 +52,20 @@ const $ = new Env('什么值得买');
 $.is_debug = getEnv('smzdm_debug', 'is_debug') || 'false';
 $.Messages = [];
 
-const APP_VERSION = '10.4.26';
-const APP_VERSION_REV = '866';
-const DEFAULT_USER_AGENT_APP = `smzdm_android_V${APP_VERSION} rv:${APP_VERSION_REV} (Redmi Note 3;Android10.0;zh)smzdmapp`;
-const DEFAULT_USER_AGENT_WEB = `Mozilla/5.0 (Linux; Android 10.0; Redmi Build/Redmi Note 3; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/95.0.4638.74 Mobile Safari/537.36 smzdm_android_V${APP_VERSION} rv:${APP_VERSION_REV} (Redmi;Android10.0;zh) jsbv_1.0.0 webv_2.0 smzdmapp`;
-const SIGN_KEY = 'apr1$AwP!wRRT$gJ/q.X24poeBInlUJC';
+const APP_VERSION = '11.2.3';
+const APP_VERSION_REV = '174.7';
+const DEFAULT_USER_AGENT_APP = `smzdm ${APP_VERSION} rv:${APP_VERSION_REV} (iPhone 15 Pro Max; iOS 26.0; zh_CN)/iphone_smzdmapp/${APP_VERSION}`;
+const DEFAULT_USER_AGENT_WEB = `Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 smzdm ${APP_VERSION} rv:${APP_VERSION_REV} (iPhone 15 Pro Max; iOS 26.0; zh_CN)/iphone_smzdmapp/${APP_VERSION} jsbv_1.0.0 webv_2.0 smzdmapp`;
+// iOS 11.2.3 的签名盐 (二进制里 %@&key=%@ 旁边的常量), 与安卓盐互不通用: 服务端按 f 选盐
+const SIGN_KEY = 'zok5JtAq3$QixaA%mncn*jGWlEpSL3E1';
 const SK_DES_KEY = 'geZm53XAspb02exN';
-const RE_VERSION = /(smzdm_android_V|smzdm\s|iphone_smzdmapp\/)([\d.]+)/i;
+const RE_VERSION = /(smzdm_android_V|smzdm\s|iphone_smzdmapp\/)([\d.]+)/gi;
 const RE_REV = /rv:([\d.]+)/i;
 const USER_STORAGE_KEY = 'smzdm_data';
 const RUNTIME_ENV = {
     SMZDM_COMMENT: getEnv('SMZDM_COMMENT', 'smzdm_comment') || '',
     SMZDM_COMMENT_TTL: getEnv('SMZDM_COMMENT_TTL', 'smzdm_comment_ttl') || '',
+    SMZDM_COMMENT_MAX: getEnv('SMZDM_COMMENT_MAX', 'smzdm_comment_max') || '',
     SMZDM_CROWD_SILVER_5: getEnv('SMZDM_CROWD_SILVER_5', 'smzdm_crowd_silver_5') || '',
     SMZDM_CROWD_KEYWORD: getEnv('SMZDM_CROWD_KEYWORD', 'smzdm_crowd_keyword') || ''
 };
@@ -71,6 +76,8 @@ const COMMENT_USED_KEY = 'smzdm_comment_used';
 const COMMENTED_ARTICLE_KEY = 'smzdm_commented_articles';
 // 冷却时长默认 72 小时，可用 SMZDM_COMMENT_TTL 按小时覆盖（填 0 表示不冷却，每次都按服务端判重结果现记）
 const COMMENT_TTL_HOURS = String(RUNTIME_ENV.SMZDM_COMMENT_TTL || '').trim() === '' ? 72 : Number(RUNTIME_ENV.SMZDM_COMMENT_TTL) || 0;
+// 单次最多发几条评论: 任务可能要求几十条(勋章活动 20 条), 一次跑完会触发提交频率限制, 默认每次补 3 条
+const COMMENT_MAX_PER_RUN = Number(RUNTIME_ENV.SMZDM_COMMENT_MAX) || 3;
 
 function commentKeyPrefix(ctx) {
     return `${(ctx && ctx.user && ctx.user.uid) || 'default'}::`;
@@ -210,8 +217,9 @@ function signFormData(data = {}) {
     const formData = {
         weixin: 1,
         basic_v: 0,
-        f: 'android',
+        f: 'iphone',
         v: APP_VERSION,
+        zhuanzai_ab: 'a',
         time: `${Math.round(Date.now() / 1000)}000`,
         ...data
     };
@@ -315,23 +323,14 @@ function normalizeBotContext(inputCtx = {}) {
         token: '',
         userAgentApp: String(inputCtx.userAgentApp || '').trim(),
         userAgentWeb: String(inputCtx.userAgentWeb || '').trim(),
-        sk: String(inputCtx.sk || '').trim(),
-        androidCookie: ''
+        sk: String(inputCtx.sk || '').trim()
     };
     const match = ctx.cookie.match(/(?:^|;\s*)sess=([^;]*)/);
     ctx.token = match ? match[1] : '';
 
-    ctx.androidCookie = ctx.cookie.replace(/iphone/ig, 'android').replace(/iPhone/g, 'Android');
-    ctx.androidCookie = updateCookie(ctx.androidCookie, 'smzdm_version', APP_VERSION);
-    ctx.androidCookie = updateCookie(ctx.androidCookie, 'device_smzdm_version', APP_VERSION);
-    ctx.androidCookie = updateCookie(ctx.androidCookie, 'v', APP_VERSION);
-    ctx.androidCookie = updateCookie(ctx.androidCookie, 'device_smzdm_version_code', APP_VERSION_REV);
-    ctx.androidCookie = updateCookie(ctx.androidCookie, 'device_system_version', '10.0');
-    ctx.androidCookie = updateCookie(ctx.androidCookie, 'apk_partner_name', 'smzdm_download');
-    ctx.androidCookie = updateCookie(ctx.androidCookie, 'partner_name', 'smzdm_download');
-    ctx.androidCookie = updateCookie(ctx.androidCookie, 'device_type', 'Android');
-    ctx.androidCookie = updateCookie(ctx.androidCookie, 'device_smzdm', 'android');
-    ctx.androidCookie = updateCookie(ctx.androidCookie, 'device_name', 'Android');
+    // iOS 直接用抓包里的 cookie, 不再把 iphone 相关字段改写成 android
+    ctx.iosCookie = ctx.cookie;
+
     return ctx;
 }
 
@@ -344,19 +343,32 @@ function getHeaders(ctx) {
         'Accept-Encoding': 'gzip, deflate, br',
         request_key: randomStr(18),
         'User-Agent': userAgent,
-        Cookie: ctx.androidCookie
+        Cookie: ctx.cookie
     };
 }
 
-function getHeadersForWeb(ctx) {
-    let userAgent = ctx.userAgentWeb || getEnv('SMZDM_USER_AGENT_WEB') || DEFAULT_USER_AGENT_WEB;
+// iOS 设备画像: 与抓包 cookie 同源, 首页这类接口 App 会带上一整套设备参数
+function getDeviceParams(ctx) {
+    return {
+        device_brand_name: 'Apple',
+        device_type_name: parseCookieValue(ctx.cookie, 'device_type') || 'iPhone16,2',
+        sys_o: 'ios',
+        sys_v: parseCookieValue(ctx.cookie, 'device_system_version') || '26.0',
+        screen_w: 1290,
+        screen_h: 2796,
+        first_startup: 0,
+        update_timestamp: Date.now()
+    };
+}
+
+function getHeadersForWeb(ctx) {    let userAgent = ctx.userAgentWeb || getEnv('SMZDM_USER_AGENT_WEB') || DEFAULT_USER_AGENT_WEB;
     userAgent = userAgent.replace(RE_VERSION, `$1${APP_VERSION}`).replace(RE_REV, `rv:${APP_VERSION_REV}`);
     return {
         Accept: '*/*',
         'Accept-Language': 'zh-CN,zh-Hans;q=0.9',
         'Accept-Encoding': 'gzip, deflate, br',
         'User-Agent': userAgent,
-        Cookie: ctx.androidCookie
+        Cookie: ctx.cookie
     };
 }
 
@@ -540,7 +552,7 @@ async function doTasks(ctx, tasks) {
 
       const result = await taskHandler.handler(ctx, task);
       if (!taskHandler.shouldNotify || taskHandler.shouldNotify(result, task, ctx)) {
-        notifyMsg += getTaskNotifyMessage(ctx, result.isSuccess, task);
+        notifyMsg += getTaskNotifyMessage(ctx, result, task);
       }
 
       await wait(5, 15);
@@ -549,8 +561,9 @@ async function doTasks(ctx, tasks) {
     return notifyMsg;
 }
 
-function getTaskNotifyMessage(ctx, isSuccess, task) {
-    return `${isSuccess ? '🟢' : '❌'}完成[${task.task_name}]任务${isSuccess ? '成功' : '失败！请查看日志'}\n`;
+function getTaskNotifyMessage(ctx, result, task) {
+    if (result.partial) return `🟡完成[${task.task_name}]${result.note || '分次补'}\n`;
+    return `${result.isSuccess ? '🟢' : '❌'}完成[${task.task_name}]任务${result.isSuccess ? '成功' : '失败！请查看日志'}\n`;
 }
 
 async function claimTaskReward(ctx, task, minSecond = 5, maxSecond = 15) {
@@ -588,9 +601,12 @@ async function getHaojiaArticleList(ctx, num = 1) {
         filter_time_flow: 0,
         time_sort: '',
         with_filter: 1,
-        is_cache: 0,
+        is_cache: 1,
         reflow_page: 1,
-        reflow_position: 1
+        reflow_position: 1,
+        customized_log: '{"love":"2"}',
+        haojia_title_abtest: 'b',
+        ...getDeviceParams(ctx)
       }
     });
 
@@ -608,7 +624,8 @@ async function getHaojiaArticleList(ctx, num = 1) {
       const id = String(o.article_id || '');
 
       if (/^\d+$/.test(id) && String(o.article_channel_id || '') === '1' && !items.some(x => x.article_id === id)) {
-        items.push({ article_id: id, article_channel_id: '1', article_title: o.article_title || '' });
+        // hashcode/h5hash 是详情接口要的, App 从列表项里带过去
+        items.push({ article_id: id, article_channel_id: '1', article_title: o.article_title || '', hashcode: o.hashcode || '', h5hash: o.h5hash || '' });
       }
 
       Object.values(o).forEach(walk);
@@ -665,13 +682,37 @@ async function doCommentTask(ctx, task) {
     const total = Number(task.task_even_num) || 0;
     const done = Number(task.task_finished_num) || 0;
     // 老版本任务没有这两个字段时退回解析文案「发表3条评论，每条评论不少于10个字」
-    const need = total > done ? total - done : Number((String(task.task_description || task.task_name).match(/(\d+)\s*条/) || [])[1]) || 1;
+    // 条数已满但还没领奖(状态可能还没变成可领取): 直接补领, 不能再发评论
+    if (total && done >= total) {
+      ctx.$env.log(`评论任务已达标 ${done}/${total}，直接领奖`);
+      return await claimTaskReward(ctx, task);
+    }
+    const remain = total > done ? total - done : Number((String(task.task_description || task.task_name).match(/(\d+)\s*条/) || [])[1]) || 1;
+    // 有些任务要几十条(如「评论赢限定勋章 20 条」), 单次跑太多既会触发提交频率限制也像刷量, 每次只补上限内的量
+    const need = Math.min(remain, COMMENT_MAX_PER_RUN);
     const pool = getCommentPool(ctx);
 
-    if (total) ctx.$env.log(`评论任务进度 ${done}/${total}，本次需发 ${need} 条`);
+    if (total) ctx.$env.log(`评论任务进度 ${done}/${total}，本次需发 ${need} 条${remain > need ? `（还差 ${remain} 条，分次补）` : ''}`);
 
-    // 只评好价: 长图文的评论不计入该任务进度
-    const articles = await getHaojiaArticleList(ctx, Math.min(20, need * 2 + 2));
+    // 任务指定了文章(如「新骁龙新旗舰」的 link_type=article)时只能评那一篇;
+    // 否则评首页好价 —— 长图文/其他栏目的评论不计入这类任务进度
+    const redirect = task.task_redirect_url || {};
+    const fixedId = redirect.link_type === 'article' ? String(redirect.link_val || '') : '';
+
+    let articles;
+
+    if (fixedId) {
+      // 评论频道以文章详情为准: 社区文章的 channel_id(11) 才是评论频道,
+      // article_channel_id(76)/任务里的 channel_id 是栏目号, 用错会回「无效的参数」
+      const detail = await getArticleDetail(ctx, fixedId);
+      const channelId = String((detail && (detail.channel_id || detail.article_channel_id)) || task.channel_id || '11');
+
+      ctx.$env.log(`任务指定文章: ${fixedId} (channel ${channelId})`);
+      articles = [{ article_id: fixedId, article_channel_id: channelId, article_title: redirect.link_title || '', hashcode: '', h5hash: '' }];
+    }
+    else {
+      articles = await getHaojiaArticleList(ctx, Math.min(20, need * 2 + 2));
+    }
 
     if (articles.length < 1) {
       return {
@@ -689,8 +730,9 @@ async function doCommentTask(ctx, task) {
 
       await wait(3, 10);
 
-      // 照 App 流程先打开好价详情再评论
-      await getHaojiaDetail(ctx, article.article_id);
+      // 照 App 流程先打开详情再评论: 好价带列表里的 hashcode/h5hash, 社区文章走 detail 接口
+      if (fixedId) await getArticleDetail(ctx, article.article_id);
+      else await getHaojiaDetail(ctx, article.article_id, article.hashcode, article.h5hash);
 
       const {isSuccess, data, response} = await submitComment(ctx, {
         articleId: article.article_id,
@@ -748,7 +790,10 @@ async function doCommentTask(ctx, task) {
       ctx.$env.log(`评论 ${commentIds.length}/${need} 条${total ? `，服务端进度 ${finished}/${total}` : ''}，本次不领奖${commentIds.length < need ? `（可用文案 ${pool.length} 条 / 未评过的好价 ${articles.length} 篇已用尽，记得补新文案）` : ''}`);
       await removeComments(ctx, commentIds);
       return {
-        isSuccess: false
+        isSuccess: false,
+        // 本次配额发完但任务是多天累计的: 通知里标 🟡, 不算失败
+        partial: total > 0 && commentIds.length >= need,
+        note: `已发 ${commentIds.length} 条，进度 ${finished}/${total}，分次补`
       };
     }
 
@@ -1241,7 +1286,7 @@ async function follow(ctx, {keywordId, keyword, type, method}) {
           p: '1'
         },
         sourceMode: '我的_我的任务页',
-        sourcePage: 'Android/关注/达人/爆料榜',
+        sourcePage: 'iPhone/关注/达人/爆料榜',
         upperLevel_url: '关注/达人/推荐/'
       });
     }
@@ -1252,7 +1297,7 @@ async function follow(ctx, {keywordId, keyword, type, method}) {
           is_detail: false
         },
         sourceMode: '栏目页',
-        sourcePage: `Android/栏目页/${keyword}/${keywordId}/`,
+        sourcePage: `iPhone/栏目页/${keyword}/${keywordId}/`,
         source_page_type_id: String(keywordId),
         upperLevel_url: '个人中心/赚奖励/',
         source_area: {
@@ -1318,7 +1363,7 @@ async function joinCrowd(ctx, id) {
       data: {
         crowd_id: id,
         sourcePage: `https://zhiyou.m.smzdm.com/user/crowd/p/${id}/`,
-        client_type: 'android',
+        client_type: 'iphone',
         sourceRoot: '个人中心',
         sourceMode: '幸运屋抽奖',
         price_id: 1
@@ -1452,7 +1497,7 @@ async function shareCallback(ctx, articleId, channelId) {
             pid: '无'
           },
           sourceMode: '排行榜_社区_好文精选',
-          sourcePage: `Android/长图文/P/${articleId}/`,
+          sourcePage: `iPhone/长图文/P/${articleId}/`,
           upperLevel_url: '排行榜/社区/好文精选/文章_24H/'
         })
       }
@@ -1631,13 +1676,13 @@ async function getArticleDetail(ctx, id) {
     }
 }
 
-async function getHaojiaDetail(ctx, id) {
+async function getHaojiaDetail(ctx, id, hashcode = '', h5hash = '') {
     const { isSuccess, data, response } = await requestApi(`https://haojia-api.smzdm.com/detail/${id}`, {
       headers: getHeaders(ctx),
       data: {
         imgmode: 0,
-        hashcode: '',
-        h5hash: ''
+        hashcode,
+        h5hash
       }
     });
 
@@ -1662,7 +1707,7 @@ async function favorite(ctx, {id, channelId, method}) {
             is_detail: true
           },
           sourceMode: '我的_我的任务页',
-          sourcePage: `Android/长图文/P/${id}/`,
+          sourcePage: `iPhone/长图文/P/${id}/`,
           upperLevel_url: '个人中心/赚奖励/'
         }),
         token: ctx.token,
@@ -1703,7 +1748,7 @@ async function followBrand(ctx, {keywordId, keyword, method}) {
         aid: String(keywordId)
       },
       sourceMode: '百科_品牌详情页',
-      sourcePage: `Android/其他/品牌详情页/${keyword}/${keywordId}/`,
+      sourcePage: `iPhone/其他/品牌详情页/${keyword}/${keywordId}/`,
       upperLevel_url: '个人中心/赚奖励/'
     });
 
@@ -1716,7 +1761,7 @@ async function followBrand(ctx, {keywordId, keyword, method}) {
           keyword_id: keywordId,
           type: 'brand'
         }),
-        refer: `Android/其他/品牌详情页/${keyword}/${keywordId}/`,
+        refer: `iPhone/其他/品牌详情页/${keyword}/${keywordId}/`,
         touchstone_event: touchstone
       }
     });
@@ -1800,7 +1845,7 @@ async function rating(ctx, {id, channelId, method, type}) {
             is_detail: true
           },
           sourceMode: '栏目页',
-          sourcePage: `Android//P/${id}/`,
+          sourcePage: `iPhone//P/${id}/`,
           upperLevel_url: '栏目页///'
         }),
         token: ctx.token,
@@ -1827,23 +1872,25 @@ async function submitComment(ctx, { articleId, channelId, content }) {
     const { isSuccess, data, response } = await postApi('https://comment-api.smzdm.com/comments/submit', {
       headers: getHeaders(ctx),
       data: {
+        // 埋点照 App 在好价页评论时的形态: 来源首页推荐/好价, is_detail=false
         touchstone_event: getTouchstoneEvent(ctx, {
+          event_key: '评论',
+          user_id: (ctx.user && ctx.user.uid) || '',
           event_value: {
+            p: '1',
+            is_detail: false,
             aid: articleId,
-            cid: channelId,
-            is_detail: true
+            cid: channelId
           },
-          sourceMode: '好物社区_全部',
-          sourcePage: `Android/长图文/${articleId}/评论页/`,
-          upperLevel_url: '好物社区/首页/全部/',
-          sourceRoot: '社区'
+          sourceMode: '首页_推荐_feed流',
+          sourcePage: `iPhone/好价/P/${articleId}/`,
+          upperLevel_url: '首页/推荐/',
+          sourceRoot: '推荐'
         }),
-        is_like: 3,
         reply_from: 3,
-        smiles: 0,
-        atta: 0,
+        smiles: 1,
+        atta: 1,
         parentid: 0,
-        token: ctx.token,
         article_id: articleId,
         channel_id: channelId,
         content
@@ -2130,7 +2177,15 @@ async function getVipInfo(ctx) {
 
 async function getTaskList(ctx) {
         const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/task/list_v2', {
-            headers: getHeaders(ctx)
+            headers: getHeaders(ctx),
+            data: {
+                get_total: 1,
+                is_install_zhangdama: 0,
+                limit: 100,
+                offset: 0,
+                point_type: 0,
+                source_from: '任务活动'
+            }
         });
 
         if (isSuccess && data.data.rows[0]?.cell_data?.activity_task?.default_list_v2) {
