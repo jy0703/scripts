@@ -1,0 +1,18 @@
+#!name = 酷我音乐签到
+#!desc = 自动登录酷我音乐并每日跑签到、打卡、听歌、宝箱、抽奖、惊喜任务领金币，支持多账号（开启插件开关后在浏览器打开 http://360.com/kuwo 登录；定时 7-23 点每小时一次，覆盖宝箱各时段）
+#!author = Fengzzzz
+#!homepage = https://github.com/jy0703/scripts
+#!icon = https://raw.githubusercontent.com/jy0703/scripts/main/icons/kuwo.png
+#!tag = 签到,自动化
+#!type = normal
+
+[Argument]
+capture = switch,false,tag=登录页,desc=打开后在浏览器访问 http://360.com/kuwo 完成手机号登录并跑一次任务，登录完建议关闭
+cronExpression = input,"15 7-23/1 * * *",tag=定时参数,desc=这里需要输入符合 CRON 表达式的参数
+
+[Script]
+http-request ^https?:\/\/360\.com\/kuwo script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/kuwo_sign.js,requires-body=true,timeout=600,tag=酷我音乐登录,enable={capture}
+cron {cronExpression} script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/kuwo_sign.js,timeout=600,tag=酷我音乐签到,enable=true
+
+[Mitm]
+hostname = 360.com

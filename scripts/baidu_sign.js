@@ -3,7 +3,7 @@
  * 活动规则：百度网盘 App「任务系统」每日签到得积分/成长值，连签累计天数可领阶段奖；任务完成后可在任务中心领取奖励
  * 脚本说明：Cookie 由本脚本 GetCookie 从 pan.baidu.com 请求头抓取，存入 baidu_data，支持多账号；
  *          每次先查 /api/loginstatus 拿 uk，再查任务中心首页与任务列表，用 task_type=166 的签到任务调用
- *          /coins/taskcenter/signin，随后领累计签到奖；任务奖励取 status=6(WAIT) 的项，按 H5 公式自产 token
+ *          /coins/taskcenter/signin，随后领累计签到奖；任务奖励取 status=6(WAIT) 的项，自算 token
  *          调用 /api/taskscore/antisave?action=receive_award。安装后直接签到/领奖。
  * 配置说明：boxjs「百度网盘签到」中：
  *          - baidu_data      抓取插件自动写入，也可手填 Cookie 字符串或 [{ cookie }] 数组；
@@ -14,19 +14,6 @@
  *                            整类不放通，只对这里列出的 ID 执行
  *          - baidu_debug     调试模式，打印请求/响应
  *          Node 环境变量同名可用
- * 待验证/实测结论（2026-10-28 真号抓包 + 实测）：
- *          1) /coins/taskcenter/* 必须带 version/channel/clienttype/aid=1002/app/devuid/cuid；
- *             devuid+cuid 这对设备标识被风控记住时会回 9312 dev repeat，换一对即恢复，
- *             脚本按账号生成并持久化这一对标识，之后固定复用。
- *          2) 领奖 /api/taskscore/antisave 的昊天镜只校验 aid 是否存在（取值任意，jt/ev 都不校验），
- *             不能带 version/devuid/cuid 等公共参数（会重新触发 8001），
- *             真正门槛是 token=md5(task_ids_uk_rand_time_盐)。
- *          3) 看视频翻倍是 task_from=points_double_award 的 task_type=70 激励视频任务，
- *             完成依赖 App 内广告 SDK 回调；脚本只检测状态、领取已到 WAIT 的奖励，不伪造观看，
- *             未完成时在通知副标题提示去 App 签到弹窗看完视频。
- *          4) 任务上报实测：type=91（领取徐涛独家资料）与 type=13 浏览类（去逛逛游戏频道、去体验云打印）
- *             均验证 tasksave→status 6→antisave→积分到账；type=13 整类混有游戏/领券/外部 App，
- *             所以只按 baidu_do_ids 白名单放通，其余依赖广告/第三方/真实动作的任务不处理。
  * 更新时间：2026-10-28
 
 ------------------ Surge 配置 ------------------
@@ -69,25 +56,25 @@ $.do_ids = String(getEnv('baidu_do_ids') || '').split(/[,，\s]+/).filter(Boolea
 $.Messages = [];   // 通知正文：只放成功项
 $.Subtitle = [];   // 通知副标题：前置失败/抓取提示
 
-// ---- 业务常量（来自 13.36.0 任务系统 H5 / operation/activitys/taskSystem） ----
+// ---- 业务常量 ----
 const HOST = 'https://pan.baidu.com';
 const DATA_KEY = 'baidu_data';
 const PAGE_REFERER = 'https://pan.baidu.com/operation/activitys/taskSystem/main?executerefresh=1&na_immerse_theme=1';
 const USER_AGENT = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148';
-// 任务系统公共参数（真号抓包 13.21.6）；devuid/cuid 由脚本按账号生成并持久化
+// 任务系统公共参数；devuid/cuid 由脚本按账号生成并持久化
 const APP_VERSION = '13.21.6';
 const APP_CHANNEL = 'iPhone_27.2_iPhone15ProMax_chunlei_1099a_wifi';
 const CLIENT_AID = '1002';
-// 领奖接口只需要「非空 aid」就能过昊天镜前置，取 H5 urlMap 里的 task 场景
+// 领奖接口要求 aid 非空
 const HTJ_AID = '13655';
 const HTJ_EV = 'task';
-// H5 里 u.L2.normal 去掉 task_sys_badge（徽章任务单独领），原样照搬
+// 徽章任务单独领，故不含 task_sys_badge
 const TASK_FROMS = ['task_sys_beginner', 'task_sys_daily', 'task_sys_space', 'task_sys_ai', 'task_sys_function', 'task_sys_growth'];
 const TASK_STATUS = { WILL: 0, DONE: 1, DOING: 3, WAIT: 6 };
 const SIGN_TASK_TYPE = 166;          // 任务列表里 task_type=166 即签到任务
 const DOUBLE_TASK_FROM = 'points_double_award';   // 看视频翻倍：task_type=70 激励视频任务
-const DO_TASK_TYPES = [91];         // 可脚本化完成的任务类型：91=客户端先上报完成再打开页面（已实测）
-const TOKEN_SALT = 'ae82c240578eb391de93c2f4c3dfc3ba';   // H5 拦截器里 tasksave/antisave 的 token 盐
+const DO_TASK_TYPES = [91];         // 可脚本化完成的任务类型：91=客户端先上报完成再打开页面
+const TOKEN_SALT = 'ae82c240578eb391de93c2f4c3dfc3ba';   // tasksave/antisave 的 token 盐
 const ERRNO_TEXT = {
     '-6': 'Cookie 已失效（invalid bduss）',
     '93': '账号未绑定手机号，任务系统不可用',
@@ -241,7 +228,7 @@ async function runAccount(acc, index, label) {
     return label;
 }
 
-// 任务列表，10117/30008 按 H5 逻辑重试一次
+// 任务列表：10117/30008 是可重试错误，重试一次
 async function fetchTasks(acc, cookie) {
     const params = { ...commonParams(acc), task_from: TASK_FROMS.join(' ') };
     let payload = await apiGet(cookie, '/coins/taskcenter/tasklist', params, '任务列表');
@@ -260,7 +247,7 @@ async function fetchDoubleTask(cookie) {
     return ((payload.result && payload.result.list) || [])[0] || null;
 }
 
-// 客户端上报型任务：task_id 单数 + token，H5 的 Eh() 就是这条
+// 客户端上报型任务：task_id 单数 + token
 async function reportTaskFinish(cookie, uk, task) {
     const rand = String(Math.floor(Math.random() * 1e8));
     const time = String(Date.now());
@@ -307,7 +294,7 @@ function signParams(task) {
         task_id: task.task_id,
         task_id_str: task.task_id_str,
         task_from: task.task_from,
-        is_growth: '0',   // 非成长值页固定 0；成长值页 H5 传 1
+        is_growth: '0',   // 非成长值页固定 0；成长值页传 1
     };
 }
 

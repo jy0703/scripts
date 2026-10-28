@@ -1641,8 +1641,7 @@
         "Cookie 由抓取插件从 pan.baidu.com 请求头获取，支持多账号；安装后直接签到/领奖",
         "抓取：打开百度网盘 APP（任务系统或任意页面）触发 pan.baidu.com 请求，插件自动写入 baidu_data；多账号各抓一次",
         "看视频翻倍是独立的 points_double_award 激励视频任务，需在 App 签到弹窗内看完广告；脚本只检测状态并领取已到账奖励，不代看",
-        "可选「上报已完成任务」：默认只对客户端上报型 type=91 生效；type=13 浏览类需用 baidu_do_ids 按任务 ID 放通（整类混有游戏/领券/外部 App，不整类开）",
-        "领奖接口已实测：非空 aid + token 即可，不再需要昊天镜 jt；遇到 9312 dev repeat 清空 baidu_data 里该账号的 devuid/cuid 后重跑"
+        "可选「上报已完成任务」：默认只对客户端上报型 type=91 生效；type=13 浏览类需用 baidu_do_ids 按任务 ID 放通（整类混有游戏/领券/外部 App，不整类开）"
       ],
       "icons": [
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/baidu.png",
@@ -1680,7 +1679,7 @@
           "autoGrow": true,
           "rows": 2,
           "placeholder": "例如 1637576931774438,1637352711774438",
-          "desc": "只对这里列出的 task_id 调 tasksave（status 0/3 时）。已实测的 type=13 浏览类：1637576931774438 去逛逛游戏频道、1637352711774438 去体验云打印；任务 ID 可能轮换，失效会自动跳过"
+          "desc": "只对这里列出的 task_id 调 tasksave（status 0/3 时）。type=13 浏览类可用：1637576931774438 去逛逛游戏频道、1637352711774438 去体验云打印；任务 ID 可能轮换，失效会自动跳过"
         },
         {
           "id": "baidu_debug",
@@ -1688,6 +1687,100 @@
           "val": false,
           "type": "boolean",
           "desc": "逐条打印请求/响应明细，排查问题用；日志可能含 Cookie 等敏感信息，看完记得关掉"
+        }
+      ]
+    },
+    {
+      "id": "kuwo_sign",
+      "name": "酷我音乐签到",
+      "author": "@Feng",
+      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/kuwo_sign.js",
+      "descs_html": [
+        "酷我音乐「赚钱」页每日任务：签到、打卡、听歌、小说、收藏、宝箱、免费抽奖领金币，金币可在积分商城兑换会员，支持多账号；任务参数按 App 11.3.8.0 内 H5 真机抓包对齐",
+        "登录：开启插件开关后，浏览器打开 http://360.com/kuwo（需 MITM 360.com），填手机号 → 点图片加载图形码 → OCR 识别或手填 → 获取短信验证码 → 登录并执行任务；登录成功自动写入 kuwo_data，之后交给定时任务，抓完可关开关",
+        "脚本只跑可脚本化的任务（签到/打卡/听歌/小说/收藏/宝箱/免费抽奖）；看广告、跳第三方、邀好友、盲盒等需要 App 内真实操作的任务会跳过，不会伪造广告 verify_str",
+        "定时默认 7-23 点每小时一次；kuwo_notify 默认只在 23 点汇总推送一次，登录失效等失败会单独推送",
+        "kuwo_device 是内置的 11.3.8.0 设备画像（devId/appUid/version/source/prod/apiversion/q36），一般不用改；换设备或服务端校验变化时可整段覆盖",
+        "verificationId（数美 SMDEVICEID）由脚本按 web fp 协议离线注册并按账号固化在 kuwo_data，不需要抓包；不想发这个请求就关掉「自动注册数美设备号」"
+      ],
+      "icons": [
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/kuwo.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/kuwo.png"
+      ],
+      "keys": [
+        "kuwo_data",
+        "kuwo_phone",
+        "kuwo_ocr",
+        "kuwo_device",
+        "kuwo_smid",
+        "kuwo_notify",
+        "kuwo_exchange",
+        "kuwo_debug"
+      ],
+      "settings": [
+        {
+          "id": "kuwo_data",
+          "name": "酷我音乐数据",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 5,
+          "placeholder": "",
+          "desc": "登录页自动写入 [{userid,sid,phone,verificationId}]，也可手填 userid@sid（多个用换行或 & 分隔）；phone 用于 AES 生成 mobile，verificationId 由「自动注册数美设备号」补上"
+        },
+        {
+          "id": "kuwo_phone",
+          "name": "登录页预填手机号",
+          "val": "",
+          "type": "text",
+          "placeholder": "13800000000",
+          "desc": "登录页预填，同时作为账号手机号生成 AES mobile；多账号以登录页实际输入为准。留空时 mobile 传空"
+        },
+        {
+          "id": "kuwo_ocr",
+          "name": "OCR API Key",
+          "val": "",
+          "type": "text",
+          "placeholder": "helloworld",
+          "desc": "ocr.space 的 Key，留空用演示 key helloworld（易被限流）；图形码也可以不 OCR、直接手填"
+        },
+        {
+          "id": "kuwo_device",
+          "name": "设备画像覆盖",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 4,
+          "placeholder": "{\"devId\":\"\",\"appUid\":\"\",\"version\":\"11.3.8.0\",\"source\":\"\",\"prod\":\"\",\"apiversion\":\"43\",\"adApiversion\":\"54\",\"q36\":\"\",\"verificationId\":\"\"}",
+          "desc": "留空使用脚本内置的 11.3.8.0 设备画像；可只填要覆盖的字段（JSON）。verificationId 是数美 SMDEVICEID，填了则所有账号都用它，一般留空交给「数美设备号」自动注册"
+        },
+        {
+          "id": "kuwo_smid",
+          "name": "自动注册数美设备号",
+          "val": true,
+          "type": "boolean",
+          "desc": "默认开启：账号缺 verificationId 时，按数美 web fp 协议向 fp-it.portal101.cn 注册一个设备号并写回 kuwo_data（每账号一次）。关掉后 verificationId 留空——签到/任务/宝箱实测不校验它，只有提现类接口才用"
+        },
+        {
+          "id": "kuwo_notify",
+          "name": "每次运行都推送",
+          "val": false,
+          "type": "boolean",
+          "desc": "默认关闭，只在 23 点那次运行推送汇总；打开后每小时运行都推送（会比较吵）"
+        },
+        {
+          "id": "kuwo_exchange",
+          "name": "积分兑换会员",
+          "val": false,
+          "type": "boolean",
+          "desc": "默认关闭。旧版 VIP 兑换接口(getExchangeAward)，当前 H5 已改 taskExchange；开启后积分≥150000 会真扣积分，仅供老账号兜底"
+        },
+        {
+          "id": "kuwo_debug",
+          "name": "调试模式",
+          "val": false,
+          "type": "boolean",
+          "desc": "逐条打印积分接口的请求/响应，排查问题用；日志可能含 userid/sid，看完记得关掉"
         }
       ]
     }
