@@ -979,7 +979,7 @@
       "descs_html": [
         "什么值得买每日签到 + 完成每日任务（浏览/分享/评论/抽奖），支持多账号",
         "抓取：开启「什么值得买获取Cookie」后打开 App 进入签到页，自动保存 Cookie、User-Agent、sk 到 smzdm_data",
-        "评论任务只评首页好价文章（长图文的评论不计入进度），文案每条需大于 10 个汉字，多条用 | 或换行分隔（任务要几条取几条；服务端按文案判重，用过的文案要换掉）；SMZDM_CROWD_SILVER_5 填 yes 才会执行 5 碎银子抽奖任务",
+        "评论任务评首页好价文章（长图文的评论不计入进度），任务指定文章时评那一篇；文案每条需大于 10 个汉字，多条用 | 或换行分隔，每次随机取；SMZDM_CROWD_SILVER_5 填 yes 才会执行 5 碎银子抽奖任务",
         "SMZDM_COOKIE / SMZDM_SK 为 Node、青龙手工填写兜底，优先级低于 smzdm_data；sk 留空会由 Cookie 自动计算，可不抓",
         "平台画像对齐 iOS 11.2.3（f=iphone）：签名盐取自 iOS 包，与安卓盐不通用；抓包请用 iOS 客户端"
       ],
@@ -992,10 +992,7 @@
         "SMZDM_COOKIE",
         "SMZDM_SK",
         "SMZDM_COMMENT",
-        "SMZDM_COMMENT_TTL",
         "SMZDM_COMMENT_MAX",
-        "smzdm_comment_used",
-        "smzdm_commented_articles",
         "SMZDM_CROWD_SILVER_5",
         "SMZDM_CROWD_KEYWORD",
         "smzdm_debug"
@@ -1039,27 +1036,7 @@
           "autoGrow": true,
           "rows": 4,
           "placeholder": "",
-          "desc": "每条需大于 10 个汉字，多条用 | 或换行分隔；任务要几条就取几条，用过的文案脚本会自动在冷却期内跳过，只管往末尾追加新的；留空则跳过评论任务"
-        },
-        {
-          "id": "SMZDM_COMMENT_TTL",
-          "name": "文案冷却(小时)",
-          "val": "",
-          "type": "textarea",
-          "autoGrow": true,
-          "rows": 1,
-          "placeholder": "72",
-          "desc": "可选，默认 72 小时；发过的文案和被服务端判重的文案在这段时间内不再使用，评过的好价文章同样按这个时长跳过"
-        },
-        {
-          "id": "smzdm_commented_articles",
-          "name": "已评论文章记录",
-          "val": "",
-          "type": "textarea",
-          "autoGrow": true,
-          "rows": 3,
-          "placeholder": "",
-          "desc": "脚本自动维护，形如 {\"7083467433::184356852\":1764000000000}；冷却期内的好价文章不再重复评论，清空可立即解锁"
+          "desc": "每条需大于 10 个汉字，多条用 | 或换行分隔；每次运行随机取，任务要几条取几条；留空则跳过评论任务"
         },
         {
           "id": "SMZDM_COMMENT_MAX",
@@ -1070,16 +1047,6 @@
           "rows": 1,
           "placeholder": "3",
           "desc": "可选，默认 3；勋章类任务要求几十条评论时，每次只补这么多，剩下的按天累计"
-        },
-        {
-          "id": "smzdm_comment_used",
-          "name": "已用评论文案记录",
-          "val": "",
-          "type": "textarea",
-          "autoGrow": true,
-          "rows": 3,
-          "placeholder": "",
-          "desc": "脚本自动维护，形如 {\"7083467433::文案\":1764000000000}；清空可立刻解锁全部文案，一般不用动"
         },
         {
           "id": "SMZDM_CROWD_SILVER_5",

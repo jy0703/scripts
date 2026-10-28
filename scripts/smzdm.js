@@ -7,11 +7,10 @@
  *   1. smzdm_data：抓包保存的账号数组（推荐）
  *   2. SMZDM_COOKIE：Node/青龙可直接填 Cookie，多账号用 & 或换行分隔
  *   3. SMZDM_SK：可选，签到请求里的 sk，多账号与 Cookie 顺序一致；不填时按 Cookie 的 smzdm_id + device_id 自动计算
- *   4. SMZDM_COMMENT：可选，评论任务文案，每条需大于 10 个汉字，多条用 | 或换行分隔（任务要几条取几条，用过的文案服务端会判重复提交）
- *   5. SMZDM_COMMENT_TTL：可选，冷却小时数，默认 72；发过的文案和评过的文章在冷却期内都会自动跳过，记录存在 smzdm_comment_used / smzdm_commented_articles
- *   6. SMZDM_COMMENT_MAX：可选，单次最多发几条评论，默认 3；勋章类任务要求几十条时按天分批补
- *   7. SMZDM_CROWD_SILVER_5：可选，值 yes 时执行 5 碎银子抽奖任务
- *   8. SMZDM_CROWD_KEYWORD：可选，非免费抽奖时优先匹配的关键词
+ *   4. SMZDM_COMMENT：可选，评论任务文案，每条需大于 10 个汉字，多条用 | 或换行分隔（每次随机取，任务要几条取几条）
+ *   5. SMZDM_COMMENT_MAX：可选，单次最多发几条评论，默认 3；勋章类任务要求几十条时按天分批补
+ *   6. SMZDM_CROWD_SILVER_5：可选，值 yes 时执行 5 碎银子抽奖任务
+ *   7. SMZDM_CROWD_KEYWORD：可选，非免费抽奖时优先匹配的关键词
  * 更新时间：2026-10-09
  *
  * 抓包说明：
@@ -64,57 +63,32 @@ const RE_REV = /rv:([\d.]+)/i;
 const USER_STORAGE_KEY = 'smzdm_data';
 const RUNTIME_ENV = {
     SMZDM_COMMENT: getEnv('SMZDM_COMMENT', 'smzdm_comment') || '',
-    SMZDM_COMMENT_TTL: getEnv('SMZDM_COMMENT_TTL', 'smzdm_comment_ttl') || '',
     SMZDM_COMMENT_MAX: getEnv('SMZDM_COMMENT_MAX', 'smzdm_comment_max') || '',
     SMZDM_CROWD_SILVER_5: getEnv('SMZDM_CROWD_SILVER_5', 'smzdm_crowd_silver_5') || '',
     SMZDM_CROWD_KEYWORD: getEnv('SMZDM_CROWD_KEYWORD', 'smzdm_crowd_keyword') || ''
 };
 
-// 用过的文案服务端会一直判「重复提交」（评论删了也记着），本地记一笔直接跳过，省掉注定失败的提交
-const COMMENT_USED_KEY = 'smzdm_comment_used';
-// 评过的文章同样记下来，避免天天在同一篇好价上刷评论
-const COMMENTED_ARTICLE_KEY = 'smzdm_commented_articles';
-// 冷却时长默认 72 小时，可用 SMZDM_COMMENT_TTL 按小时覆盖（填 0 表示不冷却，每次都按服务端判重结果现记）
-const COMMENT_TTL_HOURS = String(RUNTIME_ENV.SMZDM_COMMENT_TTL || '').trim() === '' ? 72 : Number(RUNTIME_ENV.SMZDM_COMMENT_TTL) || 0;
 // 单次最多发几条评论: 任务可能要求几十条(勋章活动 20 条), 一次跑完会触发提交频率限制, 默认每次补 3 条
 const COMMENT_MAX_PER_RUN = Number(RUNTIME_ENV.SMZDM_COMMENT_MAX) || 3;
 
-function commentKeyPrefix(ctx) {
-    return `${(ctx && ctx.user && ctx.user.uid) || 'default'}::`;
-}
-
-// 冷却记录统一按账号隔离: { "<uid>::<文案|文章id>": 使用时间戳 }
-function readUsedMap(ctx, storeKey) {
-    const all = $.toObj($.getdata(storeKey) || '{}', {}) || {};
-    const deadline = Date.now() - COMMENT_TTL_HOURS * 3600 * 1000;
-    const prefix = commentKeyPrefix(ctx);
-
-    return Object.keys(all).reduce((out, key) => {
-      if (key.indexOf(prefix) === 0 && Number(all[key]) > deadline) out[key.slice(prefix.length)] = all[key];
-      return out;
-    }, {});
-}
-
-function markUsed(ctx, storeKey, item) {
-    const all = $.toObj($.getdata(storeKey) || '{}', {}) || {};
-    const deadline = Date.now() - COMMENT_TTL_HOURS * 3600 * 1000;
-
-    Object.keys(all).forEach(key => {
-      if (!(Number(all[key]) > deadline)) delete all[key];
-    });
-
-    all[`${commentKeyPrefix(ctx)}${item}`] = Date.now();
-    $.setdata($.toStr(all), storeKey);
-}
-
-// 评论文案池：服务端按文案判重（换文章也拦），所以任务要几条就得有几句不同的话
-function getCommentPool(ctx) {
-    const used = readUsedMap(ctx, COMMENT_USED_KEY);
-
+// 评论文案池: 每次随机取, 不记忆用过哪些(服务端会判重, 撞了就换下一条)
+function getCommentPool() {
     return String(RUNTIME_ENV.SMZDM_COMMENT || '')
         .split(/[|\r\n]+/)
         .map(s => s.trim())
-        .filter(s => s.length > 10 && !used[s]);
+        .filter(s => s.length > 10);
+}
+
+// 打散数组: 随机挑文案/文章
+function shuffle(list) {
+    const arr = list.slice();
+
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+
+    return arr;
 }
 
 function randomStr(len = 18) {
@@ -514,7 +488,7 @@ async function doTasks(ctx, tasks) {
         'interactive.comment': {
             guard: (currentTask, currentCtx) => getCommentPool(currentCtx).length > 0,
             onGuardFail(currentCtx) {
-                currentCtx.$env.log(`🟡没有可用的评论文案（未设置 SMZDM_COMMENT，或都在 ${COMMENT_TTL_HOURS} 小时冷却期内用过），跳过评论任务！`);
+                currentCtx.$env.log('🟡没有可用的评论文案（SMZDM_COMMENT 未设置或没有超过 10 个字的条目），跳过评论任务！');
             },
             handler: doCommentTask
         }
@@ -638,15 +612,7 @@ async function getHaojiaArticleList(ctx, num = 1) {
       return [];
     }
 
-    // 冷却期内评过的文章不再重复评，免得天天在同一篇好价上刷
-    const commented = readUsedMap(ctx, COMMENTED_ARTICLE_KEY);
-    const fresh = items.filter(x => !commented[x.article_id]);
-
-    if (!fresh.length) {
-      ctx.$env.log(`首页 ${items.length} 篇好价在 ${COMMENT_TTL_HOURS} 小时内都评过了`);
-    }
-
-    return fresh.slice(0, num);
+    return items.slice(0, num);
 }
 
 async function getTaskArticles(ctx, task, num, repeatFixedArticle = false) {
@@ -690,7 +656,7 @@ async function doCommentTask(ctx, task) {
     const remain = total > done ? total - done : Number((String(task.task_description || task.task_name).match(/(\d+)\s*条/) || [])[1]) || 1;
     // 有些任务要几十条(如「评论赢限定勋章 20 条」), 单次跑太多既会触发提交频率限制也像刷量, 每次只补上限内的量
     const need = Math.min(remain, COMMENT_MAX_PER_RUN);
-    const pool = getCommentPool(ctx);
+    const pool = shuffle(getCommentPool());
 
     if (total) ctx.$env.log(`评论任务进度 ${done}/${total}，本次需发 ${need} 条${remain > need ? `（还差 ${remain} 条，分次补）` : ''}`);
 
@@ -721,12 +687,14 @@ async function doCommentTask(ctx, task) {
     }
 
     const commentIds = [];
+    // 文章和文案都随机打散, 同一次运行内尽量不重复
+    const articleQueue = shuffle(articles);
     let tried = 0;
     let finished = total ? done : 0;
 
-    while (commentIds.length < need && commentIds.length < articles.length && tried < pool.length) {
+    while (commentIds.length < need && commentIds.length < articleQueue.length && tried < pool.length) {
       const content = pool[tried++];
-      const article = articles[commentIds.length];
+      const article = articleQueue[commentIds.length];
 
       await wait(3, 10);
 
@@ -741,10 +709,9 @@ async function doCommentTask(ctx, task) {
       });
 
       if (!isSuccess) {
-        // 走到这里说明本地冷却没覆盖住（刚换设备或 SMZDM_COMMENT_TTL 填短了），再记一次
+        // 服务端按文案判重(换文章也拦), 换池子里下一条继续
         if (/重复提交/.test(response)) {
           ctx.$env.log(`文案被服务端判重，换下一条: ${content}`);
-          markUsed(ctx, COMMENT_USED_KEY, content);
           await wait(20, 40);
           continue;
         }
@@ -757,8 +724,6 @@ async function doCommentTask(ctx, task) {
       }
 
       commentIds.push(data.data.comment_ID);
-      markUsed(ctx, COMMENT_USED_KEY, content);
-      markUsed(ctx, COMMENTED_ARTICLE_KEY, article.article_id);
 
       // 每条发完立刻查进度: 平台不把这条计入任务时，这里就能看出来
       if (total) {
@@ -787,7 +752,7 @@ async function doCommentTask(ctx, task) {
     const complete = total ? finished >= total : commentIds.length >= need;
 
     if (!complete) {
-      ctx.$env.log(`评论 ${commentIds.length}/${need} 条${total ? `，服务端进度 ${finished}/${total}` : ''}，本次不领奖${commentIds.length < need ? `（可用文案 ${pool.length} 条 / 未评过的好价 ${articles.length} 篇已用尽，记得补新文案）` : ''}`);
+      ctx.$env.log(`评论 ${commentIds.length}/${need} 条${total ? `，服务端进度 ${finished}/${total}` : ''}，本次不领奖${commentIds.length < need ? `（可用文案 ${pool.length} 条 / 可选好价 ${articleQueue.length} 篇已用尽，记得补新文案）` : ''}`);
       await removeComments(ctx, commentIds);
       return {
         isSuccess: false,
@@ -2095,12 +2060,25 @@ async function allReward(ctx) {
         });
 
         if (isSuccess) {
-            const msg1 = `${data.data.normal_reward.reward_add.title}: ${data.data.normal_reward.reward_add.content}`;
-            const msg2 = data.data.normal_reward.gift.title ? `${data.data.normal_reward.gift.title}: ${data.data.normal_reward.gift.content_str}` : `${data.data.normal_reward.gift.sub_content}`;
-            $.log(`${msg1}\n${msg2}\n`);
+            const reward = (data.data && data.data.normal_reward) || {};
+            const add = reward.reward_add || {};
+            const gift = reward.gift || {};
+            const msgs = [];
+
+            // 没奖励时接口照样回空字段, 直接拼会打出「: 」这种空行
+            if (add.title) msgs.push(`${add.title}: ${add.content || ''}`);
+            else if (add.content) msgs.push(add.content);
+
+            if (gift.title) msgs.push(`${gift.title}: ${gift.content_str || ''}`);
+            else if (gift.sub_content) msgs.push(gift.sub_content);
+
+            const msg = msgs.join('\n');
+
+            if (msg) $.log(`${msg}\n`);
+
             return {
                 isSuccess,
-                msg: `${msg1}\n${msg2}\n\n`
+                msg: msg ? `${msg}\n\n` : ''
             };
         }
 
