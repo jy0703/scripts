@@ -622,6 +622,7 @@
         "cmcc_seed",
         "cmcc_seed_channel",
         "cmcc_gold",
+        "cmcc_gold_at",
         "cmcc_wed",
         "cmcc_wed_sk",
         "cmcc_wed_sk_at",
@@ -704,6 +705,16 @@
           "val": false,
           "type": "boolean",
           "desc": "签到页「签到专属AI豆兑换」商城：按 5元→2元→1.5元→1元 顶格兑话费券，剩余库存<=100 视为已抢光，0.5 元档与充值加赠券一律不兑。兑换会真扣 AI 豆、单商品每期限兑一次（重复运行幂等），所以默认关；要兑就连着「AI豆任务」一起开，先攒豆再兑（同步上游 1753cf1）"
+        },
+        {
+          "id": "cmcc_gold_at",
+          "name": "AI豆兑换时刻",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "08:00",
+          "desc": "北京时间 HH:MM，话费券 8 点放量。距放量 5 分钟以内会按服务器时间等到开兑瞬间连查库存抢兑；更早则只记日志跳过（与每日秒杀同一套卡点写法）。想自动抢兑请把定时放在放量前 1~2 分钟（如 07:57）或放量之后。留空用 08:00；填 00:00 则不受限"
         },
         {
           "id": "cmcc_wed",

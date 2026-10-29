@@ -4,8 +4,11 @@
  *      AI豆苗养成记、AI豆兑换话费券、周三充值日(wedrecharge，含场次秒杀)，开关见环境变量
  * 环境：NE / Node.js，多账号；账号参数(App 票据/省市)由本脚本 GetCookie 抓取后存入 cmcc_data
  * 环境变量：cmcc_data / cmcc_claim(默认开) / cmcc_task / cmcc_seckill / cmcc_sk_min(默认 11:00) / cmcc_video /
- *          cmcc_seed / cmcc_seed_channel / cmcc_gold(默认关，会真扣 AI 豆) / cmcc_wed / cmcc_wed_sk /
+ *          cmcc_seed / cmcc_seed_channel / cmcc_gold(默认关，会真扣 AI 豆) / cmcc_gold_at(默认 08:00 放量时刻) /
+ *          cmcc_wed / cmcc_wed_sk /
  *          cmcc_wed_sk_at(留空=听服务端场次) / cmcc_task_skip_days / cmcc_debug；cmcc_task_fail 自动维护
+ * 执行次序：可选活动只在「当天签到已闭环」之后跑（本轮签的、或 App 里已签过的都算），
+ *          所以 8 点后补跑一次也能兑，不必非得挤在签到那一轮
 
 
 ------------------ Surge 配置 ------------------
@@ -45,7 +48,7 @@ hostname = wx.10086.cn, client.app.coc.10086.cn
  */
 
 const $ = new Env('中国移动');
-$.is_debug = getEnv('cmcc_debug', 'is_debug') || 'false';  // 调试模式(打印每次请求/响应含头，boxjs 开关 cmcc_debug)
+$.is_debug = isOn(getEnv('cmcc_debug', 'is_debug'));  // 调试模式(打印每次请求/响应含头，boxjs 开关 cmcc_debug)
 $.userInfo = getEnv('cmcc_data') || '';  // 获取账号
 $.userArr = $.toObj($.userInfo) || [];  // 用户信息
 $.Messages = [];
@@ -60,9 +63,9 @@ const CHANNEL_ID = getEnv('cmcc_channel_id') || 'P00000109876';
 // 地址与 token 都取公共分区 @tools.address / @tools.token；留空=纯用本地抓包票据，服务对所有 /api/* 都查 token。
 const TOOLS_API = (getEnv('TOOLS_API', '@tools.address') || '').replace(/\/+$/, '');
 const TOOLS_API_TOKEN = getEnv('TOOLS_API_TOKEN', '@tools.token') || '';
-const CLAIM_AWARD = getEnv('cmcc_claim') !== 'false';  // 累计/连签奖励代领：默认开（达标后服务端不自动发放，一直挂着），显式填 false 才不领
-const RUN_TASKS = getEnv('cmcc_task') === 'true';   // 签到页 AI豆任务(小程序端 mark/task 体系)
-const SECKILL = getEnv('cmcc_seckill') === 'true';  // 签到有礼秒杀抢券(同活动 1021122301)
+const CLAIM_AWARD = !isOff(getEnv('cmcc_claim'));  // 累计/连签奖励代领：默认开（达标后服务端不自动发放，一直挂着），显式填 false 才不领
+const RUN_TASKS = isOn(getEnv('cmcc_task'));   // 签到页 AI豆任务(小程序端 mark/task 体系)
+const SECKILL = isOn(getEnv('cmcc_seckill'));  // 签到有礼秒杀抢券(同活动 1021122301)
 const TASK_API = API_MARK + '/task';
 // 周三充值日的活动页，同时是开放任务握手入口（落 HLWHD_SESSION_TOKEN）
 const WED_ENTRY = BASE + '/hlwyxhdhub/act-wedrecharge/1024101716?pageId=1849008675699650560&channelId=P00000093619';
@@ -70,7 +73,7 @@ const WED_ENTRY = BASE + '/hlwyxhdhub/act-wedrecharge/1024101716?pageId=18490086
 const OPEN_TASK_ENTRY = WED_ENTRY;
 const OPEN_TASK_API = BASE + '/hlwyxhdhub/api/open/_pub/task';
 // 追剧领福利(diy-client 活动页)：打卡 + 代币任务 + 抽奖，与签到页同一 SSO 通道但要按自己的活动页换票
-const RUN_VIDEO = getEnv('cmcc_video') === 'true';
+const RUN_VIDEO = isOn(getEnv('cmcc_video'));
 const VIDEO_ENTRY = BASE + '/qwhdhub/diy-client/1126082530?A_C_CODE=10hep1ZhkL&channelId=P00000119581';
 const VIDEO_SIGN_API = BASE + '/qwhdhub/api/diyVideoDayRedesign/sign';
 const DIY_TASK_API = BASE + '/qwhdhub/diyTask';
@@ -84,7 +87,7 @@ const CMLIVE_BASE = 'https://v.cmcc-cs.cn/cmlive/api';
 const CMLIVE_SOURCE_ID = '017027';
 const CMLIVE_REFERER = 'https://v.cmcc-cs.cn/cmlive/live/feed?id=102518&cmliveChannelId=203&belongChannelId=203&secondChannel=spr&openSelfResearch=1&tagId=157&jtCode=1';
 // AI豆苗养成记（activityId 17692，dev.coc.10086.cn 独立域）：凭证= cmcc_data 的 token，每次现签短效 phone 头
-const RUN_SEED = getEnv('cmcc_seed') === 'true';
+const RUN_SEED = isOn(getEnv('cmcc_seed'));
 const SEED_BASE = 'https://dev.coc.10086.cn/coc3/coc3-market-activity';
 const SEED_LOGIN_API = 'https://dev.coc.10086.cn/coc3/gr/login/ssoRights';
 const SEED_PAGE_URL = 'https://dev.coc.10086.cn/coc3/canvas/rightsmarket-h5-canvas/online/2026dmycj?pageRecorded=true';
@@ -98,14 +101,21 @@ const SEED_WTAC = 'P00000008211_';
 const SEED_SKIP_TYPES = { 3: '需真实办理/订购', 6: '需真实好友助力' };
 const SEED_STATE_KEY = 'cmcc_seed_state';
 // 签到专属 AI豆兑换话费券（qwhdhub 同一会话）：兑换会真扣 AI 豆、每商品每期限兑一次，默认关
-const RUN_GOLD = getEnv('cmcc_gold') === 'true';
+const RUN_GOLD = isOn(getEnv('cmcc_gold'));
 const GOLD_API = BASE + '/qwhdhub/api/mark/task';
 const GOLD_TIERS = ['5元话费券', '2元话费券', '1.5元话费券', '1元话费券'];
 const GOLD_MIN_STOCK = 100;   // 前端同款判定：剩余 <=100 视为已抢光
 const GOLD_MAX_ROUNDS = 8;    // 单商品每期限兑一次，轮次上限只作兜底
+const GOLD_AT_RAW = getEnv('cmcc_gold_at') || '08:00';   // 话费券 8 点放量，卡点时刻（北京时间 HH:MM）
+const GOLD_AT = hmToMinutes(GOLD_AT_RAW);
+const GOLD_LEAD = 400;          // 提前开火(ms)，抵消网络延迟
+const GOLD_INTERVAL = 350;      // 放量瞬间连查库存的间隔(ms)
+const GOLD_MAX_WAIT = 300000;   // 距放量超过该时长就不干等，本次跳过(ms)
+const GOLD_MAX_ATTEMPTS = 200;  // 单档连查库存的发数上限
+const GOLD_RUSH_MS = 70000;     // 放量后仍继续连查的时长上限(ms)
 // 周三充值日(hlwyxhdhub/wedrecharge)：拼图抽奖主流程 + 场次秒杀，同一 SSO 通道但要按该活动页换票
-const RUN_WED = getEnv('cmcc_wed') === 'true';
-const WED_SECKILL = getEnv('cmcc_wed_sk') === 'true';
+const RUN_WED = isOn(getEnv('cmcc_wed'));
+const WED_SECKILL = isOn(getEnv('cmcc_wed_sk'));
 const WED_API = BASE + '/hlwyxhdhub/api/wedrecharge';
 const WED_TIERS = { dp1: '95折话费券', dp2: '9折话费券', dp3: '8折话费券' };
 // 集齐后 receiveNew 的 round 与拼图序号不同源（取自前端映射表）
@@ -243,6 +253,8 @@ async function doSign(user) {
             const dailySk = SECKILL && !alreadyWon && skWindowOpen();
             const wedSk = WED_SECKILL && beijingWeekday() === WED_DAY && user.wedSkDay !== today;
             const wedSkDone = WED_SECKILL && beijingWeekday() === WED_DAY && user.wedSkDay === today;
+            // 当天签到已闭环也要跑活动：开关是中途才开的、或 cron 之后手动补跑的，之前整块被这里跳过
+            lines.push(...await runExtraActs(user, null));
             if (!dailySk && !wedSk) {
                 say(`今日签到已完成，本次无抢券任务`);
                 if (alreadyWon) $.log(`[秒杀] 本周已于 ${user.skWinDay.slice(4, 6)}-${user.skWinDay.slice(6, 8)} 抢到${user.skWinPrize ? `「${user.skWinPrize}」` : ''}，本周不再参与`);
@@ -254,7 +266,9 @@ async function doSign(user) {
                 if (wedSk) lines.push(...await doWedSeckill(user));
             }
         } else {
-            const { ctx, statusData } = await openCtx(user);
+            const opened = await openCtx(user);
+            const ctx = opened.ctx;
+            const statusData = opened.statusData;
             let acc = (statusData.userinfo || {}).accumulateTimes || '?';
             const signedToday = (statusData.markstatus || []).some(d => d.date === today && d.status === '1');
             $.log(`当前累计签到 ${acc} 天，App 端今日${signedToday ? '已签' : '未签'}`);
@@ -296,49 +310,7 @@ async function doSign(user) {
                 }
             }
 
-            if (RUN_TASKS) {
-                try {
-                    lines.push(...await doMarkTasks(ctx, user));
-                } catch (e) {
-                    say(`[任务] 失败: ${e.message || e}`);
-                }
-            }
-
-            // 追剧领福利是独立活动页，自己换票；放在秒杀之前，免得被抢券的等待挤掉
-            if (RUN_VIDEO) {
-                try {
-                    lines.push(...await doVideoAct(user));
-                } catch (e) {
-                    say(`[追剧] 失败: ${e.message || e}`);
-                }
-            }
-
-            // AI豆苗养成记走 dev.coc.10086.cn 独立域+独立凭证(ticket 现签 phone 头)，与主站会话无关
-            if (RUN_SEED) {
-                try {
-                    lines.push(...await runSeed(user));
-                } catch (e) {
-                    say(`[豆苗] 失败: ${e.message || e}`);
-                }
-            }
-
-            // AI豆兑换话费券复用签到会话：空跑只写日志，兑到/失败才进通知
-            if (RUN_GOLD) {
-                try {
-                    lines.push(...await runGold(ctx, user));
-                } catch (e) {
-                    say(`[AI豆兑换] 失败: ${e.message || e}`);
-                }
-            }
-
-            // 周三充值日（hlwyxhdhub 的拼图抽奖）同样是独立活动页，自己换票
-            if (RUN_WED) {
-                try {
-                    lines.push(...await doWedAct(user));
-                } catch (e) {
-                    say(`[周三] 失败: ${e.message || e}`);
-                }
-            }
+            lines.push(...await runExtraActs(user, ctx));
 
             if (WED_SECKILL) {
                 try {
@@ -360,6 +332,63 @@ async function doSign(user) {
         say(`❌ ${e.message || e}`);
     }
     $.messages = $.messages.concat(lines);
+}
+
+// 签到之后的独立活动：两支都跑（当天已签过也要跑，之前整块嵌在「未签到」分支里，
+// 开关中途打开或 cron 之后补跑就永远不会执行）。重复执行靠各活动自身幂等挡：
+// 任务有 quota、兑换看 USED 状态、豆苗/追剧/周三查当天状态。
+// ctx 传 null 时只在建会话才建（mark/task 体系与 AI豆兑换吃主站会话，其余自己换票）。
+async function runExtraActs(user, ctx) {
+    const lines = [];
+    const say = t => { lines.push(t); $.log(t); };
+    const useCtx = async () => ctx || (ctx = (await openCtx(user)).ctx);
+
+    if (RUN_TASKS) {
+        try {
+            lines.push(...await doMarkTasks(await useCtx(), user));
+        } catch (e) {
+            say(`[任务] 失败: ${e.message || e}`);
+        }
+    }
+
+    // 追剧领福利是独立活动页，自己换票；放在秒杀之前，免得被抢券的等待挤掉
+    if (RUN_VIDEO) {
+        try {
+            lines.push(...await doVideoAct(user));
+        } catch (e) {
+            say(`[追剧] 失败: ${e.message || e}`);
+        }
+    }
+
+    // AI豆苗养成记走 dev.coc.10086.cn 独立域+独立凭证(ticket 现签 phone 头)，与主站会话无关
+    if (RUN_SEED) {
+        try {
+            lines.push(...await runSeed(user));
+        } catch (e) {
+            say(`[豆苗] 失败: ${e.message || e}`);
+        }
+    }
+
+    // AI豆兑换话费券复用签到会话：会真扣豆，无可兑时也报一行，别静悄悄跳过
+    // 8 点放量的卡点/等待在 runGold 内部，与每日秒杀同一套逻辑
+    if (RUN_GOLD) {
+        try {
+            lines.push(...await runGold(await useCtx(), user));
+        } catch (e) {
+            say(`[AI豆兑换] 失败: ${e.message || e}`);
+        }
+    }
+
+    // 周三充值日（hlwyxhdhub 的拼图抽奖）同样是独立活动页，自己换票
+    if (RUN_WED) {
+        try {
+            lines.push(...await doWedAct(user));
+        } catch (e) {
+            say(`[周三] 失败: ${e.message || e}`);
+        }
+    }
+
+    return lines;
 }
 
 // 建会话并查签到状态；首次若是会话问题，重建后再试一次
@@ -1270,9 +1299,34 @@ function goldPick(prizes, balance, skipIds) {
     return null;
 }
 
+// 今天放量时刻（epoch ms，按北京时间 HH:MM）
+function goldOpenMs() {
+    const d = new Date(Date.now() + 8 * 3600000);
+    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - 8 * 3600000 + GOLD_AT * 60000;
+}
+
+// 放量瞬间库存是陆续打开的：rushUntil 之前按 GOLD_INTERVAL 连查，命中即返回
+async function goldStockRush(ctx, target, rushUntil) {
+    let left;
+    for (let attempt = 1; attempt <= GOLD_MAX_ATTEMPTS; attempt++) {
+        const stock = await goldApi(ctx, 'checkStock', { prizeId: target.id });
+        left = (stock.data || {}).stock;
+        if (typeof left === 'number' && left > GOLD_MIN_STOCK) return left;
+        if (!rushUntil || Date.now() >= rushUntil) return left;
+        await $.wait(GOLD_INTERVAL);
+    }
+    return left;
+}
+
 async function runGold(ctx, user) {
     const lines = [];
     const say = t => { lines.push(t); $.log(t); };
+    // 离放量还远（超等待上限）就一行日志收工，一次请求都不发——凌晨那次常规签到不该被兑换拖住
+    const openSrv = goldOpenMs();
+    if (Date.now() < openSrv - GOLD_MAX_WAIT) {
+        $.log(`[AI豆兑换] 距放量 ${GOLD_AT_RAW} 还有 ${((openSrv - Date.now()) / 60000).toFixed(0)} 分钟，超过等待上限 ${GOLD_MAX_WAIT / 60000} 分钟，本次不执行（抢兑请另开放量前 1~2 分钟的定时）`);
+        return lines;
+    }
     let st;
     try {
         st = await goldState(ctx);
@@ -1293,6 +1347,18 @@ async function runGold(ctx, user) {
         $.log(`[AI豆兑换] 档位 ${name} ${Number(p.cost || 0)}豆 库存 ${stock}（${state}）`);
     });
 
+    // 逼近放量时刻：按服务器时间校准，等到放量前 GOLD_LEAD 毫秒才开火（与每日秒杀一致）
+    const srvMs = await serverNowMs(ctx);
+    const offsetMs = srvMs - Date.now();
+    $.log(`服务器时间 ${fmtCn(srvMs)}，本机时钟偏移 ${offsetMs >= 0 ? '+' : ''}${offsetMs.toFixed(0)} ms`);
+    if (srvMs < openSrv) {
+        const waitMs = openSrv - srvMs - GOLD_LEAD;
+        $.log(`[AI豆兑换] 距放量 ${(((waitMs + GOLD_LEAD)) / 1000).toFixed(1)} 秒，提前 ${GOLD_LEAD}ms 开火`);
+        await waitUntil(Date.now() + Math.max(0, waitMs), ctx);
+    }
+    // 刚放量的这段时间里库存陆续放开，checkStock 不足先别急着跳档
+    const rushUntil = openSrv - offsetMs + GOLD_RUSH_MS;
+
     const got = [], bad = [];
     // 碰过壁的档本次不再重试（列表每轮重取，只改本地对象挡不住）
     const skipIds = new Set();
@@ -1300,8 +1366,7 @@ async function runGold(ctx, user) {
         const cur = await goldState(ctx);
         const target = goldPick(cur.prizes, cur.balance, skipIds);
         if (!target) break;
-        const stock = await goldApi(ctx, 'checkStock', { prizeId: target.id });
-        const left = (stock.data || {}).stock;
+        const left = await goldStockRush(ctx, target, rushUntil);
         if (typeof left !== 'number' || left <= GOLD_MIN_STOCK) {
             $.log(`[AI豆兑换] ${target.name} 库存不足(${left})，看下一档`);
             skipIds.add(target.id);
@@ -1321,7 +1386,7 @@ async function runGold(ctx, user) {
         say(`[AI豆兑换] ${target.name} 失败：${reason}`);
         if (resp.data === 1) break;
     }
-    if (!got.length && !bad.length) $.log('[AI豆兑换] 本次无可兑档位（AI豆不足/已兑过/已抢光）');
+    if (!got.length && !bad.length) say(`[AI豆兑换] 无可兑档位（余额 ${balance} 豆：不足/已兑过/已抢光）`);
     return lines;
 }
 
@@ -1934,10 +1999,14 @@ function getEnv(...keys) {
     }
 }
 
+// BoxJS 的 boolean 项在 Quantumult X 里 $prefs.valueForKey 回的是真布尔，Loon/Surge 回字符串 'true'
+function isOn(v) { return v === true || v === 'true' || v === 1 || v === '1'; }
+function isOff(v) { return v === false || v === 'false' || v === 0 || v === '0'; }
+
 function debug(content, title = 'debug') {
     let start = `\n----- ${title} -----\n`;
     let end = `\n----- ${$.time('HH:mm:ss')} -----\n`;
-    if ($.is_debug === 'true') {
+    if ($.is_debug) {
         if (typeof content == 'string') $.log(start + content + end);
         else if (typeof content == 'object') $.log(start + $.toStr(content) + end);
     }
