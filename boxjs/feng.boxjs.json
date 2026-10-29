@@ -1750,6 +1750,97 @@
           "desc": "逐条打印积分接口的请求/响应，排查问题用；日志可能含 userid/sid，看完记得关掉"
         }
       ]
+    },
+    {
+      "id": "migu_sign",
+      "name": "咪咕音乐签到",
+      "author": "@Feng",
+      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/migu_sign.js",
+      "descs_html": [
+        "咪咕音乐 AI 豆中心：每日签到（新人七日/普通自动分流）、社区入口、听歌档位领奖；评论与彩铃设置是真实副作用（公开评论/改变本人铃音），默认关闭",
+        "账号只需手机号+密码：脚本按官方网页登录链路 passport.migu.cn 做 RSA(PKCS#1) 加密 → c.musicapp.migu.cn 换 pacmtoken → 用户资料，再生成安卓 8.9.5 原生 ce 并按账号缓存，之后不再重复登录；密码只存在本机 boxjs",
+        "原生接口（听歌状态/上报/领奖/评论/彩铃）按 V005 现场签名（请求路径+ce+13 位时间戳+请求体），与 py 版逐字节一致；H5 福利任务复用同一账号的 uid/deviceId",
+        "听歌开启后下载完整免费音频，按 MP3 实际时长真实计时，每 10 秒上报一次并独立查询服务端增量，增量不足即停止不虚报；档位全部达标提前结束，跑满约 30 分钟，建议 Node/青龙，timeout 设 3600",
+        "签到/社区/听歌领奖每天自动执行；评论、彩铃设置与结算都有本地防重记录，结果不确定时当天不重试；密码与完整手机号不会出现在日志和通知里"
+      ],
+      "icons": [
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/migu.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/migu.png"
+      ],
+      "keys": [
+        "migu_data",
+        "migu_listen",
+        "migu_listen_seconds",
+        "migu_comment",
+        "migu_comment_text",
+        "migu_ringtone",
+        "migu_ip",
+        "migu_debug"
+      ],
+      "settings": [
+        {
+          "id": "migu_data",
+          "name": "咪咕账号",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 5,
+          "placeholder": "13800000000@密码",
+          "desc": "每行或 & 分隔「手机号@密码」；密码含 & 或 @ 时改用 JSON：[{\"phone\":\"13800000000\",\"password\":\"...\"}]。只填本人授权账号，密码会明文保存在本机 boxjs"
+        },
+        {
+          "id": "migu_listen",
+          "name": "真实计时听歌",
+          "val": true,
+          "type": "boolean",
+          "desc": "默认开启：下载完整免费音频、按 MP3 实际时长计时、每 10 秒上报一次并独立核对服务端增量。关闭后只领取服务端已可领的档位，不播放不上报"
+        },
+        {
+          "id": "migu_listen_seconds",
+          "name": "单次最多实播秒数",
+          "val": "1800",
+          "type": "text",
+          "placeholder": "1800",
+          "desc": "1..1800；服务端最高档需 1785 秒，全部档位达标会提前结束。跑满约 30 分钟，建议用 Node/青龙并给足脚本超时"
+        },
+        {
+          "id": "migu_comment",
+          "name": "发布歌曲评论",
+          "val": false,
+          "type": "boolean",
+          "desc": "默认关闭。打开后每天最多公开发一条评论（正文见下），会真实公开可见；列表与福利任务都确认后才算完成，结果不确定当天不重发"
+        },
+        {
+          "id": "migu_comment_text",
+          "name": "评论正文",
+          "val": "旋律很好听，支持好音乐。",
+          "type": "text",
+          "placeholder": "旋律很好听，支持好音乐。",
+          "desc": "1..120 字单行文字，不能含链接、网址或 @"
+        },
+        {
+          "id": "migu_ringtone",
+          "name": "设置免费彩铃",
+          "val": false,
+          "type": "boolean",
+          "desc": "默认关闭。打开后在本月彩铃任务未完成时，从官方「一日一铃」免费库随机设置一条，会改变本人彩铃；只设置鉴权通过、资费为 0 的免费库内容，不开通/购买/续费"
+        },
+        {
+          "id": "migu_ip",
+          "name": "生成 ce 的客户端 IP",
+          "val": "",
+          "type": "text",
+          "placeholder": "留空自动",
+          "desc": "可选：写入 ce 的 ip 字段，留空时 Node 取本机内网地址、其它环境取出口 IP。只影响新登录生成的配置"
+        },
+        {
+          "id": "migu_debug",
+          "name": "调试模式",
+          "val": false,
+          "type": "boolean",
+          "desc": "逐条打印接口路径与请求长度，不含密码、ce、token 或音频地址"
+        }
+      ]
     }
   ]
 }

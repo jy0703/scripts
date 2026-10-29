@@ -1,0 +1,5 @@
+#!name=咪咕音乐签到
+#!desc=咪咕音乐 AI 豆中心每日签到、社区入口、听歌计时上报与档位领奖，支持多账号（手机号+密码登录，自动换 ce 并缓存；评论/彩铃默认关闭）
+
+[Script]
+咪咕音乐签到 = type=cron,cronexp="0 8 * * *",wake-system=1,timeout=3600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/migu_sign.js,script-update-interval=0
