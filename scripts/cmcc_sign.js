@@ -5,10 +5,11 @@
  * 环境：NE / Node.js，多账号；账号参数(App 票据/省市)由本脚本 GetCookie 抓取后存入 cmcc_data
  * 环境变量：cmcc_data / cmcc_claim(默认开) / cmcc_task / cmcc_seckill / cmcc_sk_min(默认 11:00) / cmcc_video /
  *          cmcc_seed / cmcc_seed_channel / cmcc_gold(默认关，会真扣 AI 豆) / cmcc_gold_at(默认 08:00 放量时刻) /
- *          cmcc_wed / cmcc_wed_sk /
- *          cmcc_wed_sk_at(留空=听服务端场次) / cmcc_task_skip_days / cmcc_debug；cmcc_task_fail 自动维护
- * 执行次序：可选活动只在「当天签到已闭环」之后跑（本轮签的、或 App 里已签过的都算），
- *          所以 8 点后补跑一次也能兑，不必非得挤在签到那一轮
+ *          cmcc_wed / cmcc_wed_sk / cmcc_wed_sk_at(留空=听服务端场次) / cmcc_task_skip_days / cmcc_debug；cmcc_task_fail 自动维护
+ * 执行次序（定时 `58 0,7,11 * * *`）：00:58 那轮做签到+领奖+AI豆任务+追剧+豆苗+周三拼图；
+ *          07:58 那轮先打周三场次秒杀（仅周三），再按「放量窗口(08:00 前 5 分钟~后 5 分钟)」抢 AI豆兑换；
+ *          11:58 那轮只抢签到页日常秒杀（cmcc_sk_min 默认 11:00 之后）。
+ *          活动绑签到轮、兑换绑放量窗口，所以窗口外的定时一次兑换请求都不发
 
 
 ------------------ Surge 配置 ------------------
@@ -17,7 +18,7 @@
 中国移动获取Cookie = type=http-request,pattern=^https?:\/\/wx\.10086\.cn\/qwhdsso\/appTokenLogin,requires-body=1,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,script-update-interval=0
 中国移动抓autoLogin传参 = type=http-request,pattern=^https?:\/\/client\.app\.coc\.10086\.cn\/.*uamrandcodelogin\/autoLogin,requires-body=1,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,script-update-interval=0
 
-中国移动签到 = type=cron,cronexp="0 1 * * *",wake-system=1,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,script-update-interval=0
+中国移动签到 = type=cron,cronexp="58 0,7,11 * * *",wake-system=1,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,script-update-interval=0
 
 [MITM]
 hostname = wx.10086.cn, client.app.coc.10086.cn
@@ -28,7 +29,7 @@ hostname = wx.10086.cn, client.app.coc.10086.cn
 http-request ^https?:\/\/wx\.10086\.cn\/qwhdsso\/appTokenLogin script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,requires-body=true,timeout=600,tag=中国移动获取Cookie
 http-request ^https?:\/\/client\.app\.coc\.10086\.cn\/.*uamrandcodelogin\/autoLogin script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,requires-body=true,timeout=600,tag=中国移动抓autoLogin传参
 
-cron "0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js, timeout=600, tag=中国移动签到
+cron "58 0,7,11 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js, timeout=600, tag=中国移动签到
 
 [MITM]
 hostname = wx.10086.cn, client.app.coc.10086.cn
@@ -40,7 +41,7 @@ hostname = wx.10086.cn, client.app.coc.10086.cn
 ^https?:\/\/client\.app\.coc\.10086\.cn\/.*uamrandcodelogin\/autoLogin url script-request-body https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js
 
 [task_local]
-"0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js, tag=中国移动签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/cmcc.png, enabled=true
+"58 0,7,11 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js, tag=中国移动签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/cmcc.png, enabled=true
 
 [MITM]
 hostname = wx.10086.cn, client.app.coc.10086.cn
@@ -111,6 +112,7 @@ const GOLD_AT = hmToMinutes(GOLD_AT_RAW);
 const GOLD_LEAD = 400;          // 提前开火(ms)，抵消网络延迟
 const GOLD_INTERVAL = 350;      // 放量瞬间连查库存的间隔(ms)
 const GOLD_MAX_WAIT = 300000;   // 距放量超过该时长就不干等，本次跳过(ms)
+const GOLD_AFTER_WAIT = 300000; // 放量后还允许补打的时长(ms)——两个窗口合起来界定"哪一次定时该抢兑"
 const GOLD_MAX_ATTEMPTS = 200;  // 单档连查库存的发数上限
 const GOLD_RUSH_MS = 70000;     // 放量后仍继续连查的时长上限(ms)
 // 周三充值日(hlwyxhdhub/wedrecharge)：拼图抽奖主流程 + 场次秒杀，同一 SSO 通道但要按该活动页换票
@@ -239,8 +241,9 @@ function GetAutoLogin() {
     }
 }
 
-// 任务: 建会话 → App 端签到 → (可选)连签奖励/AI豆任务/追剧领福利/周三充值日 → (可选)抢券
-// 当天签到完成后(user.signDay)，再次执行本脚本只跑抢券(签到页秒杀/周三场次秒杀)，不再签到/领奖/任务/追剧/拼图；本周已抢中的账号连抢券请求也不发
+// 任务: 建会话 → App 端签到 → (可选)连签奖励/AI豆任务/追剧领福利/周三充值日 → (可选)AI豆兑换 → (可选)抢券
+// 当天签到完成后(user.signDay)，再次执行本脚本只跑抢券(签到页秒杀/周三场次秒杀)与放量窗口内的 AI豆兑换，
+// 不再签到/领奖/任务/追剧/拼图；本周已抢中的账号连抢券请求也不发
 // 结果边产生边 $.log（say），通知内容仍攒在 lines 里最后一起推送
 async function doSign(user) {
     const lines = [];
@@ -253,17 +256,28 @@ async function doSign(user) {
             const dailySk = SECKILL && !alreadyWon && skWindowOpen();
             const wedSk = WED_SECKILL && beijingWeekday() === WED_DAY && user.wedSkDay !== today;
             const wedSkDone = WED_SECKILL && beijingWeekday() === WED_DAY && user.wedSkDay === today;
-            // 当天签到已闭环也要跑活动：开关是中途才开的、或 cron 之后手动补跑的，之前整块被这里跳过
-            lines.push(...await runExtraActs(user, null));
-            if (!dailySk && !wedSk) {
+            // 周三场次先打（同一轮里它在前、兑换在后），打完再排兑换
+            if (wedSk) {
+                try {
+                    lines.push(...await doWedSeckill(user));
+                } catch (e) {
+                    say(`[周三·秒杀] 失败: ${e.message || e}`);
+                }
+            }
+            // 兑换按放量窗口自行取舍：只有落在窗口里的那一次定时会真打（07:58 那次）
+            lines.push(...await runGoldAct(user, null));
+            if (dailySk) {
+                try {
+                    lines.push(...await doSeckill(await exchangeSession(user), user));
+                } catch (e) {
+                    say(`[秒杀] 失败: ${e.message || e}`);
+                }
+            } else if (!wedSk) {
                 say(`今日签到已完成，本次无抢券任务`);
                 if (alreadyWon) $.log(`[秒杀] 本周已于 ${user.skWinDay.slice(4, 6)}-${user.skWinDay.slice(6, 8)} 抢到${user.skWinPrize ? `「${user.skWinPrize}」` : ''}，本周不再参与`);
                 else if (SECKILL && !skWindowOpen()) $.log(`[秒杀] 触发时刻未到 ${SK_MIN_OPEN_RAW}，本次不执行`);
                 if (wedSkDone) $.log('[周三·秒杀] 今天已执行过，本次不再打');
                 else if (WED_SECKILL && beijingWeekday() !== WED_DAY) $.log('[周三·秒杀] 今天(北京时间)不是周三，本次跳过');
-            } else {
-                if (dailySk) lines.push(...await doSeckill(await exchangeSession(user), user));
-                if (wedSk) lines.push(...await doWedSeckill(user));
             }
         } else {
             const opened = await openCtx(user);
@@ -312,6 +326,7 @@ async function doSign(user) {
 
             lines.push(...await runExtraActs(user, ctx));
 
+            // 周三场次先打，再排兑换（万一这天这次才是签到轮，顺序也一致）
             if (WED_SECKILL) {
                 try {
                     lines.push(...await doWedSeckill(user));
@@ -319,6 +334,8 @@ async function doSign(user) {
                     say(`[周三·秒杀] 失败: ${e.message || e}`);
                 }
             }
+
+            lines.push(...await runGoldAct(user, ctx));
 
             if (SECKILL) {
                 try {
@@ -334,10 +351,10 @@ async function doSign(user) {
     $.messages = $.messages.concat(lines);
 }
 
-// 签到之后的独立活动：两支都跑（当天已签过也要跑，之前整块嵌在「未签到」分支里，
-// 开关中途打开或 cron 之后补跑就永远不会执行）。重复执行靠各活动自身幂等挡：
-// 任务有 quota、兑换看 USED 状态、豆苗/追剧/周三查当天状态。
-// ctx 传 null 时只在建会话才建（mark/task 体系与 AI豆兑换吃主站会话，其余自己换票）。
+// 签到那一轮之后的独立活动：只在「本轮执行了签到」时跑（user.signDay 已是今天则整块跳过，
+// 同一天补跑不会重复做任务）。AI豆兑换的 8 点卡点在 runGold 内部，所以抢兑要把定时
+// 放在放量前 1~2 分钟，让同一轮先签到再等到开兑。
+// ctx 由签到那轮传进来；传 null 时只在建会话才建（mark/task 体系与 AI豆兑换吃主站会话）。
 async function runExtraActs(user, ctx) {
     const lines = [];
     const say = t => { lines.push(t); $.log(t); };
@@ -369,15 +386,7 @@ async function runExtraActs(user, ctx) {
         }
     }
 
-    // AI豆兑换话费券复用签到会话：会真扣豆，无可兑时也报一行，别静悄悄跳过
-    // 8 点放量的卡点/等待在 runGold 内部，与每日秒杀同一套逻辑
-    if (RUN_GOLD) {
-        try {
-            lines.push(...await runGold(await useCtx(), user));
-        } catch (e) {
-            say(`[AI豆兑换] 失败: ${e.message || e}`);
-        }
-    }
+    // AI豆兑换不在这里：它绑放量窗口，由 runGoldAct 在两支各自调用
 
     // 周三充值日（hlwyxhdhub 的拼图抽奖）同样是独立活动页，自己换票
     if (RUN_WED) {
@@ -1299,10 +1308,28 @@ function goldPick(prizes, balance, skipIds) {
     return null;
 }
 
-// 今天放量时刻（epoch ms，按北京时间 HH:MM）
-function goldOpenMs() {
+// 今天北京时间 HH:MM 对应的 epoch ms
+function beijingMinuteMs(atMin) {
     const d = new Date(Date.now() + 8 * 3600000);
-    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - 8 * 3600000 + GOLD_AT * 60000;
+    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - 8 * 3600000 + atMin * 60000;
+}
+
+// 今天放量时刻（epoch ms，按北京时间 HH:MM）
+function goldOpenMs() { return beijingMinuteMs(GOLD_AT); }
+
+// 放量窗口：前 GOLD_MAX_WAIT（够它等到开兑瞬间）~ 后 GOLD_AFTER_WAIT（补打）。
+// 一天跑几次定时都只有落在窗口里的那一次会真去抢兑，其余一次请求都不发。
+function goldWindowOpen() {
+    const since = Date.now() - goldOpenMs();
+    return since >= -GOLD_MAX_WAIT && since <= GOLD_AFTER_WAIT;
+}
+
+// 周三场次秒杀归「本场次开抢那一轮」：cmcc_wed_sk_at 设了按它，没设按 App 显示的 08:00（与抢兑同轮）。
+// 这样 11:58 那轮只打日常秒杀，不会把周三这一场顺带打掉。
+function wedSkRoundOpen() {
+    const at = WSK_AT_CFG ? hmToMinutes(WSK_AT_CFG) : GOLD_AT;
+    const since = Date.now() - beijingMinuteMs(at);
+    return since >= -WSK_MAX_WAIT && since <= WSK_MAX_WAIT;
 }
 
 // 放量瞬间库存是陆续打开的：rushUntil 之前按 GOLD_INTERVAL 连查，命中即返回
@@ -1321,12 +1348,6 @@ async function goldStockRush(ctx, target, rushUntil) {
 async function runGold(ctx, user) {
     const lines = [];
     const say = t => { lines.push(t); $.log(t); };
-    // 离放量还远（超等待上限）就一行日志收工，一次请求都不发——凌晨那次常规签到不该被兑换拖住
-    const openSrv = goldOpenMs();
-    if (Date.now() < openSrv - GOLD_MAX_WAIT) {
-        $.log(`[AI豆兑换] 距放量 ${GOLD_AT_RAW} 还有 ${((openSrv - Date.now()) / 60000).toFixed(0)} 分钟，超过等待上限 ${GOLD_MAX_WAIT / 60000} 分钟，本次不执行（抢兑请另开放量前 1~2 分钟的定时）`);
-        return lines;
-    }
     let st;
     try {
         st = await goldState(ctx);
@@ -1348,6 +1369,7 @@ async function runGold(ctx, user) {
     });
 
     // 逼近放量时刻：按服务器时间校准，等到放量前 GOLD_LEAD 毫秒才开火（与每日秒杀一致）
+    const openSrv = goldOpenMs();
     const srvMs = await serverNowMs(ctx);
     const offsetMs = srvMs - Date.now();
     $.log(`服务器时间 ${fmtCn(srvMs)}，本机时钟偏移 ${offsetMs >= 0 ? '+' : ''}${offsetMs.toFixed(0)} ms`);
@@ -1387,6 +1409,24 @@ async function runGold(ctx, user) {
         if (resp.data === 1) break;
     }
     if (!got.length && !bad.length) say(`[AI豆兑换] 无可兑档位（余额 ${balance} 豆：不足/已兑过/已抢光）`);
+    return lines;
+}
+
+// 兑换单独一层：它绑"放量窗口"而不是绑签到轮，所以一天三次定时里只有 07:58 那次会真打。
+// 签到轮如果在窗口内（例如凌晨那次没跑成，早上这次才第一次签到）也照样执行。
+async function runGoldAct(user, ctx) {
+    const lines = [];
+    const say = t => { lines.push(t); $.log(t); };
+    if (!RUN_GOLD) return lines;
+    if (!goldWindowOpen()) {
+        $.log(`[AI豆兑换] 不在放量窗口（${GOLD_AT_RAW} 前 ${GOLD_MAX_WAIT / 60000} 分钟 ~ 后 ${GOLD_AFTER_WAIT / 60000} 分钟），本次不执行`);
+        return lines;
+    }
+    try {
+        lines.push(...await runGold(ctx || (await openCtx(user)).ctx, user));
+    } catch (e) {
+        say(`[AI豆兑换] 失败: ${e.message || e}`);
+    }
     return lines;
 }
 
@@ -1593,6 +1633,11 @@ async function wedReceive(ctx, state) {
 async function doWedSeckill(user) {
     const lines = [];
     const say = t => { lines.push(t); $.log(t); };
+    // 先判本轮归不归它（00:58 签到轮、11:58 日常秒杀轮都不碰），窗口外一次请求都不发
+    if (!wedSkRoundOpen()) {
+        $.log(`[周三·秒杀] 不在本场次开抢窗口（${WSK_AT_CFG || '08:00'} 前 ${WSK_MAX_WAIT / 60000} 分钟 ~ 后 ${WSK_MAX_WAIT / 60000} 分钟），本轮不执行`);
+        return lines;
+    }
     if (beijingWeekday() !== WED_DAY) { $.log('[周三·秒杀] 今天(北京时间)不是周三，本次跳过'); return lines; }
     // 本周三已经打过（无论中没中）就不再重复：一周就这一场，再打只会白耗会话与库存
     if (user.wedSkDay === $.time('yyyyMMdd')) { $.log('[周三·秒杀] 今天已执行过，本次不再打'); return lines; }
