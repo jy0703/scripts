@@ -1,6 +1,6 @@
 /**
  * 脚本名称：咪咕音乐签到
- * 活动规则：咪咕音乐 AI 豆中心：每日签到、社区入口、歌曲评论、彩铃、听歌领 AI 豆
+ * 活动规则：咪咕音乐 AI豆中心：每日签到、社区入口、歌曲评论、彩铃、听歌领 AI豆
  * 脚本说明：账号由 boxjs migu_data 提供（手机号@密码），脚本按官方网页登录链路
  *          passport.migu.cn（RSA 加密手机号/密码）→ c.musicapp.migu.cn 换 pacmtoken → 用户资料，
  *          再用 uid/手机号/本机出口 IP/deviceId 生成安卓 8.9.5 原生 ce，逐账号缓存复用。
@@ -18,7 +18,7 @@
  *          - migu_ip            可选：生成 ce 时使用的客户端地址，留空用本机/出口 IP
  *          - migu_debug         调试模式
  *          Node 环境变量同名可用
- * 更新时间：2026-10-29
+ * 更新时间：2026-10-30
 
 ------------------ Surge 配置 ------------------
 
@@ -312,6 +312,17 @@ function formEncode(obj) {
 function maskPhone(phone) {
     const s = String(phone || '');
     return s.length >= 8 ? s.slice(0, 3) + '****' + s.slice(-4) : s;
+}
+
+function secText(ms) {
+    return Math.round((ms || 0) / 1000) + ' 秒';
+}
+
+function claimText(list) {
+    if (!list || !list.length) return '';
+    let total = 0;
+    list.forEach(function (x) { if (x && typeof x.num === 'number') total += x.num; });
+    return ' 已领 ' + list.length + ' 档' + (total > 0 ? ' +' + total + ' AI豆' : '');
 }
 
 function todayBeijing() {
@@ -871,7 +882,7 @@ class MiguClient {
 
     async balance() {
         const data = await this.send('GET', API_ORIGIN, BALANCE);
-        if (!data || typeof data.availableNum !== 'number' || data.availableNum < 0) throw new MiguError('AI 豆余额结构变化');
+        if (!data || typeof data.availableNum !== 'number' || data.availableNum < 0) throw new MiguError('AI豆余额结构变化');
         return data.availableNum;
     }
 
@@ -882,7 +893,7 @@ class MiguClient {
         if (this.journal) this.journal.markSettled(name);
         const data = await this.send('GET', API_ORIGIN, '/act-jbzx/music-bean-accumulate');
         if (!data || typeof data.num !== 'number' || data.num < 0) throw new MiguError('结算结果无法核验');
-        $.log('奖励结算 num=' + data.num + '（不是总余额）');
+        $.log('AI豆结算：+' + data.num);
         return data.num;
     }
 
@@ -1237,7 +1248,9 @@ class MiguClient {
             const cand = tasks.filter(function (t) { return t && typeof t.status === 'number' && t.status === 1; })[0];
             if (!cand) return claimed;
             const id = cand.id;
-            if (typeof id !== 'string' || !/^SONG_[1-7]$/.test(id) || claimed.indexOf(id) >= 0) throw new MiguError('待领档位不是已验证的听歌任务');
+            if (typeof id !== 'string' || !/^SONG_[1-7]$/.test(id) || claimed.some(function (x) { return x.id === id; })) throw new MiguError('待领档位不是已验证的听歌任务');
+            const tierName = typeof cand.name === 'string' && cand.name ? cand.name : id;
+            const tierNum = typeof cand.num === 'number' && cand.num >= 0 ? cand.num : null;
             await this.sendRaw('POST', API_ORIGIN, RECEIVE_REWARD, JSON.stringify({ taskId: id }), 'application/json', { activityId: 'MAC_KF_CBH_JBZX' });
             let confirmed = false;
             const delays = [1, 2, 4];
@@ -1248,8 +1261,8 @@ class MiguClient {
                 if (tier.status === 2) { confirmed = true; break; }
             }
             if (!confirmed) throw new MiguError(id + ' 领取后未确认 status=2，不重复提交');
-            claimed.push(id);
-            $.log(id + '：领取后已独立核对 status=2');
+            claimed.push({ id: id, name: tierName, num: tierNum });
+            $.log(tierName + '：' + (tierNum === null ? '' : '+' + tierNum + ' AI豆，') + '已独立核对 status=2');
         }
         return claimed;
     }
@@ -1268,7 +1281,7 @@ class MiguClient {
             const claimed = await this.claimListening();
             return { skipped: true, added: 0, claimed: claimed, before: before, after: before };
         }
-        $.log('听歌：服务端 ' + before + ' ms，本次最多实播 ' + remaining + ' 秒');
+        $.log('听歌：服务端 ' + secText(before) + '，本次最多实播 ' + Math.round(remaining) + ' 秒');
         let total = 0;
         while (remaining >= 1) {
             const info = await this.listenInfo();
@@ -1286,9 +1299,9 @@ class MiguClient {
                 total += measured;
                 remaining -= measured / 1000;
                 trackRemaining -= measured / 1000;
-                $.log('本区间实播 ' + measured + ' ms，累计 ' + total + ' ms');
+                $.log('本区间实播 ' + secText(measured) + '，累计 ' + secText(total));
                 before = await this.reportInterval(measured, before);
-                $.log('独立查询确认服务端时长：' + before + ' ms');
+                $.log('独立查询确认服务端时长：' + secText(before));
                 if (listenGoalReached(this.lastSongState)) { remaining = 0; break; }
             }
         }
@@ -1408,7 +1421,7 @@ async function runAccount(account, index) {
         saveNativeCache(key, opened.ctx);
         $.log('登录后四项只读核验通过，已缓存本账号原生配置');
     }
-    $.log('只读核验：听歌 ' + info.ms + ' ms，任务 ' + info.taskCount + ' 项，AI 豆 ' + info.balance);
+    $.log('只读核验：听歌 ' + secText(info.ms) + '，任务 ' + info.taskCount + ' 项，AI豆 ' + info.balance);
 
     const lines = [];
     const fail = function (name, e) {
@@ -1434,17 +1447,25 @@ async function runAccount(account, index) {
     try {
         if ($.listenOn) {
             const r = await client.listen($.seconds);
-            const claimed = r.claimed && r.claimed.length ? ' 已领 ' + r.claimed.length + ' 档' : '';
+            const claimed = claimText(r.claimed);
             if (r.skipped) {
                 lines.push('✅ 听歌: 已达标，跳过播放' + claimed);
             } else {
-                lines.push('✅ 听歌: 实播 ' + Math.round(r.added / 1000) + ' 秒，服务端 ' + Math.round(r.after / 1000) + ' 秒' + claimed);
+                lines.push('✅ 听歌: 实播 ' + secText(r.added) + '，服务端 ' + secText(r.after) + claimed);
             }
         } else {
             const claimed = await client.claimListening();
-            lines.push('✅ 听歌: ' + (claimed.length ? '已领 ' + claimed.length + ' 档' : '无待领档位'));
+            lines.push('✅ 听歌:' + (claimed.length ? claimText(claimed) : ' 无待领档位'));
         }
     } catch (e) { fail('听歌', e); }
+
+    try {
+        const afterBalance = await client.balance();
+        const delta = afterBalance - info.balance;
+        const sign = delta >= 0 ? '+' : '';
+        lines.push('✅ AI豆: ' + info.balance + ' → ' + afterBalance + '（' + sign + delta + '）');
+        $.log('AI豆：' + info.balance + ' → ' + afterBalance + '（' + sign + delta + '）');
+    } catch (e) { fail('AI豆', e); }
 
     return { label: label, lines: lines };
 }

@@ -1,0 +1,21 @@
+#!name = GitHub Private Access
+#!desc = 让 Loon 自己发起的请求可以访问私有仓库链接（自动带 GitHub token）；默认只匹配 jy0703 名下的 raw/gist 链接，token 留空则规则不生效
+#!author = Fengzzzz
+#!homepage = https://github.com/jy0703/scripts
+#!icon = https://raw.githubusercontent.com/jy0703/scripts/main/icons/github.png
+#!tag = 功能增强
+#!type = normal
+#!system = IOS,iPadOS,macOS
+#!system_version = 15.0
+#!loon_version = 3.5.3
+#!date = 2026-10-30
+
+[Argument]
+username = input,"^https:\/\/(?:raw|gist)\.githubusercontent\.com\/jy0703\/",tag=用户名,desc=默认只匹配 jy0703 名下的 raw/gist 链接；只放行某个仓库可改成 `^https:\/\/(?:raw|gist)\.githubusercontent\.com\/jy0703\/scripts\/`，换账号就改成你的 GitHub 用户名
+token = input,"",tag=token,desc=填写你自己的 GitHub PAT（只给 repo 读权限即可），留空时规则不生效
+
+[rewrite]
+request if ${url} ~= ${username} && ${token} ~= /^\S+$/ && ${request.header['user-agent']} ~= /^Loon/ then request.header.set("Authorization", "token ${token}")
+
+[MITM]
+hostname = raw.githubusercontent.com, gist.githubusercontent.com
