@@ -293,13 +293,18 @@ function rewardsOf(text) {
 // 反过来，若 App 已经回到默认值而这里还压着旧覆盖，就把那一项撤掉，免得一直用错期的参数跑
 function saveCfg(patch) {
     const cur = $.toObj($.getdata(CFG_KEY) || '', {}) || {};
-    const upd = [], rst = [];
-    for (const [k, v] of Object.entries(patch)) {
+    const valid = {};
+    for (const [k, v] of Object.entries(patch || {})) {
         if (!isCfgVal(k, v)) continue;
-        const val = k === 'clockInRewards' ? v.map(String) : String(v).trim();
-        if (JSON.stringify(cur[k]) === JSON.stringify(val)) continue;
+        valid[k] = k === 'clockInRewards' ? v.map(String) : String(v).trim();
+    }
+    if (!Object.keys(valid).length) return;            // 这条请求里没有可用参数
+    const ackKey = CFG_KEY + '_ack';
+    const upd = [], rst = [];
+    for (const [k, val] of Object.entries(valid)) {
+        if (JSON.stringify(cur[k]) === JSON.stringify(val)) continue;                  // 与已存值相同
         if (JSON.stringify(DEFAULT_CFG[k]) === JSON.stringify(val)) {
-            if (cur[k] === undefined) continue;
+            if (cur[k] === undefined) continue;                                        // 本来就走默认值
             delete cur[k];
             rst.push(k);
             continue;
@@ -307,13 +312,19 @@ function saveCfg(patch) {
         cur[k] = val;
         upd.push(k);
     }
-    if (!upd.length && !rst.length) return;
-    cur.capturedAt = new Date().toISOString();
-    $.setdata($.toStr(cur), CFG_KEY);
-    const parts = [];
-    if (upd.length) parts.push('更新 ' + upd.join('/'));
-    if (rst.length) parts.push('回落默认 ' + rst.join('/'));
-    const msg = '🎉已抓到活动参数：' + parts.join(' · ');
+    let msg = '';
+    if (upd.length || rst.length) {
+        const parts = [];
+        if (upd.length) parts.push('更新 ' + upd.join('/'));
+        if (rst.length) parts.push('回落默认 ' + rst.join('/'));
+        msg = '🎉已抓到活动参数：' + parts.join(' · ');
+        cur.capturedAt = new Date().toISOString();
+        $.setdata($.toStr(cur), CFG_KEY);
+    } else if ($.getdata(ackKey) !== JSON.stringify(valid)) {
+        msg = '✅已抓到活动参数（与内置默认值一致，不用写入）：' + Object.keys(valid).join('/');   // 一组值只确认一次
+    }
+    if (!msg) return;
+    $.setdata(JSON.stringify(valid), ackKey);
     $.Messages.push(msg);
     $.log(msg);
 }

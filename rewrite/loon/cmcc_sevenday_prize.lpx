@@ -7,7 +7,7 @@
 #!type = normal
 
 [Argument]
-capture = switch,false,tag=捕获活动参数,desc=打开后进一次「每日登录活动」页（七日打卡/天天来夺宝），把抽奖与打卡的 activityId、pageId、channelId 和七日金额表写进 cmcc_sevenday_prize_cfg，抓完建议关闭
+capture = switch,false,tag=捕获活动参数,desc=打开后进一次「每日登录活动」页（七日打卡/天天来夺宝），把抽奖与打卡的 activityId、pageId、channelId 和七日金额表写进 cmcc_sevenday_prize_cfg；抓到会推一条确认（与内置默认值一致时不写参数，只确认一次），抓完建议关闭
 cronExpression = input,"5 8 * * *",tag=定时参数,desc=这里需要输入符合 CRON 表达式的参数
 
 [Script]
