@@ -217,13 +217,12 @@ async function runAccount(account) {
         if (st.code === '40') { say('❌ User-Token 被拒（code=40）：重抓一次 autoLogin 再跑'); return; }
         if (String(st.code) !== '0') { say(`❌ 查次数: ${st.code} ${st.message || ''}`); return; }
         left = Number((st.data || {}).dayRemainNum || 0);
-        $.log(`[夺宝] 今日可抽 ${left} 次`);
+        $.log(left <= 0 ? '[夺宝] 今日可抽 0 次，不抽奖' : `[夺宝] 今日可抽 ${left} 次`);
     }
 
     // ④ 抽奖：次数全看服务端给的 dayRemainNum
     let n = 0;
     const drew = [];
-    if (left <= 0) $.log('[夺宝] 今天没有次数');
     while (left > 0) {
         n++;
         const r = await cocPost('/coc/activities/prize/templatePrize', { activityId: cfg.drawActivityId, touchCode: cfg.touchCode });
