@@ -1,7 +1,8 @@
 /**
  * 脚本名称：移动七日夺宝
  * 活动规则：中国移动 App「每日登录活动」H5 —— 七日打卡分百万（连续打卡领奖）+ 天天来夺宝（每天 1 次，打卡获得）
- * 脚本说明：全自动、本地零加密（凭证复用「中国移动签到」抓的 autoLogin 传参，加密与换票全在取凭证网关里）
+ * 脚本说明：全自动、本地零加密（加密与换票全在取凭证网关里）：换 User-Token 先用 cmcc_data 里的大网 uid
+ *            （cmcc_sign 换票时顺手写入，不顶号），换不到才回落到重放「中国移动签到」抓的 autoLogin 传参（会顶号）
  * 环境变量：cmcc_autologin_data(由 cmcc_sign 抓) / cmcc_sevenday_prize_cfg(本脚本抓) / @tools.address / @tools.token / cmcc_sevenday_prize_phone(兜底手机号) / cmcc_sevenday_prize_debug
  * 更新时间：2026-10-31
 
@@ -123,8 +124,37 @@ async function gatewayTools(path, body) {
     });
 }
 
-// 换 User-Token：网关一次调用内部串完「换大网票 → 签 uid → loginCheck」，活动参数一起带上去（网关用它拼 referer）
+// cmcc_data 里找「中国移动签到」换票时存下的大网 uid：有它就只走 loginCheck，不重放 autoLogin（不顶号、不惹风控）
+function pickSessionUid() {
+    const arr = $.toObj($.getdata('cmcc_data'), []) || [];
+    const hits = (Array.isArray(arr) ? arr : []).filter((u) => u && u.sessionUid);
+    if (!hits.length) return null;
+    if (hits.length > 1) $.log(`[凭证] cmcc_data 里有 ${hits.length} 个带大网 uid 的账号，先用第一个`);
+    const u = hits[0];
+    let phone = '';
+    try { const p = BigInt('0x' + String(u.userCheckId)).toString(); if (/^1\d{10}$/.test(p)) phone = p; } catch (e) { }
+    return { sessionUid: String(u.sessionUid), phone };
+}
+
+// 换 User-Token：先用 cmcc_data 里的大网 uid（不顶号），换不到（没有/过期/被拒）才重放 autoLogin
 async function fetchUserToken(autologin) {
+    const u = pickSessionUid();
+    if (u) {
+        let why = '';
+        try {
+            const t = await gatewayTools('/api/cmcc/usertoken', { sessionUid: u.sessionUid, cfg: pickCfg() });
+            if (t && t.userToken) {
+                if (!t.phone) t.phone = u.phone;
+                $.log(`[凭证] 用 cmcc_data 的大网 uid 换到 User-Token（${String(t.userToken).length} 字符，没重放 autoLogin）`);
+                return t;
+            }
+            why = String((t && (t.error || t.message)) || '响应为空').slice(0, 90);
+        } catch (e) { why = String(e.message || e).slice(0, 90); }
+        $.log(`[凭证] ⚠️ 大网 uid 没换出 User-Token（${why}），回落到 autoLogin 重放`);
+    }
+    if (!autologin || !autologin.url || !autologin.body) {
+        throw new Error(u ? '大网 uid 换不到、又没有 cmcc_autologin_data 可重放：在「中国移动签到」插件开「捕获 autoLogin」进一次 App' : `既没有 cmcc_data 里的大网 uid，也没有 ${AUTOLOGIN_KEY}：先在签到插件开「捕获 autoLogin」抓一次传参`);
+    }
     const body = Object.assign({}, autologin, { cfg: pickCfg() });
     let r = null, why = '';
     for (let attempt = 1; attempt <= 3; attempt++) {
@@ -134,12 +164,13 @@ async function fetchUserToken(autologin) {
             r = null;
             why = String(e.message || e);
         }
-        if (r && r.userToken) return r;
+        if (r && r.userToken) { $.log('[凭证] 用 autoLogin 重放换到 User-Token（本次会顶掉 App 当前登录）'); return r; }
         why = why || String((r && (r.error || r.message)) || '响应为空');
-        // 风控要求验证、或网关还没有这个路由（跑的是旧进程），都不必再试
-        if (why.includes('214100') || /接口不存在|404/.test(why)) break;
+        // 风控要求验证（2141xx）、或网关还没有这个路由（跑的是旧进程），都不必再试——重试用只会加重风控
+        if (/2141\d\d/.test(why) || /接口不存在|404/.test(why)) break;
         if (attempt < 3) await $.wait(1000 * attempt);
     }
+    if (why.includes('214103')) throw new Error(`${why} —— 短时间换票太频繁被风控拦住，要人脸识别：去 App 里过一次人脸（或等几小时），这期间别再重跑本脚本`);
     if (why.includes('214100')) throw new Error(`${why} —— App 侧风控要求验证：开着抓取，在 App 里过一遍验证/重新登录再跑`);
     if (/接口不存在|404/.test(why)) throw new Error('网关还没有 /api/cmcc/usertoken，重启取凭证网关后再跑');
     throw new Error(`换 User-Token 失败：${why}`);
@@ -164,12 +195,14 @@ function clockInAmount(days) {
         .reduce((sum, x) => sum + Number(x), 0).toFixed(1);
 }
 
-// 打卡密文由网关的 wasm 出（这段 wasm 会把宿主 global 的属性名清单打进密文，放网关比放手机脚本里更像浏览器）
+// 打卡密文由网关的 wasm 出：wasm 的 g_dt() 要自己发一次 POST /coc/wasmrc/gDT 取设备令牌（请求得带 User-Token），
+// 手机脚本环境里没有 fetch、那个字段就是空的，服务端只回「参数不合法/领取失败」，所以整段 wasm 放网关 worker 里跑
 async function clockInToday() {
     const phone = phoneOfUser();
     if (!phone) throw new Error('拿不到手机号：boxjs 填 cmcc_sevenday_prize_phone，或让 cmcc_data 里有该账号');
     const c = await gatewayTools('/api/cmcc/clockin', {
         activityId: cfg.clockInActivityId, account: phone, pageId: cfg.pageId, touchCode: cfg.touchCode,
+        userToken: $.user && $.user.token,
     });
     if (!c || !c.cocEnContent || !c.cocAurora) throw new Error(`网关没出打卡密文：${(c && (c.error || c.message)) || '响应为空'}`);
     return cocPost('/coc/activities/prize/clockIn', { cocEnContent: c.cocEnContent }, { 'coc-aurora': c.cocAurora, 'coc-en-version': c.cocEnVersion });
@@ -184,8 +217,8 @@ async function runAccount(account) {
         const t = await fetchUserToken(account.autologin);
         account.token = t.userToken;
         account.phone = String(t.phone || '');
-        account.userName = `尾号 ${String(t.phone || '').slice(-4)}`;
-        $.log(`[凭证] 网关已换出 User-Token（${String(t.userToken).length} 字符）`);
+        const tail = String(t.phone || '').slice(-4) || String(t.maskedMobile || '').slice(-4);
+        account.userName = tail ? `尾号 ${tail}` : '未命名';
     } catch (e) { say(`❌ 换票: ${e.message || e}`); return; }
 
     // ② 打卡：必须先打卡再查次数，否则漏掉今天这次抽奖
@@ -333,10 +366,11 @@ async function main() {
     loadCfg();
     let autologin = getEnv(AUTOLOGIN_KEY) || '';
     if (typeof autologin === 'string') autologin = $.toObj(autologin, null);
-    if (!autologin || !autologin.url || !autologin.body) {
-        throw new Error(`未找到 ${AUTOLOGIN_KEY}：先在 App 里触发一次自动登录抓传参（「中国移动签到」插件开「捕获 autoLogin」）❌`);
+    const okAuto = !!(autologin && autologin.url && autologin.body);
+    if (!okAuto && !pickSessionUid()) {
+        throw new Error(`既没有 cmcc_data 里的大网 uid，也没有 ${AUTOLOGIN_KEY}：在「中国移动签到」插件开「捕获 autoLogin」进一次 App 抓传参 ❌`);
     }
-    const age = autologin.capturedAt ? `（autoLogin 抓于 ${((Date.now() - Date.parse(autologin.capturedAt)) / 86400000).toFixed(1)} 天前）` : '';
+    const age = (okAuto && autologin.capturedAt) ? `（autoLogin 抓于 ${((Date.now() - Date.parse(autologin.capturedAt)) / 86400000).toFixed(1)} 天前）` : '';
     $.log(`\n🌀 开始执行${age}\n`);
     if (cfg.capturedAt) $.log(`[活动参数] 抓于 ${((Date.now() - Date.parse(cfg.capturedAt)) / 86400000).toFixed(1)} 天前 · 抽奖 ${cfg.drawActivityId} · 打卡 ${cfg.clockInActivityId}`);
     $.messages = [];

@@ -1,5 +1,5 @@
 #!name = 移动七日夺宝
-#!desc = 中国移动 App「每日登录活动」H5（七日打卡分百万 / 天天来夺宝）：用「中国移动签到」抓的 autoLogin 传参，取凭证网关一次换出 User-Token，定时打卡+抽奖；活动改期就开「捕获活动参数」进一次活动页，新参数自动写进 cmcc_sevenday_prize_cfg，不用改脚本；换票会顶掉 App 当前登录
+#!desc = 中国移动 App「每日登录活动」H5（七日打卡分百万 / 天天来夺宝）：优先用「中国移动签到」换票时存进 cmcc_data 的大网 uid 找取凭证网关换 User-Token（不顶号），换不到才回落到重放 autoLogin 传参；定时打卡+抽奖；活动改期就开「捕获活动参数」进一次活动页，新参数自动写进 cmcc_sevenday_prize_cfg，不用改脚本；换票会顶掉 App 当前登录
 #!author = Fengzzzz
 #!homepage = https://github.com/jy0703/scripts
 #!icon = https://raw.githubusercontent.com/jy0703/scripts/main/icons/cmcc.png

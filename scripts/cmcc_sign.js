@@ -207,6 +207,8 @@ function GetCookie() {
             'jwt_first': old.jwt_first || Date.now(),
             // 重新抓包不该把当天"已签到"标记清掉，否则同日会再签一次；抢中记录同理，否则当天会重复打
             'signDay': old.signDay || '',
+            // 大网 uid 由换票时写入，只给「移动七日夺宝」换 User-Token 用，重抓不该把它清掉
+            'sessionUid': old.sessionUid || '',
             'skWinDay': old.skWinDay || '',
             'skWinPrize': old.skWinPrize || '',
             'wedSkDay': old.wedSkDay || '',
@@ -460,6 +462,9 @@ async function refreshAppTokenFromApi(user) {
             return fail(`换回的票据是尾号 ${phoneTail({ userCheckId: r.userCheckId })}，与当前账号尾号 ${phoneTail(user)} 不符`);
         }
         user.token = r.token;
+        // 顺手把大网 uid 存进 cmcc_data：签到自身的请求不用它，只有「移动七日夺宝」拿它去换 User-Token（省一次顶号）
+        const bigNetUid = String(r.sessionUid || ((/UID=([^;,\s]+)/.exec(String(r.token || '')) || [])[1] || ''));
+        if (bigNetUid) user.sessionUid = bigNetUid;      // 旧版网关没回 sessionUid 字段时，仍从 token 串里抠
         if (r.provinceCode && !user.provinceCode) user.provinceCode = r.provinceCode;
         if (r.cityCode && !user.cityCode) user.cityCode = r.cityCode;
         saveUsers();
