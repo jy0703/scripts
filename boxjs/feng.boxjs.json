@@ -1509,6 +1509,65 @@
       ]
     },
     {
+      "id": "cmcc_sevenday_prize",
+      "name": "移动七日夺宝",
+      "author": "@Feng",
+      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sevenday_prize.js",
+      "descs_html": [
+        "中国移动 App「每日登录活动」H5（七日打卡分百万 / 天天来夺宝）的打卡与抽奖",
+        "账号来源：本模块只挂定时，凭证复用「中国移动签到」抓的 autoLogin 传参（cmcc_autologin_data）——在签到插件里打开「捕获 autoLogin」，进一次 App 自动登录即可；不用再抓 uid",
+        "运行：脚本只调一次网关 /api/cmcc/usertoken（内部换大网票据 → 签 172 位活动 uid → loginCheck）拿回 User-Token，活动参数随请求一起带上去（网关用它拼 referer）→ 先打卡（当天抽奖次数就是打卡给的）→ 有次数就抽",
+        "活动参数：抽奖/打卡的 activityId、pageId、channelId、七日金额表都有内置默认值，不抓包也能跑；活动改期时开「移动七日夺宝」插件的「捕获活动参数」进一次活动页，新参数写进 cmcc_sevenday_prize_cfg 就自动生效，不用改脚本（打卡密文连那段 wasm 都在取凭证网关里，脚本本地零加密）",
+        "打卡与抽奖没有开关；autoLogin 重放会顶掉 App 当前登录，与 cmcc_sign 一致"
+      ],
+      "icons": [
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/cmcc.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/cmcc.png"
+      ],
+      "keys": [
+        "cmcc_autologin_data",
+        "cmcc_sevenday_prize_cfg",
+        "cmcc_sevenday_prize_phone",
+        "cmcc_sevenday_prize_debug"
+      ],
+      "settings": [
+        {
+          "id": "cmcc_autologin_data",
+          "name": "autoLogin抓包(只读)",
+          "val": "",
+          "type": "text",
+          "desc": "由「中国移动签到」插件的「捕获 autoLogin」写入，本模块只读复用：autoLogin 传参（密文 body/ua/x-qen）。由 /api/cmcc/usertoken 一次换出 User-Token（网关内部含换票+签 uid+loginCheck）"
+        },
+        {
+          "id": "cmcc_sevenday_prize_cfg",
+          "name": "活动参数(抓取写入)",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "",
+          "desc": "由插件「捕获活动参数」写入，也可手填/改单项：JSON，键为 drawActivityId / clockInActivityId / touchCode / pageId / clockInRewards / clockInTotal。留空用脚本内置的当期默认值；只认形状对的字段，写错的项会忽略并回落默认。打卡密文（含 coc-en-version）由网关 /api/cmcc/clockin 出，不在这份参数里"
+        },
+        {
+          "id": "cmcc_sevenday_prize_phone",
+          "name": "打卡手机号",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "159xxxxxxxx",
+          "desc": "打卡 payload 要 11 位手机号。留空优先用本次换票拿到的号码，其次从 cmcc_data 的 userCheckId（hex 手机号）还原"
+        },
+        {
+          "id": "cmcc_sevenday_prize_debug",
+          "name": "调试日志",
+          "val": false,
+          "type": "boolean",
+          "desc": "打印每次请求的 HTTP 状态与响应片段"
+        }
+      ]
+    },
+    {
       "id": "cmcc_balance",
       "name": "移动余额套餐",
       "author": "@Feng",

@@ -9,6 +9,9 @@
 # 网页取凭证换到的 service_ticket 等本地账号数据，绝不入库
 /tools/
 /tmp/
+# Node 下跑脚本时 Env 落的数据文件
+/box.dat
+/.box.dat
 
 # 本地跑的 Inception 聊天反代（依赖本机 Chrome+CDP 代发，入库对别人没用）
 /inception-proxy/
