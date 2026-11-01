@@ -12,8 +12,8 @@
  *          - migu_data          手机号@密码，多个用 & 或换行分隔；密码含 & / @ 时用 JSON：[{"phone":"138...","password":"..."}]
  *          - migu_listen        默认 true：真实计时听歌上报（需能取到音频二进制，Node / Quantumult X 可解析 MP3）
  *          - migu_listen_seconds 本次最多实播秒数，默认 1800（1..1800），全部档位达标提前结束
- *          - migu_comment       默认 false：公开发一条歌曲评论（每天最多一条）
- *          - migu_comment_text  评论正文，默认「旋律很好听，支持好音乐。」（1..120 字，不含链接/@）
+ *          - migu_comment       默认 false：公开发一条歌曲评论（每天最多一条）；歌曲自动从「咪咕尖叫榜·全网热歌榜」公开接口读取（取带 songId 的条目、优先非 VIP），按北京时间逐日轮换，同一天重复运行不换歌
+ *          - migu_comment_text  评论正文，支持用 | 或换行写多条，每天随机取一条（当天重复运行沿用同一条），默认「旋律很好听，支持好音乐。」（每条 1..120 字，不含链接/@）
  *          - migu_ringtone      默认 false：从「一日一铃」免费库随机设置一条，会改变本人彩铃
  *          - migu_ip            可选：生成 ce 时使用的客户端地址，留空用本机/出口 IP
  *          - migu_debug         调试模式
@@ -77,6 +77,8 @@ const RBT_NEXT_OP = '/v1.0/rbt/get-next-operation';
 const RBT_PRICE = '/strategy/biz-info-and-times/v1.0';
 const RBT_SET_TO_PLAY = '/ringbacktone/vrbt-set-to-play/v2.0';
 const RBT_PAGE_ID = '69df566b1dec4544e9c1ca00';
+const COMMENT_RANK_ID = '83048887';
+const RANK_INFO = '/pc/bmw/rank/rank-info/v1.0';
 
 // 官方 APK 签名证书字符（公开常量）、App 侧静态编码表，均为 py 源码原值
 const APK_CERT_PREFIX = '308202333082019ca00302010202044d';
@@ -307,6 +309,51 @@ function encodeQuery(pairs) {
 
 function formEncode(obj) {
     return Object.keys(obj).map(function (k) { return encodeURIComponent(k) + '=' + encodeURIComponent(obj[k]); }).join('&');
+}
+
+function parseCommentList(raw) {
+    const list = [];
+    String(raw || '').split(/[|\n\r]+/).forEach(function (t) {
+        t = t.trim();
+        if (t && list.indexOf(t) < 0) list.push(t);
+    });
+    return list.length ? list : [DEFAULT_COMMENT];
+}
+
+// 榜单返回里挑可评论的歌：只要带 songId 的条目，优先非 VIP 标记
+function parseRankSongs(contents) {
+    if (!Array.isArray(contents)) return [];
+    const free = [];
+    const all = [];
+    contents.forEach(function (x) {
+        if (!x || typeof x.songId !== 'string' || !/^\d{1,24}$/.test(x.songId)) return;
+        if (all.some(function (o) { return o.songId === x.songId; })) return;
+        const item = { songId: x.songId, name: typeof x.txt === 'string' ? x.txt : '' };
+        all.push(item);
+        if (!x.vip) free.push(item);
+    });
+    return free.length ? free : all;
+}
+
+async function fetchRankSongs(rankId) {
+    const url = API_ORIGIN + RANK_INFO + '?' + encodeQuery([['rankId', rankId || COMMENT_RANK_ID]]);
+    const res = await httpCall('GET', url, {
+        'Accept': 'application/json', 'Origin': WEB_ORIGIN, 'Referer': WEB_ORIGIN + '/', 'User-Agent': UA_WEB
+    }, undefined, 15000);
+    if (statusOf(res) !== 200) throw new MiguError('榜单未返回 200');
+    const obj = parseJson(bodyOf(res), '榜单');
+    if (String(obj.code) !== '000000' || !obj.data || !Array.isArray(obj.data.contents)) throw new MiguError('榜单结构变化');
+    const songs = parseRankSongs(obj.data.contents);
+    if (!songs.length) throw new MiguError('榜单没有可评论歌曲');
+    return songs;
+}
+
+// 按北京时间逐日轮换：同一天固定一首，第二天换列表里的下一首，循环使用
+function pickByDay(list, day) {
+    if (list.length === 1) return list[0];
+    const d = new Date(day + 'T00:00:00Z');
+    const doy = Math.floor((d.getTime() - Date.UTC(d.getUTCFullYear(), 0, 0)) / 86400000);
+    return list[doy % list.length];
 }
 
 function maskPhone(phone) {
@@ -715,13 +762,25 @@ class Journal {
         if (!obj || obj.day !== day || typeof obj.tasks !== 'object') {
             this.data = { day: day, tasks: {}, settle: {} };
         } else {
-            this.data = { day: day, tasks: obj.tasks || {}, settle: obj.settle || {} };
+            this.data = { day: day, tasks: obj.tasks || {}, settle: obj.settle || {}, picks: obj.picks || {} };
         }
     }
     save() { $.setdata(JSON.stringify(this.data), this.storeKey); }
     get(name) { return this.data.tasks[name] || null; }
     set(name, value) { this.data.tasks[name] = value; this.save(); }
     settled(name) { return this.data.settle[name] === this.data.day; }
+    // 同一天的随机选择固定下来，避免重复运行时换一条评论
+    pick(name, candidates) {
+        const picks = this.data.picks || {};
+        const old = picks[name];
+        const chosen = candidates.indexOf(old) >= 0 ? old : candidates[Math.floor(Math.random() * candidates.length)];
+        if (chosen !== old) {
+            picks[name] = chosen;
+            this.data.picks = picks;
+            this.save();
+        }
+        return chosen;
+    }
     markSettled(name) { this.data.settle[name] = this.data.day; this.save(); }
 }
 
@@ -955,25 +1014,25 @@ class MiguClient {
     }
 
     // ---- 评论 ----
-    async comments() {
+    async comments(songId) {
         const data = await this.send('GET', API_ORIGIN, COMMENT_LIST, {
             native: true,
-            params: [['resourceType', '2'], ['resourceId', this.songId()], ['queryType', '1'],
+            params: [['resourceType', '2'], ['resourceId', songId || this.songId()], ['queryType', '1'],
                 ['commentId', ''], ['hotCommentStart', '0'], ['pageSize', '20']]
         });
         if (!data || !Array.isArray(data.comments)) throw new MiguError('歌曲评论列表无法验证');
         return data.comments;
     }
 
-    async ownedComment(text, reportId) {
-        const songId = this.songId();
-        const list = await this.comments();
+    async ownedComment(text, reportId, songId) {
+        const target = songId || this.songId();
+        const list = await this.comments(target);
         for (let i = 0; i < list.length; i++) {
             const c = list[i];
             if (!c || typeof c !== 'object' || !c.user || typeof c.user !== 'object') continue;
             const owner = String(c.user.userId !== undefined ? c.user.userId : (c.user.uid !== undefined ? c.user.uid : (c.user.mUserId !== undefined ? c.user.mUserId : '')));
             if (owner !== this.ctx.uid || c.commentInfo !== text) continue;
-            if (c.targetResourceId !== undefined && c.targetResourceId !== null && String(c.targetResourceId) !== songId) continue;
+            if (c.targetResourceId !== undefined && c.targetResourceId !== null && String(c.targetResourceId) !== target) continue;
             const cid = String(c.commentId === undefined || c.commentId === null ? '' : c.commentId);
             if (reportId !== undefined && reportId !== null && cid !== String(reportId)) continue;
             if (/^[A-Za-z0-9_-]{1,100}$/.test(cid)) return cid;
@@ -981,9 +1040,44 @@ class MiguClient {
         return null;
     }
 
-    async publishComment(text) {
-        if (typeof text !== 'string' || !text.trim() || text.length > 120 || /[\x00-\x1f]/.test(text)) throw new MiguError('评论必须是 1..120 字单行文字');
-        if (/https?:\/\/|www\.|@/i.test(text)) throw new MiguError('评论不发布链接、推广或点名内容');
+    async ownedAnyComment(texts, songId) {
+        const target = songId || this.songId();
+        const list = await this.comments(target);
+        for (let i = 0; i < list.length; i++) {
+            const c = list[i];
+            if (!c || typeof c !== 'object' || !c.user || typeof c.user !== 'object') continue;
+            const owner = String(c.user.userId !== undefined ? c.user.userId : (c.user.uid !== undefined ? c.user.uid : (c.user.mUserId !== undefined ? c.user.mUserId : '')));
+            if (owner !== this.ctx.uid) continue;
+            if (c.targetResourceId !== undefined && c.targetResourceId !== null && String(c.targetResourceId) !== target) continue;
+            if (texts.indexOf(c.commentInfo) >= 0) return true;
+        }
+        return false;
+    }
+
+    async publishComment(candidates, songPool) {
+        const list = (Array.isArray(candidates) ? candidates : [candidates]).filter(function (t) { return typeof t === 'string' && t.trim(); });
+        if (!list.length) throw new MiguError('没有可用的评论正文');
+        list.forEach(function (t) {
+            if (t.length > 120 || /[\x00-\x1f]/.test(t)) throw new MiguError('评论必须是 1..120 字单行文字');
+            if (/https?:\/\/|www\.|@/i.test(t)) throw new MiguError('评论不发布链接、推广或点名内容');
+        });
+        const pool = (Array.isArray(songPool) && songPool.length)
+            ? songPool.map(function (x) { return typeof x === 'string' ? { songId: x, name: '' } : x; })
+                .filter(function (x) { return x && /^\d{1,24}$/.test(String(x.songId)); })
+            : [{ songId: this.songId(), name: '' }];
+        if (!pool.length) throw new MiguError('榜单没有合法歌曲 ID');
+        let chosen = pool.length === 1 ? pool[0] : pickByDay(pool, todayBeijing());
+        if (pool.length > 1) {
+            try {
+                await this.comments(chosen.songId);
+            } catch (e) {
+                $.log('今日歌曲「' + (chosen.name || chosen.songId) + '」评论列表不可用（' + e.message + '），改用听歌那首');
+                chosen = { songId: this.songId(), name: '' };
+            }
+        }
+        const song = chosen.songId;
+        const songName = chosen.name || song;
+        const text = this.journal ? this.journal.pick('comment', list) : list[Math.floor(Math.random() * list.length)];
         if (await this.complete(COMMENT_TASK)) {
             $.log('评论：服务端已完成 1/1，不重复发布');
             return '已完成 1/1';
@@ -993,32 +1087,32 @@ class MiguClient {
         if (prior && (prior.status === 'attempting' || prior.status === 'posted' || prior.status === 'uncertain')) {
             throw new MiguError('今日已有评论提交记录，不重复发布');
         }
-        if (await this.ownedComment(text)) throw new MiguError('本人已有相同歌曲评论，不重复发布');
-        const payload = { resourceId: this.songId(), resourceType: '2', commentInfo: text };
-        if (this.journal) this.journal.set('comment', { status: 'attempting', digest: digest });
-        $.log('发布评论：' + text);
+        if (await this.ownedAnyComment(list, song)) throw new MiguError('本人已有相同歌曲评论，不重复发布');
+        const payload = { resourceId: song, resourceType: '2', commentInfo: text };
+        if (this.journal) this.journal.set('comment', { status: 'attempting', digest: digest, song: song });
+        $.log('发布评论：' + text + '（歌曲 ' + songName + '）');
         let data;
         try {
             data = await this.send('POST', USER_ORIGIN, COMMENT_ADD, { native: true, payload: payload });
         } catch (e) {
-            if (this.journal) this.journal.set('comment', { status: 'uncertain', digest: digest });
+            if (this.journal) this.journal.set('comment', { status: 'uncertain', digest: digest, song: song });
             throw e;
         }
         const reportId = data && data.reportId;
         if (!/^[A-Za-z0-9_-]{1,100}$/.test(String(reportId === undefined || reportId === null ? '' : reportId))) {
-            if (this.journal) this.journal.set('comment', { status: 'uncertain', digest: digest });
+            if (this.journal) this.journal.set('comment', { status: 'uncertain', digest: digest, song: song });
             throw new MiguError('评论响应缺少可验证 ID，绝不重复发布');
         }
-        if (this.journal) this.journal.set('comment', { status: 'posted', digest: digest, reportId: String(reportId) });
+        if (this.journal) this.journal.set('comment', { status: 'posted', digest: digest, reportId: String(reportId), song: song });
         const delays = [1, 2, 4, 8, 10];
         let visible = false;
         for (let i = 0; i < delays.length; i++) {
             await sleep(delays[i] * 1000);
-            visible = visible || !!(await this.ownedComment(text, String(reportId)));
+            visible = visible || !!(await this.ownedComment(text, String(reportId), song));
             if (visible && (await this.complete(COMMENT_TASK))) {
-                if (this.journal) this.journal.set('comment', { status: 'confirmed', digest: digest, reportId: String(reportId) });
+                if (this.journal) this.journal.set('comment', { status: 'confirmed', digest: digest, reportId: String(reportId), song: song });
                 await this.settle('comment');
-                return '已发布并核对 1/1';
+                return '已发布并核对 1/1（歌曲 ' + songName + '）';
             }
         }
         throw new MiguError('评论已提交但列表/任务未同时确认（可能待审核），不重发');
@@ -1433,7 +1527,11 @@ async function runAccount(account, index) {
     try { lines.push('✅ 社区: ' + await client.community()); } catch (e) { fail('社区', e); }
 
     if ($.commentOn) {
-        try { lines.push('✅ 评论: ' + await client.publishComment($.commentText)); } catch (e) { fail('评论', e); }
+        try {
+            const pool = await fetchRankSongs();
+            $.log('已从咪咕尖叫榜·全网热歌榜取到 ' + pool.length + ' 首可评论歌曲');
+            lines.push('✅ 评论: ' + await client.publishComment($.commentList, pool));
+        } catch (e) { fail('评论', e); }
     }
 
     try {
@@ -1506,7 +1604,7 @@ async function sendMsg(message, subtitle) {
     $.ringtoneOn = /^(true|1|yes|on)$/i.test(String(getEnv('migu_ringtone') || ''));
     $.listenOn = !/^(false|0|no|off)$/i.test(String(getEnv('migu_listen') || ''));
     $.seconds = parseInt(getEnv('migu_listen_seconds') || '1800', 10);
-    $.commentText = String(getEnv('migu_comment_text') || DEFAULT_COMMENT);
+    $.commentList = parseCommentList(getEnv('migu_comment_text'));
     if (!(($.seconds >= 1 && $.seconds <= 1800))) throw new MiguError('migu_listen_seconds 需在 1..1800');
 
     const accounts = loadAccounts();
