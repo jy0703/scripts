@@ -40,6 +40,8 @@ request if ${HideSalePopup} == true && ${url} ~= /^https?:\/\/mobile\.ximalaya\.
 request if ${HideSignInGuide} == true && ${url} ~= /^https?:\/\/[^\/]*ximalaya\.com\/x-web-activity\/signIn\/getHomePageSignInInfo(?:[\/?].*)?$/i then reject(200)
 # 专辑页限时促销价格卡
 request if ${HideAlbumPrice} == true && ${url} ~= /^https?:\/\/[^\/]*ximalaya\.com\/product\/promotion\/v1\/album\/price(?:[\/?].*)?$/i then reject(200)
+
+[Script]
 # 喜马拉雅+会员解锁+大师课+音质/音效/下载/播放器皮肤
 response if ${Vip} == true && ${url} ~= /^https?:\/\/.+((ximalaya)|(xmcdn)).+(mobile-user\/v2\/homePage|product\/detail\/v1|v1\/album\/track\/ts|mobile-playpage\/track\/v4\/baseInfo\/ts|mobile-playpage\/playpage\/tabs\/v2|mobile-playpage\/playpage\/track\/qualityAndEffect|mobile\/download\/v2\/track|mobile-user-grade\/decoratorV2\/decorationDetails\/page|mobile-album\/album\/plant\/grass)?$/i then script("https://raw.githubusercontent.com/WeiGiegie/666/refs/heads/main/xmly.js", {${Vip}}) with tag="喜马拉雅+会员解锁+大师课+音质/音效/下载/播放器皮肤", timeout=10, requires_body=true
 
