@@ -1,12 +1,12 @@
 /**
  * 脚本名称：中国移动签到
  * 活动：签到(mark31) 每日一次；可选 AI豆任务(mark/task)、签到页秒杀(markSeckill)、追剧领福利(1126082530)、
- *      AI豆苗养成记、AI豆兑换话费券、周三充值日(wedrecharge，含场次秒杀)，开关见环境变量
+ *      周六游戏中心(1126086939)、AI豆苗养成记、AI豆兑换话费券、周三充值日(wedrecharge，含场次秒杀)，开关见环境变量
  * 环境：NE / Node.js，多账号；账号参数(App 票据/省市)由本脚本 GetCookie 抓取后存入 cmcc_data
  * 环境变量：cmcc_data / cmcc_claim(默认开) / cmcc_task / cmcc_seckill / cmcc_sk_min(默认 11:00) / cmcc_video /
- *          cmcc_seed / cmcc_seed_channel / cmcc_gold(默认关，会真扣 AI 豆) / cmcc_gold_at(默认 08:00 放量时刻) /
+ *          cmcc_saturday / cmcc_seed / cmcc_seed_channel / cmcc_gold(默认关，会真扣 AI 豆) / cmcc_gold_at(默认 08:00 放量时刻) /
  *          cmcc_wed / cmcc_wed_sk / cmcc_wed_sk_at(留空=听服务端场次) / cmcc_task_skip_days / cmcc_debug；cmcc_task_fail 自动维护
- * 执行次序（定时 `58 0,7,11 * * *`）：00:58 那轮做签到+领奖+AI豆任务+追剧+豆苗+周三拼图；
+ * 执行次序（定时 `58 0,7,11 * * *`）：00:58 那轮做签到+领奖+AI豆任务+追剧+周六游戏中心+豆苗+周三拼图；
  *          07:58 那轮先打周三场次秒杀（仅周三），再按「放量窗口(08:00 前 5 分钟~后 5 分钟)」抢 AI豆兑换；
  *          11:58 那轮只抢签到页日常秒杀（cmcc_sk_min 默认 11:00 之后）。
  *          活动绑签到轮、兑换绑放量窗口，所以窗口外的定时一次兑换请求都不发
@@ -77,6 +77,14 @@ const OPEN_TASK_API = BASE + '/hlwyxhdhub/api/open/_pub/task';
 const RUN_VIDEO = isOn(getEnv('cmcc_video'));
 const VIDEO_ENTRY = BASE + '/qwhdhub/diy-client/1126082530?A_C_CODE=10hep1ZhkL&channelId=P00000119581';
 const VIDEO_SIGN_API = BASE + '/qwhdhub/api/diyVideoDayRedesign/sign';
+// 周六游戏中心(diy-client 1126086939)：每日打卡 + 代币任务(挣游戏币) + 游戏币抽奖
+const RUN_SATURDAY = isOn(getEnv('cmcc_saturday'));
+const SAT_ENTRY = BASE + '/qwhdhub/diy-client/1126086939?A_C_CODE=pXMkQhEmZ7&channelId=P00000119581';
+const SAT_API = BASE + '/qwhdhub/api/diySaturdayGame';
+const SAT_COMPONENT = '50HQAg0-9YaSW4St7MDT';
+const SAT_COIN_COST = 10;          // 一次抽奖扣 10 游戏币
+const SAT_DRAW_WEEKDAY = 6;        // 周六 12:00 起奖池拓展；其余日子只攒不抽（币按 31 天周期清零，攒够要在窗口内抽光）
+const SAT_DRAW_HOUR = 12;
 const DIY_TASK_API = BASE + '/qwhdhub/diyTask';
 const DIY_LOTTERY_API = BASE + '/qwhdhub/diyLottery';
 // 该活动的任务与抽奖共用同一个 componentId：任务 earnOpportunity 加的就是抽奖次数
@@ -376,6 +384,15 @@ async function runExtraActs(user, ctx) {
             lines.push(...await doVideoAct(user));
         } catch (e) {
             say(`[追剧] 失败: ${e.message || e}`);
+        }
+    }
+
+    // 周六游戏中心同样是独立活动页，自己换票
+    if (RUN_SATURDAY) {
+        try {
+            lines.push(...await doSaturdayAct(user));
+        } catch (e) {
+            say(`[周六] 失败: ${e.message || e}`);
         }
     }
 
@@ -840,28 +857,28 @@ async function videoSign(ctx) {
 
 // diyTask 代币任务：UNDO 任务 POST finish 即发奖（服务端不校验真实到访，browse/share 等类型通吃）
 // 逐条只进日志，通知留一行汇总
-async function runDiyTasks(ctx) {
+async function runDiyTasks(ctx, component = VIDEO_COMPONENT, tag = '追剧·任务') {
     const lines = [];
     const say = t => { lines.push(t); $.log(t); };
-    const resp = await Request({ url: `${DIY_TASK_API}/list/${VIDEO_COMPONENT}`, headers: apiHeaders(ctx), _timeout: 30000 });
+    const resp = await Request({ url: `${DIY_TASK_API}/list/${component}`, headers: apiHeaders(ctx), _timeout: 30000 });
     if (!resp || resp.code !== 'SUCCESS') throw new Error(`任务清单获取失败: ${resp && resp.code} ${resp && resp.msg}`);
     const tasks = resp.data || [];
     const todo = tasks.filter(t => t.taskStage === 'UNDO' && t.taskId);
-    $.log(`[追剧·任务] 共 ${tasks.length} 个，待办 ${todo.length} 个`);
+    $.log(`[${tag}] 共 ${tasks.length} 个，待办 ${todo.length} 个`);
     if (!todo.length) return lines;
 
     let done = 0;
     for (const t of todo) {
         const fin = await Request({ url: `${DIY_TASK_API}/finish/${t.taskId}`, method: 'post', headers: apiHeaders(ctx), body: {}, _timeout: 30000 });
         // 复查清单：完成后任务可能直接移出列表，"消失"也算成功
-        const chk = await Request({ url: `${DIY_TASK_API}/list/${VIDEO_COMPONENT}`, headers: apiHeaders(ctx), _timeout: 30000 });
+        const chk = await Request({ url: `${DIY_TASK_API}/list/${component}`, headers: apiHeaders(ctx), _timeout: 30000 });
         const cur = ((chk && chk.data) || []).find(x => x.taskId === t.taskId);
         const ok = !cur || cur.taskStage === 'DONE';
-        $.log(`[追剧·任务] ${t.name || t.taskId}: ${ok ? '✅ 完成' : `⚠️ finish=${fin && fin.code} ${(fin && fin.msg) || ''}`}`);
+        $.log(`[${tag}] ${t.name || t.taskId}: ${ok ? '✅ 完成' : `⚠️ finish=${fin && fin.code} ${(fin && fin.msg) || ''}`}`);
         if (ok) done++;
         await $.wait(randomInt(1000, 2500));
     }
-    say(`[追剧·任务] 待办 ${todo.length} 个，完成 ${done} 个`);
+    say(`[${tag}] 待办 ${todo.length} 个，完成 ${done} 个`);
     return lines;
 }
 
@@ -870,6 +887,72 @@ async function lotteryRemain(ctx) {
     const r = await Request({ url: `${DIY_LOTTERY_API}/period/remain/${VIDEO_COMPONENT}`, method: 'post', headers: apiHeaders(ctx), _timeout: 30000 });
     if (!r || r.code !== 'SUCCESS') return null;
     return Number((r.data || {}).remain) || 0;
+}
+
+// ---------- 周六游戏中心（diy-client 1126086939）----------
+
+// 独立活动页：自己换票 → 每日打卡 → 代币任务(挣游戏币) → 游戏币抽奖（窗口内才消耗）
+async function doSaturdayAct(user) {
+    const lines = [];
+    const say = t => { lines.push(t); $.log(t); };
+    try {
+        const ctx = await exchangeSession(user, SAT_ENTRY);
+        say(`[周六] ${await satSign(ctx)}`);
+        lines.push(...await runDiyTasks(ctx, SAT_COMPONENT, '周六·任务'));
+        lines.push(...await runSaturdayLottery(ctx));
+    } catch (e) {
+        say(`[周六] 失败: ${e.message || e}`);
+    }
+    return lines;
+}
+
+// 打卡：getClockInStatus 是 POST 且无 body；"已签"既看 data.signed 也看文案（服务端两处都回过）
+async function satSign(ctx) {
+    const q = (await Request({ url: `${SAT_API}/getClockInStatus`, method: 'post', headers: apiHeaders(ctx), body: {}, _timeout: 30000 })) || {};
+    const d = q.data || {};
+    if (d.signed || (d.message || '').includes('已签到') || (q.msg || '').includes('已签到')) return `今日已打卡${d.continuousDays != null ? `（连签 ${d.continuousDays} 天）` : ''}`;
+    const r = (await Request({ url: `${SAT_API}/clockIn`, method: 'post', headers: apiHeaders(ctx), body: {}, _timeout: 30000 })) || {};
+    const msg = r.msg || '';
+    if (r.code !== 'SUCCESS' && !msg.includes('已签')) {
+        throw new Error(`打卡失败: ${r.code} ${msg}${hasSessionToken(ctx.jar) ? '' : '（环境未回传活动页 302 的 Set-Cookie，会话无法建立）'}`);
+    }
+    $.log(`[周六] clockIn data=${$.toStr(r.data || {}, '{}').slice(0, 200)}`);
+    return `打卡成功${msg && msg !== '成功' ? `（${msg}）` : ''}`;
+}
+
+// 游戏币抽奖：钱包余额 remainGameVal、每次 10 币，另受服务端下发的 remain 上限约束；
+// 只有周六 12:00 起奖池才拓展，其余日子只报余额不消耗；未中奖即停（防奖池被抽空后白扣币）
+async function runSaturdayLottery(ctx) {
+    const lines = [];
+    const say = t => { lines.push(t); $.log(t); };
+    const rem = await Request({ url: `${DIY_LOTTERY_API}/period/remain/${SAT_COMPONENT}`, method: 'post', headers: apiHeaders(ctx), _timeout: 30000 });
+    if (!rem || rem.code !== 'SUCCESS') throw new Error(`抽奖余额查询失败: ${rem && rem.code} ${rem && rem.msg}`);
+    const d = rem.data || {};
+    const coins = Number(d.remainGameVal) || 0;
+    const cap = d.remain == null ? null : Number(d.remain);
+    let n = Math.floor(coins / SAT_COIN_COST);
+    if (cap != null) n = Math.min(n, cap);
+    const head = `游戏币 ${coins}${cap != null ? `（服务端上限 ${cap} 次）` : ''}，${SAT_COIN_COST} 币/次 → 可抽 ${n} 次`;
+    if (!n) { $.log(`[周六·抽奖] ${head}`); return lines; }
+    if (beijingWeekday() !== SAT_DRAW_WEEKDAY || beijingHour() < SAT_DRAW_HOUR) {
+        say(`[周六·抽奖] ${head}；未到窗口（周六 ${SAT_DRAW_HOUR}:00 起），本次不消耗`);
+        return lines;
+    }
+
+    say(`[周六·抽奖] ${head}，窗口内开始消耗`);
+    const prizes = [];
+    let drawn = 0, aborted = '';
+    for (let i = 0; i < n; i++) {
+        const r = await Request({ url: `${DIY_LOTTERY_API}/lotterySafely/${SAT_COMPONENT}`, headers: apiHeaders(ctx), _timeout: 30000 });
+        drawn++;
+        const won = r && r.code === 'SUCCESS' && (Array.isArray(r.data) ? r.data[0] : null);
+        if (won) prizes.push(won.prizeName || '?');
+        else if (r && (r.code === 'SUCCESS' || r.code === 'NOT_WON')) { aborted = ''; $.log(`[周六·抽奖] 第${drawn}次 未中奖，停止消耗`); break; }
+        else { aborted = `${r && r.code} ${(r && r.msg) || ''}`; break; }
+        await $.wait(randomInt(1200, 2800));
+    }
+    say(`[周六·抽奖] 已抽 ${drawn} 次${prizes.length ? `，中奖: ${prizes.join(' / ')}` : ''}${aborted ? `，中断于 ${aborted}` : ''}`);
+    return lines;
 }
 
 // 视频站头：cmlive 与 qwhdhub 是两套会话，这里绝不带主站 Cookie，只带视频站自己的 JWT
@@ -1020,6 +1103,11 @@ async function runDiyLottery(ctx) {
 // 北京时间星期（不依赖设备时区）：周日=0
 function beijingWeekday() {
     return new Date(Date.now() + 8 * 3600000).getUTCDay();
+}
+
+// 北京时间小时（0-23），用于按整点开窗的活动（周六游戏中心 12 点拓展奖池）
+function beijingHour() {
+    return new Date(Date.now() + 8 * 3600000).getUTCHours();
 }
 
 // 北京时间「当天的第几分钟」，用于按时刻筛场次

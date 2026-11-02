@@ -1,9 +1,10 @@
 #!name=龙湖天街获取Cookie
-#!desc=自动抓取龙湖天街 Cookie
-#!打开龙湖天街小程序，进入 我的 - 签到赚珑珠 - 任务赚奖励 - 马上签到。
+#!desc=自动抓取龙湖天街 Cookie 与当期抽奖组件ID
+#!打开龙湖天街小程序，进入 我的 - 签到赚珑珠 - 任务赚奖励 - 马上签到 抓 Cookie；换期后在 App 里进一次抽奖页，自动把当期组件ID写进 boxjs 的 lhtj_lottery_app。
 
 [Script]
 龙湖天街获取Cookie = type=http-request,pattern=^https?:\/\/gw2c\-hw\-open\.longfor\.com\/lmarketing\-task\-api\-mvc\-prod\/openapi\/task\/v1\/signature\/clock,requires-body=0,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/lhtj.js,script-update-interval=0
+龙湖天街获取抽奖ID = type=http-request,pattern=^https?:\/\/gw2c\-hw\-open\.longfor\.com\/llt\-gateway\-prod\/api\/v1\/activity\/auth\/lottery\/(sign|chance|click),requires-body=1,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/lhtj.js,script-update-interval=0
 
 [MITM]
 hostname = %APPEND% gw2c-hw-open.longfor.com
