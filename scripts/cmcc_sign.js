@@ -1,12 +1,13 @@
 /**
  * 脚本名称：中国移动签到
  * 活动：签到(mark31) 每日一次；可选 AI豆任务(mark/task)、签到页秒杀(markSeckill)、追剧领福利(1126082530)、
- *      周六游戏中心(1126086939)、AI豆苗养成记、AI豆兑换话费券、周三充值日(wedrecharge，含场次秒杀)，开关见环境变量
+ *      周六游戏中心(1126086939)、AI豆苗养成记、幸运三日签(coc3 累签)、AI豆兑换话费券、周三充值日(wedrecharge，含场次秒杀)，开关见环境变量
  * 环境：NE / Node.js，多账号；账号参数(App 票据/省市)由本脚本 GetCookie 抓取后存入 cmcc_data
  * 环境变量：cmcc_data / cmcc_claim(默认开) / cmcc_task / cmcc_seckill / cmcc_sk_min(默认 11:00) / cmcc_video /
- *          cmcc_saturday / cmcc_seed / cmcc_seed_channel / cmcc_gold(默认关，会真扣 AI 豆) / cmcc_gold_at(默认 08:00 放量时刻) /
+ *          cmcc_saturday / cmcc_seed / cmcc_seed_channel / cmcc_lucky3 / cmcc_lucky3_task / cmcc_lucky3_pools /
+ *          cmcc_gold(默认关，会真扣 AI 豆) / cmcc_gold_at(默认 08:00 放量时刻) /
  *          cmcc_wed / cmcc_wed_sk / cmcc_wed_sk_at(留空=听服务端场次) / cmcc_task_skip_days / cmcc_debug；cmcc_task_fail 自动维护
- * 执行次序（定时 `58 0,7,11 * * *`）：00:58 那轮做签到+领奖+AI豆任务+追剧+周六游戏中心+豆苗+周三拼图；
+ * 执行次序（定时 `58 0,7,11 * * *`）：00:58 那轮做签到+领奖+AI豆任务+追剧+周六游戏中心+豆苗+幸运三日签+周三拼图；
  *          07:58 那轮先打周三场次秒杀（仅周三），再按「放量窗口(08:00 前 5 分钟~后 5 分钟)」抢 AI豆兑换；
  *          11:58 那轮只抢签到页日常秒杀（cmcc_sk_min 默认 11:00 之后）。
  *          活动绑签到轮、兑换绑放量窗口，所以窗口外的定时一次兑换请求都不发
@@ -109,6 +110,16 @@ const SEED_WTAC = 'P00000008211_';
 // 任务类型：1 浏览/直播；2 分享；3 订购；4/5 领取/关注；6 邀请 —— 3/6 需要真实操作，直接跳过
 const SEED_SKIP_TYPES = { 3: '需真实办理/订购', 6: '需真实好友助力' };
 const SEED_STATE_KEY = 'cmcc_seed_state';
+// 幸运三日签（coc3 权益市场的「累计签到」组件）：与豆苗同域、同网关、同一份 phone 凭证，页面码 26xysrqtybld
+const RUN_LUCKY3 = isOn(getEnv('cmcc_lucky3'));
+const L3_PAGE_URL = `https://dev.coc.10086.cn/coc3/canvas/rightsmarket-h5-canvas/online/${getEnv('cmcc_lucky3_page') || '26xysrqtybld'}`;
+const L3_TASK_ID = Number(getEnv('cmcc_lucky3_task') || 3157);
+const L3_WTAC = 'P00000138744_';       // 页面累签组件的埋点位，随包原样上送
+const L3_POOLS = parsePools(String(getEnv('cmcc_lucky3_pools') || '17788:累签第2日,17789:累签第3日,17790:每满3签'));
+const L3_STATE_KEY = 'cmcc_lucky3_state';
+// 两个活动共用同一套「读状态→签到」，只有这几个常量不同；infoBody 保持与抓包完全一致的字段顺序
+const SEED_SIGN_CFG = { taskId: SEED_SIGN_TASK_ID, channelCode: SEED_CHANNEL, wtAc: SEED_WTAC, tag: '豆苗', referer: SEED_PAGE_URL, infoBody: { taskId: SEED_SIGN_TASK_ID, needQyCredits: 1, needLimit: 0 } };
+const L3_SIGN_CFG = { taskId: L3_TASK_ID, channelCode: SEED_CHANNEL, wtAc: L3_WTAC, tag: '三日签', referer: L3_PAGE_URL, infoBody: { taskId: L3_TASK_ID, needLimit: 0 } };
 // 签到专属 AI豆兑换话费券（qwhdhub 同一会话）：兑换会真扣 AI 豆、每商品每期限兑一次，默认关
 const RUN_GOLD = isOn(getEnv('cmcc_gold'));
 const GOLD_API = BASE + '/qwhdhub/api/mark/task';
@@ -402,6 +413,15 @@ async function runExtraActs(user, ctx) {
             lines.push(...await runSeed(user));
         } catch (e) {
             say(`[豆苗] 失败: ${e.message || e}`);
+        }
+    }
+
+    // 幸运三日签与豆苗同网关同凭证，排在豆苗之后直接复用本次已现签好的 phone，不再多签一次
+    if (RUN_LUCKY3) {
+        try {
+            lines.push(...await runLucky3(user));
+        } catch (e) {
+            say(`[三日签] 失败: ${e.message || e}`);
         }
     }
 
@@ -1151,26 +1171,26 @@ function skWindowOpen() {
     return beijingMinuteOfDay(Date.now()) >= SK_MIN_OPEN;
 }
 
-// ---------- AI豆苗养成记（dev.coc.10086.cn）----------
+// ---------- coc3 权益市场（dev.coc.10086.cn，豆苗与幸运三日签共用）----------
 
 // 该域只认请求头 phone，绝不带主站 Cookie；channelCode/wtAc 是活动侧固定标识
-function seedHeaders(cred) {
+function coc3Headers(cred, referer = SEED_PAGE_URL) {
     return {
         'user-agent': USER_AGENT,
         accept: 'application/json, text/plain, */*',
         'content-type': 'application/json;charset=utf-8',
         origin: 'https://dev.coc.10086.cn',
-        referer: SEED_PAGE_URL,
+        referer,
         phone: cred,
         'accept-language': 'zh-CN,zh-Hans;q=0.9',
     };
 }
 
 // 统一 POST；网关偶发非 JSON 或网络抖动按失败结构返回，不抛异常（网络错误重试一次）
-async function seedPost(cred, path, body) {
+async function coc3Post(cred, path, body, referer = SEED_PAGE_URL) {
     for (const retry of [0, 1000]) {
         try {
-            const r = await Request({ url: `${SEED_BASE}${path}`, method: 'post', headers: seedHeaders(cred), body: body || {}, _timeout: 30000 });
+            const r = await Request({ url: `${SEED_BASE}${path}`, method: 'post', headers: coc3Headers(cred, referer), body: body || {}, _timeout: 30000 });
             if (r) return r;
             return { resultCode: 'NO_RESP', msg: '响应非 JSON' };
         } catch (e) {
@@ -1184,7 +1204,7 @@ async function seedPost(cred, path, body) {
 // 凭证身份：只记长度与尾 4 位，不存明文，用于检测 coc3_phone 被更换
 function seedCredSig(cred) { return `${String(cred).length}:${String(cred).slice(-4)}`; }
 
-function seedUuid() {
+function coc3Uuid() {
     const h = n => Array.from({ length: n }, () => '0123456789abcdef'[Math.floor(Math.random() * 16)]).join('');
     return `${h(8)}-${h(4)}-4${h(3)}-8${h(3)}-${h(12)}`;
 }
@@ -1203,47 +1223,48 @@ function seedAge(sec) {
     return `${m} 分钟`;
 }
 
-// 本地状态 + accumulateCount 双重判断；count 已 >0 时只记录不重复签（避免打断连签）
-async function seedSign(cred, state, today) {
-    const info = await seedPost(cred, '/cmpp-manage/task/getTaskSignInfo', { taskId: SEED_SIGN_TASK_ID, needQyCredits: 1, needLimit: 0 });
-    if (info.resultCode !== 0) return `签到信息获取失败: ${info.resultCode} ${info.msg || ''}`;
+// 本地状态 + accumulateCount 双重判断；count 已增加时只记录不重复签（避免打断累签）
+// 返回 { line, count }：count 是本次判断后的当月累签天数，取不到状态时为 null
+async function coc3Sign(cred, state, today, cfg) {
+    const info = await coc3Post(cred, '/cmpp-manage/task/getTaskSignInfo', cfg.infoBody, cfg.referer);
+    if (info.resultCode !== 0) return { line: `签到信息获取失败: ${info.resultCode} ${info.msg || ''}`, count: null };
     const count = Number(((info.data || {}).accumulateCount) || 0);
-    if (state.signDate === today) return '今日已签到（本地记录），跳过';
+    if (state.signDate === today) return { line: '今日已签到（本地记录），跳过', count };
     if (state.signCount != null && count > Number(state.signCount)) {
         state.signDate = today; state.signCount = count;
-        return '今日已签到（签到天数已增加），跳过';
+        return { line: '今日已签到（签到天数已增加），跳过', count };
     }
     if (state.signCount == null && count > 0) {
         state.signDate = today; state.signCount = count;
-        return '检测到已有签到记录，今日不重复签到';
+        return { line: '检测到已有签到记录，今日不重复签到', count };
     }
-    const body = { taskId: SEED_SIGN_TASK_ID, channelCode: SEED_CHANNEL, needLimit: 0 };
-    if (SEED_WTAC) { body.wtAc = SEED_WTAC; body.wtAcId = seedUuid(); }
-    const resp = await seedPost(cred, '/cmpp-manage/task/accumulateSign', body);
+    const body = { taskId: cfg.taskId, channelCode: cfg.channelCode, needLimit: 0 };
+    if (cfg.wtAc) { body.wtAc = cfg.wtAc; body.wtAcId = coc3Uuid(); }
+    const resp = await coc3Post(cred, '/cmpp-manage/task/accumulateSign', body, cfg.referer);
     const awards = resp.data;
     if (resp.resultCode === 0 && Array.isArray(awards) && awards.length) {
         state.signDate = today; state.signCount = count + 1;
-        return `签到成功：${awards.map(a => a.awardName || '奖励').join('、')}`;
+        return { line: `签到成功：${awards.map(a => a.awardName || '奖励').join('、')}`, count: count + 1 };
     }
     const msg = String(resp.msg || '');
     if (resp.resultCode === 500 || resp.resultCode === 502 || /已签|重复/.test(msg)) {
         state.signDate = today; state.signCount = count;
-        return `今日已签到（${msg || resp.resultCode}），跳过`;
+        return { line: `今日已签到（${msg || resp.resultCode}），跳过`, count };
     }
-    return `签到失败: ${resp.resultCode} ${msg}`;
+    return { line: `签到失败: ${resp.resultCode} ${msg}`, count };
 }
 
 // 可代做任务：type 2 走 share，其余走 visit(目标页)；上报被接受即算完成，最后统一复查
 async function seedTasks(cred) {
-    const r = await seedPost(cred, '/cmpp-manage/task/getGrowthTaskList', { taskListId: SEED_TASK_LIST_ID });
+    const r = await coc3Post(cred, '/cmpp-manage/task/getGrowthTaskList', { taskListId: SEED_TASK_LIST_ID });
     if (r.resultCode !== 0) return { lines: [`任务清单获取失败: ${r.resultCode} ${r.msg || ''}`], done: 0 };
     const todo = (r.data || []).filter(t => t.isFinish === 0);
     const lines = [];
     const accepted = [];
     let done = 0;
     const doIt = t => t.taskType === 2
-        ? seedPost(cred, '/cmpp-manage/task/share', { channelCode: SEED_CHANNEL, visitUrl: SEED_PAGE_KEY, taskId: t.taskId })
-        : seedPost(cred, '/cmpp-manage/task/visit', { channelCode: SEED_CHANNEL, visitUrl: seedTargetKey(t), taskId: t.taskId });
+        ? coc3Post(cred, '/cmpp-manage/task/share', { channelCode: SEED_CHANNEL, visitUrl: SEED_PAGE_KEY, taskId: t.taskId })
+        : coc3Post(cred, '/cmpp-manage/task/visit', { channelCode: SEED_CHANNEL, visitUrl: seedTargetKey(t), taskId: t.taskId });
 
     for (const t of todo) {
         const title = t.taskMainTitle || `任务${t.taskId}`;
@@ -1265,7 +1286,7 @@ async function seedTasks(cred) {
     }
     if (accepted.length) {
         await $.wait(2000);
-        const chk = await seedPost(cred, '/cmpp-manage/task/getGrowthTaskList', { taskListId: SEED_TASK_LIST_ID });
+        const chk = await coc3Post(cred, '/cmpp-manage/task/getGrowthTaskList', { taskListId: SEED_TASK_LIST_ID });
         if (chk.resultCode === 0) {
             const still = (chk.data || []).filter(t => accepted.includes(t.taskId) && t.isFinish !== 1).length;
             if (still) lines.push(`· 复查：${still} 个任务状态待刷新`);
@@ -1277,14 +1298,14 @@ async function seedTasks(cred) {
 
 // 待领阳光值气泡：home 里的 unreceivedCreditsVOList 逐条 claim
 async function seedClaim(cred) {
-    const r = await seedPost(cred, '/api/activity/slgCredits/getSlgCreditsHomePage', { activityId: SEED_ACTIVITY_ID });
+    const r = await coc3Post(cred, '/api/activity/slgCredits/getSlgCreditsHomePage', { activityId: SEED_ACTIVITY_ID });
     if (r.resultCode !== 0) return { lines: [`待领阳光值获取失败: ${r.resultCode} ${r.msg || ''}`], got: 0 };
     const records = (r.data || {}).unreceivedCreditsVOList || [];
     if (!records.length) return { lines: ['待领阳光值：无'], got: 0 };
     const lines = [];
     let got = 0;
     for (const rec of records) {
-        const resp = await seedPost(cred, '/api/activity/slgCredits/getGrowthBubble', {
+        const resp = await coc3Post(cred, '/api/activity/slgCredits/getGrowthBubble', {
             activityId: SEED_ACTIVITY_ID, creditsRecordId: rec.recordId, referer: SEED_PAGE_KEY, channelNo: SEED_CHANNEL,
         });
         const name = rec.showName || '阳光值', num = Number(rec.showNum || 0);
@@ -1297,9 +1318,12 @@ async function seedClaim(cred) {
 }
 
 // ticket = App 大网 SSO 的整串会话 Cookie，与 cmcc_data 的 token 同值，不另设抓取入口
-async function seedTicketSign(user) {
+// 同一次运行里豆苗和三日签共用这份凭证（只落内存，跨运行仍然每次现签，不写盘）
+let coc3CredMemo = { ticket: '', token: '', err: '' };
+async function coc3Cred(user) {
     const ticket = user.token || '';
     if (!ticket) return { token: '', ticket: '', err: '无 App 票据(token)' };
+    if (coc3CredMemo.ticket === ticket) return { token: coc3CredMemo.token, ticket, err: coc3CredMemo.err };
     const r = await Request({
         url: `${SEED_LOGIN_API}/userLoginV2`, method: 'post',
         headers: {
@@ -1314,17 +1338,21 @@ async function seedTicketSign(user) {
         _timeout: 30000,
     });
     const d = (r && r.data) || {};
-    if (!r || String(r.code) !== '0' || !d.token) return { token: '', ticket: '', err: `${r && r.code} ${String((r && r.message) || '').slice(0, 18)}` };
-    $.log(`[豆苗·凭证] App 票据现签 phone 成功（${d.mobileMask || '手机号已掩码'}，province ${d.provinceCode || '?'}）`);
+    if (!r || String(r.code) !== '0' || !d.token) {
+        coc3CredMemo = { ticket, token: '', err: `${r && r.code} ${String((r && r.message) || '').slice(0, 18)}` };
+        return { token: '', ticket: '', err: coc3CredMemo.err };
+    }
+    coc3CredMemo = { ticket, token: d.token, err: '' };
+    $.log(`[coc3·凭证] App 票据现签 phone 成功（${d.mobileMask || '手机号已掩码'}，province ${d.provinceCode || '?'}）`);
     return { token: d.token, ticket };
 }
 
 // 主流程：用 ticket 现签 phone → 探活 → 签到 → 任务 → 领取 → 余额前后对比
-// ticket 只在 App 登录后几小时内可用（放几小时即 40006，App 重登会轮换），签不出就提示重抓，不缓存 phone
+// ticket 只在 App 登录后几小时内可用（放几小时即 40006，App 重登会轮换），签不出就提示重抓，phone 不落盘（只在本次运行内复用）
 async function runSeed(user) {
     const lines = [];
     const say = t => { lines.push(t); $.log(t); };
-    const signed = await seedTicketSign(user);
+    const signed = await coc3Cred(user);
     const cred = signed.token;
     if (!cred) { say(`[豆苗] ticket 签不出 phone(${signed.err})，本次跳过——ticket 只在 App 刚登录后几小时内有效，开着获取Cookie在 App 里点任意一页重抓`); return lines; }
 
@@ -1340,7 +1368,7 @@ async function runSeed(user) {
     else ageSec = Math.max(0, nowSec - Number(state.credFirst || nowSec));
 
     // 探活：queryGrowthValue 回 -516 或 msg 含「登录」即凭证失效（ticket 没有续期接口，只能重抓）
-    const chkResp = await seedPost(cred, '/api/activity/slgCredits/queryGrowthValue', { activityId: SEED_ACTIVITY_ID });
+    const chkResp = await coc3Post(cred, '/api/activity/slgCredits/queryGrowthValue', { activityId: SEED_ACTIVITY_ID });
     const chkMsg = String(chkResp.msg || '');
     const dead = () => chkResp.resultCode === -516 || /登录/.test(chkMsg);
     if (dead()) {
@@ -1353,17 +1381,72 @@ async function runSeed(user) {
     $.log(`[豆苗·凭证] ticket 已服役 ${seedAge(ageSec)}（token 每次现签）${isNew ? '，首次使用从本次计时' : ''}`);
 
     const today = $.time('yyyy-MM-dd');
-    const signLine = await seedSign(cred, state, today);
+    const signRes = await coc3Sign(cred, state, today, SEED_SIGN_CFG);
     const taskRes = await seedTasks(cred);
     const claimRes = await seedClaim(cred);
-    const afterResp = await seedPost(cred, '/api/activity/slgCredits/queryGrowthValue', { activityId: SEED_ACTIVITY_ID });
+    const afterResp = await coc3Post(cred, '/api/activity/slgCredits/queryGrowthValue', { activityId: SEED_ACTIVITY_ID });
     const growthAfter = afterResp.resultCode === 0 ? Number(((afterResp.data || {}).growthValue)) : null;
     const lagged = claimRes.got && growthBefore != null && growthAfter != null && growthAfter < growthBefore + claimRes.got;
 
     taskRes.lines.forEach(l => $.log(`[豆苗·任务] ${l}`));
     all[k] = state;
     $.setdata($.toStr(all, '{}'), SEED_STATE_KEY);
-    say(`[豆苗] 签到${signLine.slice(0, 24)}｜任务完成 ${taskRes.done} 个｜领取 ${claimRes.got} 阳光值｜余额 ${growthBefore ?? '?'}→${growthAfter ?? '?'}${lagged ? '（入账延迟，以活动页为准）' : ''}`);
+    say(`[豆苗] 签到${signRes.line.slice(0, 24)}｜任务完成 ${taskRes.done} 个｜领取 ${claimRes.got} 阳光值｜余额 ${growthBefore ?? '?'}→${growthAfter ?? '?'}${lagged ? '（入账延迟，以活动页为准）' : ''}`);
+    return lines;
+}
+
+// ---------- 幸运三日签（coc3 权益市场累签组件，页面码 26xysrqtybld）----------
+
+// 奖池配置串形如 '17788:累签第2日,17789:累签第3日'；活动换期时只改 boxjs 的 cmcc_lucky3_pools，不用改代码
+function parsePools(raw) {
+    return String(raw || '').split(/[,，;；]/).map(t => t.trim()).filter(Boolean).map(t => {
+        const i = t.search(/[:：]/);
+        const id = Number(i < 0 ? t : t.slice(0, i));
+        const name = i < 0 ? '' : t.slice(i + 1).trim();
+        return id > 0 ? { id, name: name || `奖池${id}` } : null;
+    }).filter(Boolean);
+}
+
+// coc3 的两套响应封装：task/* 回 resultCode:0，lottery/* 回 code:"200"+success:true（所以这里只认 code）
+async function l3PoolCount(cred, activityId) {
+    const r = await coc3Post(cred, '/cmpp-manage/lottery/residueLotteryCount', { activityId }, L3_PAGE_URL);
+    if (String(r.code) !== '200') return { ok: false, why: String(r.msg || r.code || r.resultCode || '无响应') };
+    const n = Number(r.data || 0);
+    return { ok: true, n: isFinite(n) ? n : 0 };
+}
+
+// 只代做「签到」并回报当月累签天数与各奖池剩余次数：真·抽奖接口在抓包里没有出现过
+// （抓包时三档次数全为 0，页面只走到 residueLotteryCount/currentLottery），未还原就不猜接口、不代抽，
+// 有次数时提示去 App 活动页手点。
+async function runLucky3(user) {
+    const lines = [];
+    const say = t => { lines.push(t); $.log(t); };
+    const signed = await coc3Cred(user);
+    const cred = signed.token;
+    if (!cred) { say(`[三日签] ticket 签不出 phone(${signed.err})，本次跳过——ticket 只在 App 刚登录后几小时内有效，开着获取Cookie在 App 里点任意一页重抓`); return lines; }
+
+    const all = $.toObj($.getdata(L3_STATE_KEY), {}) || {};
+    const k = user.userCheckId || user.userName || 'default';
+    const state = all[k] || {};
+    const signRes = await coc3Sign(cred, state, $.time('yyyy-MM-dd'), L3_SIGN_CFG);
+    all[k] = state;
+    $.setdata($.toStr(all, '{}'), L3_STATE_KEY);
+    if (signRes.count === null) {
+        say(`[三日签] ${signRes.line}${/登录|-516/.test(signRes.line) ? '（ticket 已失效，开着获取Cookie在 App 里点任意一页重抓）' : ''}`);
+        return lines;
+    }
+    $.log(`[三日签·签到] ${signRes.line}`);
+
+    const open = [];
+    for (const p of L3_POOLS) {
+        const c = await l3PoolCount(cred, p.id);
+        if (!c.ok) { $.log(`[三日签·奖池] ${p.name}(${p.id}) 查询失败: ${c.why}`); continue; }
+        $.log(`[三日签·奖池] ${p.name}(${p.id}): ${c.n} 次`);
+        if (c.n > 0) open.push({ name: p.name, n: c.n });
+        await $.wait(randomInt(300, 700));
+    }
+    const free = open.reduce((a, x) => a + x.n, 0);
+    say(`[三日签] 当月累签 ${signRes.count} 天｜${signRes.line.slice(0, 20)}${free ? `｜${free} 次抽奖机会（${open.map(x => `${x.name}×${x.n}`).join('、')}），抽奖接口尚未还原，请在 App 活动页手动抽` : ''}`);
     return lines;
 }
 
