@@ -118,8 +118,8 @@ const L3_WTAC = 'P00000138744_';       // 页面累签组件的埋点位，随�
 const L3_POOLS = parsePools(String(getEnv('cmcc_lucky3_pools') || '17788:累签第2日,17789:累签第3日,17790:每满3签'));
 const L3_STATE_KEY = 'cmcc_lucky3_state';
 // 两个活动共用同一套「读状态→签到」，只有这几个常量不同；infoBody 保持与抓包完全一致的字段顺序
-const SEED_SIGN_CFG = { taskId: SEED_SIGN_TASK_ID, channelCode: SEED_CHANNEL, wtAc: SEED_WTAC, tag: '豆苗', referer: SEED_PAGE_URL, infoBody: { taskId: SEED_SIGN_TASK_ID, needQyCredits: 1, needLimit: 0 } };
-const L3_SIGN_CFG = { taskId: L3_TASK_ID, channelCode: SEED_CHANNEL, wtAc: L3_WTAC, tag: '三日签', referer: L3_PAGE_URL, infoBody: { taskId: L3_TASK_ID, needLimit: 0 } };
+const SEED_SIGN_CFG = { taskId: SEED_SIGN_TASK_ID, channelCode: SEED_CHANNEL, wtAc: SEED_WTAC, tag: '豆苗', referer: SEED_PAGE_URL, countAsSigned: true, infoBody: { taskId: SEED_SIGN_TASK_ID, needQyCredits: 1, needLimit: 0 } };
+const L3_SIGN_CFG = { taskId: L3_TASK_ID, channelCode: SEED_CHANNEL, wtAc: L3_WTAC, tag: '三日签', referer: L3_PAGE_URL, countAsSigned: false, infoBody: { taskId: L3_TASK_ID, needLimit: 0 } };
 // 签到专属 AI豆兑换话费券（qwhdhub 同一会话）：兑换会真扣 AI 豆、每商品每期限兑一次，默认关
 const RUN_GOLD = isOn(getEnv('cmcc_gold'));
 const GOLD_API = BASE + '/qwhdhub/api/mark/task';
@@ -1142,6 +1142,12 @@ function beijingDate(ms) {
     return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}`;
 }
 
+// yyyy-MM-dd 的前一天（纯日期加减，不受设备时区影响），用于「昨天记过数、今天多一天」的判据
+function ymdPrevDay(ymd) {
+    const d = new Date(Date.parse(`${ymd}T00:00:00Z`) - 86400000), p = n => String(n).padStart(2, '0');
+    return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}`;
+}
+
 // 该时刻所在「周」的键(周一的 yyyyMMdd，北京时间)——秒杀的期是按周算的，一周内多场只算一期
 function beijingWeekKey(ms) {
     const d = new Date(ms + 8 * 3600000);
@@ -1223,34 +1229,45 @@ function seedAge(sec) {
     return `${m} 分钟`;
 }
 
-// 本地状态 + accumulateCount 双重判断；count 已增加时只记录不重复签（避免打断累签）
+// 「今天已签」的判据分两套（cfg.countAsSigned）：
+//  · 豆苗沿用上游的保守判断：首次见到 count>0 就当今天签过（不打断连签，宁可少签一次）
+//  · 幸运三日签是「当月累签」，count>0 只说明这个月签过、不代表今天签过 ⇒ 只认本地记录，
+//    外加「昨天记过数、今天多了一天」这一条实证判据（隔多日没跑时不做保守跳过，照签，服务端会回已签）
 // 返回 { line, count }：count 是本次判断后的当月累签天数，取不到状态时为 null
 async function coc3Sign(cred, state, today, cfg) {
     const info = await coc3Post(cred, '/cmpp-manage/task/getTaskSignInfo', cfg.infoBody, cfg.referer);
     if (info.resultCode !== 0) return { line: `签到信息获取失败: ${info.resultCode} ${info.msg || ''}`, count: null };
     const count = Number(((info.data || {}).accumulateCount) || 0);
-    if (state.signDate === today) return { line: '今日已签到（本地记录），跳过', count };
-    if (state.signCount != null && count > Number(state.signCount)) {
-        state.signDate = today; state.signCount = count;
-        return { line: '今日已签到（签到天数已增加），跳过', count };
-    }
-    if (state.signCount == null && count > 0) {
-        state.signDate = today; state.signCount = count;
-        return { line: '检测到已有签到记录，今日不重复签到', count };
+    const prev = state.countSeen;
+    const seen = c => { state.countSeen = { d: today, c }; };
+    if (state.signDate === today) { seen(count); return { line: '今日已签到（本地记录），跳过', count }; }
+    if (cfg.countAsSigned) {
+        if (state.signCount != null && count > Number(state.signCount)) {
+            state.signDate = today; state.signCount = count; seen(count);
+            return { line: '今日已签到（签到天数已增加），跳过', count };
+        }
+        if (state.signCount == null && count > 0) {
+            state.signDate = today; state.signCount = count; seen(count);
+            return { line: '检测到已有签到记录，今日不重复签到', count };
+        }
+    } else if (prev && prev.d === ymdPrevDay(today) && count > Number(prev.c || 0)) {
+        state.signDate = today; state.signCount = count; seen(count);
+        return { line: `今日已签到（App 里签的 ${prev.c}→${count}）`, count };
     }
     const body = { taskId: cfg.taskId, channelCode: cfg.channelCode, needLimit: 0 };
     if (cfg.wtAc) { body.wtAc = cfg.wtAc; body.wtAcId = coc3Uuid(); }
     const resp = await coc3Post(cred, '/cmpp-manage/task/accumulateSign', body, cfg.referer);
     const awards = resp.data;
     if (resp.resultCode === 0 && Array.isArray(awards) && awards.length) {
-        state.signDate = today; state.signCount = count + 1;
+        state.signDate = today; state.signCount = count + 1; seen(count + 1);
         return { line: `签到成功：${awards.map(a => a.awardName || '奖励').join('、')}`, count: count + 1 };
     }
     const msg = String(resp.msg || '');
     if (resp.resultCode === 500 || resp.resultCode === 502 || /已签|重复/.test(msg)) {
-        state.signDate = today; state.signCount = count;
+        state.signDate = today; state.signCount = count; seen(count);
         return { line: `今日已签到（${msg || resp.resultCode}），跳过`, count };
     }
+    seen(count);
     return { line: `签到失败: ${resp.resultCode} ${msg}`, count };
 }
 
@@ -1446,7 +1463,7 @@ async function runLucky3(user) {
         await $.wait(randomInt(300, 700));
     }
     const free = open.reduce((a, x) => a + x.n, 0);
-    say(`[三日签] 当月累签 ${signRes.count} 天｜${signRes.line.slice(0, 20)}${free ? `｜${free} 次抽奖机会（${open.map(x => `${x.name}×${x.n}`).join('、')}），抽奖接口尚未还原，请在 App 活动页手动抽` : ''}`);
+    say(`[三日签] 当月累签 ${signRes.count} 天｜${signRes.line.slice(0, 26)}${free ? `｜${free} 次抽奖机会（${open.map(x => `${x.name}×${x.n}`).join('、')}），抽奖接口尚未还原，请在 App 活动页手动抽` : ''}`);
     return lines;
 }
 
