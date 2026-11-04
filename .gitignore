@@ -5,6 +5,8 @@
 /py2js.md
 /.qoder/
 /.probe/
+/.workbuddy/
+/.zcode/
 
 # 网页取凭证换到的 service_ticket 等本地账号数据，绝不入库
 /tools/
@@ -16,3 +18,12 @@
 # 本地跑的 Inception 聊天反代（依赖本机 Chrome+CDP 代发，入库对别人没用）
 /inception-proxy/
 /cmcc/
+# 上汽大众(SVW) 逆向/签到：含本地凭证与抓包数据，绝不入库
+/svw/
+
+# 双保险：svw_extract 未迁入 svw/ 前先忽略；名称含 svw/csvw/大众/上汽 的一律不进库
+/svw_extract/
+**/*svw*
+**/*csvw*
+**/*大众*
+**/*上汽*

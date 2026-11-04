@@ -1,0 +1,12 @@
+#!name=移动七日夺宝
+#!desc=中国移动 App「每日登录活动」H5（七日打卡分百万 / 天天来夺宝）：优先用「中国移动签到」换票时存进 cmcc_data 的大网 uid 找取凭证网关换 User-Token（不顶号），换不到才回落到重放 autoLogin 传参；定时打卡+抽奖；换票会顶掉 App 当前登录
+#!抓取：进 App「每日登录活动」页（七日打卡分百万 / 天天来夺宝）即触发，把当期参数（activityId、pageId、channelId、七日金额表）写入 cmcc_sevenday_prize_cfg，并顺带收割设备 cookie（_zw/gdp_* 自动填进 boxjs，打卡风控用）；抓到的参数与内置默认值相同的项不会写入，活动改期或 cookie 更新后重抓一次即可
+
+[Script]
+中国移动抓活动参数 = type=http-request,pattern=^https?:\/\/dev\.coc\.10086\.cn\/coc\/(web6\/dailyLoginEvent(?!\/assets)|activities\/prize\/(drawDayNum|consecutiveClockInQuery)),requires-body=1,max-size=0,timeout=60,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sevenday_prize.js,script-update-interval=0
+中国移动抓七日金额 = type=http-response,pattern=^https?:\/\/dev\.coc\.10086\.cn\/coc\/web6\/dailyLoginEvent\/assets\/index-,requires-body=1,max-size=2097152,timeout=60,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sevenday_prize.js,script-update-interval=0
+
+移动七日夺宝 = type=cron,cronexp="5 8 * * *",wake-system=1,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sevenday_prize.js,script-update-interval=0
+
+[MITM]
+hostname = %APPEND% dev.coc.10086.cn

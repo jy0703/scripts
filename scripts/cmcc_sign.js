@@ -4,7 +4,8 @@
  *      周六游戏中心(1126086939)、AI豆苗养成记、幸运三日签(coc3 累签)、AI豆兑换话费券、周三充值日(wedrecharge，含场次秒杀)，开关见环境变量
  * 环境：NE / Node.js，多账号；账号参数(App 票据/省市)由本脚本 GetCookie 抓取后存入 cmcc_data
  * 环境变量：cmcc_data / cmcc_claim(默认开) / cmcc_task / cmcc_seckill / cmcc_sk_min(默认 11:00) / cmcc_video /
- *          cmcc_saturday / cmcc_seed / cmcc_seed_channel / cmcc_lucky3 / cmcc_lucky3_task / cmcc_lucky3_pools /
+ *          cmcc_saturday / cmcc_seed / cmcc_seed_channel / cmcc_lucky3 / cmcc_lucky3_draw(默认开) / cmcc_lucky3_task / cmcc_lucky3_pools / cmcc_lucky3_page /
+ *          TOOLS_API + TOOLS_API_TOKEN(取凭证网关，代抽 wasmparams 时用) /
  *          cmcc_gold(默认关，会真扣 AI 豆) / cmcc_gold_at(默认 08:00 放量时刻) /
  *          cmcc_wed / cmcc_wed_sk / cmcc_wed_sk_at(留空=听服务端场次) / cmcc_task_skip_days / cmcc_debug；cmcc_task_fail 自动维护
  * 执行次序（定时 `58 0,7,11 * * *`）：00:58 那轮做签到+领奖+AI豆任务+追剧+周六游戏中心+豆苗+幸运三日签+周三拼图；
@@ -117,6 +118,28 @@ const L3_TASK_ID = Number(getEnv('cmcc_lucky3_task') || 3157);
 const L3_WTAC = 'P00000138744_';       // 页面累签组件的埋点位，随包原样上送
 const L3_POOLS = parsePools(String(getEnv('cmcc_lucky3_pools') || '17788:累签第2日,17789:累签第3日,17790:每满3签'));
 const L3_STATE_KEY = 'cmcc_lucky3_state';
+// 代抽开关与常量：抽奖接口已还原（真机抓包 60000=中奖），参数 wasmparams 由 tools 网关跑 coc3 的 wasm 现产
+const RUN_LUCKY3_DRAW = !isOff(getEnv('cmcc_lucky3_draw'));   // 默认代抽；显式填 false 只查次数不抽
+const L3_DRAW_MAX = 8;                                        // 单次运行的代抽上限（服务端本来就按次数扣，纯兜底）
+const L3_DRAW_WTAC = 'P00000001090_';                         // 抽奖位的埋点位（11-04 真机抓包实测，两个奖池同值；旧值 8211 是误读别的组件）
+const L3_DRAW_REFER = '264xysrqtybld';                        // body.referer 是 layout 的页面键，带"4"，与 URL 里那段页面码不同
+const L3_DRAW_REFERER = L3_PAGE_URL + '?pageRecorded=true';   // 抽奖请求头的 referer 带 pageRecorded（真机同款）
+// GrowingIO gdp_user_id：按手机号现造（算法逆自 gdp-full-H5.js：逐字符 charCode^1，直通 A a Z z @ {），
+// 同号永远同一设备身份、异号隔离——不再用抓包静态值（跨账号错配是风控破绽）；boxjs cmcc_lucky3_gdp 仍可覆盖
+const gioencStr = s => 'gioenc-' + String(s).split('').map(c => 'AaZz@{'.includes(c) ? c : String.fromCharCode(c.charCodeAt(0) ^ 1)).join('').replace(/,/g, '%2C');
+function gioUserUuid(seed) {
+    // 纯 JS 确定性 16 字节（代理环境没有 crypto）：FNV-1a 四轮搅动出种子，xorshift 填充
+    let h0 = 0x811c9dc5, h1 = 0x01000193;
+    for (const ch of String(seed)) { h0 = ((h0 ^ ch.charCodeAt(0)) >>> 0); h0 = (Math.imul(h0, 0x01000193) >>> 0); h1 = ((h1 ^ (ch.charCodeAt(0) << 5)) >>> 0); h1 = (Math.imul(h1, 0x85ebca6b) >>> 0); }
+    let s0 = h0 || 1, s1 = h1 || 2;
+    const b = [];
+    for (let i = 0; i < 16; i++) { s0 = (Math.imul(s0, 0x9e3779b1) >>> 0); s1 = (Math.imul(s1 ^ (s1 >>> 15), 0x85ebca6b) >>> 0); b.push((s0 ^ s1) & 0xff); }
+    b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
+    const h = b.map(x => x.toString(16).padStart(2, '0')).join('');
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
+}
+const L3_GDP_COOKIE_ENV = getEnv('cmcc_lucky3_gdp') || '';
+function l3GdpCookie(phone) { return L3_GDP_COOKIE_ENV || `gdp_user_id=${gioencStr(gioUserUuid(phone || 'l3-anon'))}`; }
 // 两个活动共用同一套「读状态→签到」，只有这几个常量不同；infoBody 保持与抓包完全一致的字段顺序
 const SEED_SIGN_CFG = { taskId: SEED_SIGN_TASK_ID, channelCode: SEED_CHANNEL, wtAc: SEED_WTAC, tag: '豆苗', referer: SEED_PAGE_URL, countAsSigned: true, infoBody: { taskId: SEED_SIGN_TASK_ID, needQyCredits: 1, needLimit: 0 } };
 const L3_SIGN_CFG = { taskId: L3_TASK_ID, channelCode: SEED_CHANNEL, wtAc: L3_WTAC, tag: '三日签', referer: L3_PAGE_URL, countAsSigned: false, infoBody: { taskId: L3_TASK_ID, needLimit: 0 } };
@@ -1193,10 +1216,10 @@ function coc3Headers(cred, referer = SEED_PAGE_URL) {
 }
 
 // 统一 POST；网关偶发非 JSON 或网络抖动按失败结构返回，不抛异常（网络错误重试一次）
-async function coc3Post(cred, path, body, referer = SEED_PAGE_URL) {
+async function coc3Post(cred, path, body, referer = SEED_PAGE_URL, extraHeaders = null) {
     for (const retry of [0, 1000]) {
         try {
-            const r = await Request({ url: `${SEED_BASE}${path}`, method: 'post', headers: coc3Headers(cred, referer), body: body || {}, _timeout: 30000 });
+            const r = await Request({ url: `${SEED_BASE}${path}`, method: 'post', headers: Object.assign(coc3Headers(cred, referer), extraHeaders || {}), body: body || {}, _timeout: 30000 });
             if (r) return r;
             return { resultCode: 'NO_RESP', msg: '响应非 JSON' };
         } catch (e) {
@@ -1263,6 +1286,8 @@ async function coc3Sign(cred, state, today, cfg) {
         return { line: `签到成功：${awards.map(a => a.awardName || '奖励').join('、')}`, count: count + 1 };
     }
     const msg = String(resp.msg || '');
+    // 实测真机「今天已签」回 resultCode:-9014 msg:"本日已签到,次日再来签到吧"（500/502 是豆苗侧见过的码），
+    // 三日签的码不固定，故一律靠 msg 正则兜底而不是枚举 resultCode
     if (resp.resultCode === 500 || resp.resultCode === 502 || /已签|重复/.test(msg)) {
         state.signDate = today; state.signCount = count; seen(count);
         return { line: `今日已签到（${msg || resp.resultCode}），跳过`, count };
@@ -1432,15 +1457,54 @@ async function l3PoolCount(cred, activityId) {
     return { ok: true, n: isFinite(n) ? n : 0 };
 }
 
-// 只代做「签到」并回报当月累签天数与各奖池剩余次数：真·抽奖接口在抓包里没有出现过
-// （抓包时三档次数全为 0，页面只走到 residueLotteryCount/currentLottery），未还原就不猜接口、不代抽，
-// 有次数时提示去 App 活动页手点。
+// 网关产 wasmparams：入参只有本次现签的 phone（+活动页 URL/UA），网关内跑 wheel_bg-0.0.8.wasm
+// 走页面同款 g_dt_with_custom_url(gettoken) → roto_simple("{}")。配了 TOOLS_API/TOOLS_API_TOKEN 才可用。
+async function l3WasmParams(cred) {
+    if (!TOOLS_API || !TOOLS_API_TOKEN) return { ok: false, why: '未配 @tools.address/@tools.token' };
+    const r = await Request({
+        url: `${TOOLS_API}/api/cmcc/wasmparams`, method: 'post',
+        headers: { 'content-type': 'application/json', 'x-token': TOOLS_API_TOKEN },
+        body: { phone: cred, url: L3_PAGE_URL, ua: USER_AGENT },
+        _timeout: 30000,
+    });
+    const arr = r && r.wasmparams;
+    if (!Array.isArray(arr) || arr.length !== 2 || !arr[0] || !arr[1]) {
+        return { ok: false, why: String((r && (r.error || r.message)) || '网关未返回 wasmparams').slice(0, 60) };
+    }
+    return { ok: true, header: JSON.stringify(arr) };
+}
+
+// 抽一次：拿到 wasmparams 才能发。成功码实测是字符串 "60000" 且带 activitySales；
+// 其它码含义未知（未中奖/超限/风控都可能是别的码），只原样回报码和 msg，不替它下结论。
+// 11-04 真机抓包对齐：wtAcId 不是随机数，是 JSESSIONID（会话绑定）；请求头带 gdp_user_id cookie、
+// referer 带 ?pageRecorded=true。sessionId 缺失时退回随机（真机形态优先）。
+async function l3Draw(cred, pool, sessionId, gdpCookie) {
+    const p = await l3WasmParams(cred);
+    if (!p.ok) return { ok: false, why: `wasmparams: ${p.why}` };
+    const body = {
+        activityId: pool.id, channelNo: SEED_CHANNEL, referer: L3_DRAW_REFER,
+        wtAc: L3_DRAW_WTAC, wtAcId: sessionId || coc3Uuid(), operDfp: null,
+    };
+    const r = await coc3Post(cred, '/cmpp-manage/lottery/lottery', body, L3_DRAW_REFERER, { wasmparams: p.header, cookie: gdpCookie || L3_GDP_COOKIE_ENV || `gdp_user_id=${gioencStr(gioUserUuid('l3-anon'))}` });
+    if (!r) return { ok: false, why: '无响应' };
+    const won = String(r.code) === '60000';
+    const sales = (r.data && r.data.activitySales) || {};
+    return { ok: true, won, code: String(r.code), msg: String(r.msg || ''), prize: sales.salesUnitName || sales.showName || '' };
+}
+
+// 签到 + 回报当月累签与各奖池次数；次数>0 且代抽开关开着时，向网关要一份 wasmparams 再真抽。
+// 未中奖/风控等返回码含义未知，只如实回报码和 msg，不替服务端下结论。
 async function runLucky3(user) {
     const lines = [];
     const say = t => { lines.push(t); $.log(t); };
     const signed = await coc3Cred(user);
     const cred = signed.token;
     if (!cred) { say(`[三日签] ticket 签不出 phone(${signed.err})，本次跳过——ticket 只在 App 刚登录后几小时内有效，开着获取Cookie在 App 里点任意一页重抓`); return lines; }
+    // 抽奖的 wtAcId 是 JSESSIONID 本身（11-04 真机抓包）：服务端拿它核对会话，随机 UUID 就是破绽
+    const jsessionid = (String(user.token || '').match(/JSESSIONID=([^;\s]+)/) || [, ''])[1];
+    // gdp_user_id 按本号手机号现造（设备身份与账号一致，不再用抓包静态值——跨账号错配是破绽）
+    const l3phone = (() => { const d = String(user.phone || '').replace(/\D/g, ''); if (/^1\d{10}$/.test(d)) return d; try { const p = BigInt('0x' + user.userCheckId).toString(); if (/^1\d{10}$/.test(p)) return p; } catch (e) { } return ''; })();
+    const gdpCookie = l3GdpCookie(l3phone || user.userCheckId);
 
     const all = $.toObj($.getdata(L3_STATE_KEY), {}) || {};
     const k = user.userCheckId || user.userName || 'default';
@@ -1459,11 +1523,33 @@ async function runLucky3(user) {
         const c = await l3PoolCount(cred, p.id);
         if (!c.ok) { $.log(`[三日签·奖池] ${p.name}(${p.id}) 查询失败: ${c.why}`); continue; }
         $.log(`[三日签·奖池] ${p.name}(${p.id}): ${c.n} 次`);
-        if (c.n > 0) open.push({ name: p.name, n: c.n });
+        if (c.n > 0) open.push({ id: p.id, name: p.name, n: c.n });
         await $.wait(randomInt(300, 700));
     }
     const free = open.reduce((a, x) => a + x.n, 0);
-    say(`[三日签] 当月累签 ${signRes.count} 天｜${signRes.line.slice(0, 26)}${free ? `｜${free} 次抽奖机会（${open.map(x => `${x.name}×${x.n}`).join('、')}），抽奖接口尚未还原，请在 App 活动页手动抽` : ''}`);
+    // 实测：签到当场查三档都是 0，约 1~2 分钟后服务端才把次数结出来（不是没给）
+    const lag = !free && /签到成功/.test(signRes.line);
+    let drawPart = '';
+    if (free && RUN_LUCKY3_DRAW) {
+        const got = [];
+        let left = L3_DRAW_MAX, fatal = '';
+        for (const x of open) {
+            for (let i = 0; i < x.n && left > 0; i++, left--) {
+                const d = await l3Draw(cred, x, jsessionid, gdpCookie);
+                if (!d.ok) { fatal = d.why; left = 0; break; }
+                got.push(`${x.name}${d.won ? `中:${d.prize || '?'}` : `回${d.code}${d.msg ? '(' + d.msg.slice(0, 10) + ')' : ''}`}`);
+                $.log(`[三日签·抽奖] ${x.name}(${x.id}) → ${got[got.length - 1]}`);
+                await $.wait(randomInt(800, 1600));
+            }
+            if (!left) break;
+        }
+        // 网关或 wasmparams 取不到时退回手动提示，不能把"没抽成"说成"抽了没中"
+        drawPart = got.length ? `｜已抽 ${got.length} 次：${got.join('、')}`
+            : `｜${fatal ? `代抽没走通(${fatal})，` : ''}还有 ${free} 次机会（${open.map(x => x.name).join('、')}），请在 App 活动页手动抽`;
+    } else if (free) {
+        drawPart = `｜${free} 次抽奖机会（${open.map(x => `${x.name}×${x.n}`).join('、')}），代抽开关 cmcc_lucky3_draw 未开，请在 App 活动页手动抽`;
+    }
+    say(`[三日签] 当月累签 ${signRes.count} 天｜${signRes.line.slice(0, 26)}${drawPart}${!drawPart && lag ? '｜本次刚签，次数延迟 1~2 分钟结算，稍后在活动页可见' : ''}`);
     return lines;
 }
 

@@ -632,6 +632,7 @@
         "cmcc_seed",
         "cmcc_seed_channel",
         "cmcc_lucky3",
+        "cmcc_lucky3_draw",
         "cmcc_lucky3_task",
         "cmcc_lucky3_pools",
         "cmcc_lucky3_page",
@@ -735,7 +736,14 @@
           "name": "幸运三日签",
           "val": false,
           "type": "boolean",
-          "desc": "移动爱购「幸运三日签」累签：每天签到即得首签卡券，当月累签第 2、3 天各开一档抽奖，每满 3 次签到再多加 1 次机会；卡券 7 天有效，同专区同档位单月限领 1 次。凭证与豆苗同一条（同一次运行只现签一次 phone，不重复签），跟随当天签到那一次执行。真·抽奖接口尚未还原（抓包时三档次数都是 0，页面只走到查询），脚本只代签到并把各档剩余次数报出来，有次数时去 App 活动页手动抽"
+          "desc": "移动爱购「幸运三日签」累签：每天签到即得首签卡券，当月累签第 2、3 天各开一档抽奖，每满 3 次签到再多加 1 次机会；卡券 7 天有效，同专区同档位单月限领 1 次。凭证与豆苗同一条（同一次运行只现签一次 phone，不重复签），跟随当天签到那一次执行。实测抽奖次数在签到后 1~2 分钟才结算，当场查会显示 0，属正常"
+        },
+        {
+          "id": "cmcc_lucky3_draw",
+          "name": "三日签代抽",
+          "val": true,
+          "type": "boolean",
+          "desc": "默认开：有次数时连「lottery/lottery」也一起代抽（走页面同款 wasm 风控参数，由取凭证网关 tools 的 /api/cmcc/wasmparams 现产，需配好 @tools.address / @tools.token）。网关没配或产不出参数时会退回「只报次数、提示手抽」，不会谎称抽过。填 false 则只签到+报次数"
         },
         {
           "id": "cmcc_lucky3_task",
@@ -850,6 +858,85 @@
           "val": "",
           "type": "text",
           "desc": "「中国移动」插件里打开「捕获 autoLogin」后由签到脚本自动写入的 autoLogin 传参(密文body/ua/x-qen)，无需手填；cmcc_sign 换票时把它传给 /api/cmcc/refresh 现场换成新票据"
+        }
+      ]
+    },
+    {
+      "id": "cmcc_sevenday_prize",
+      "name": "移动七日夺宝",
+      "author": "@Feng",
+      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sevenday_prize.js",
+      "descs_html": [
+        "中国移动 App「每日登录活动」H5（七日打卡分百万 / 天天来夺宝）的打卡与抽奖",
+        "账号来源：凭证复用「中国移动签到」换票时存进 cmcc_data 的大网 uid（不顶号）；没有或过期才回落到重放「捕获 autoLogin」抓的传参（会顶号）",
+        "运行：脚本只调取凭证网关——换 User-Token → 网关出打卡密文（含 wasm 取设备令牌）→ 打卡 → 查次数 → 有次数就抽奖；脚本本地零加密",
+        "打卡成败以「打完再查一次进度里有没有今天」为准，不看 clockIn 的返回码：实测它会回 code=10「领取失败」但日期照记，真机成功时 data 也全是 null（打卡本身不发奖，奖励在夺宝的 templatePrize 那一步）",
+        "风控对表（11-04 已破）：事件流「gDT 前缀-延续」+ gdp cookie 两条腿 + 栈帧/扩展表对齐后实测 code 0；打卡成败仍以复查进度为准",
+        "设备 cookie（_zw_kvani5r、gdp_*）开着抓包进一次活动页即自动填充 boxjs；gdp 未填充时取凭证网关按手机号自动生成稳定设备身份"
+      ],
+      "icons": [
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/cmcc.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/cmcc.png"
+      ],
+      "keys": [
+        "cmcc_autologin_data",
+        "cmcc_sevenday_prize_cfg",
+        "cmcc_sevenday_prize_phone",
+        "cmcc_sevenday_prize_zw",
+        "cmcc_sevenday_prize_gdp",
+        "cmcc_sevenday_prize_debug"
+      ],
+      "settings": [
+        {
+          "id": "cmcc_autologin_data",
+          "name": "autoLogin抓包(只读)",
+          "val": "",
+          "type": "text",
+          "desc": "由「中国移动签到」插件的「捕获 autoLogin」写入，本模块只读复用。只是兜底——正常先拿 cmcc_data 里的大网 uid 换 User-Token，那条不通才重放这份传参（重放会顶号）"
+        },
+        {
+          "id": "cmcc_sevenday_prize_cfg",
+          "name": "活动参数(抓取写入)",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "",
+          "desc": "由插件「捕获活动参数」写入，也可手填/改单项：JSON，键为 drawActivityId / clockInActivityId / touchCode / pageId / clockInRewards / clockInTotal。留空用脚本内置的当期默认值；只认形状对的字段，写错的项会忽略并回落默认"
+        },
+        {
+          "id": "cmcc_sevenday_prize_phone",
+          "name": "打卡手机号",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "159xxxxxxxx",
+          "desc": "打卡 payload 要 11 位手机号明文。留空优先用本次换票拿到的号码，其次从 cmcc_data 的 userCheckId（hex 手机号）还原"
+        },
+        {
+          "id": "cmcc_sevenday_prize_zw",
+          "name": "ZWRisk设备cookie(可选)",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "",
+          "desc": "ZWRisk 设备 cookie（生成不了只能抓）：App 进活动页时抓包自动填充；也可手动填真机抓包值"
+        },
+        {
+          "id": "cmcc_sevenday_prize_debug",
+          "name": "调试日志",
+          "val": false,
+          "type": "boolean",
+          "desc": "打印每次请求的 HTTP 状态与响应片段"
+        },
+        {
+          "id": "cmcc_sevenday_prize_gdp",
+          "name": "gdp cookie(打卡)",
+          "val": "",
+          "type": "text",
+          "desc": "留空=网关按手机号自动生成设备 jar；开着抓包在 App 里进一次活动页会自动填充真机值（优先级高于自动生成）"
         }
       ]
     },
