@@ -6,6 +6,8 @@
  * 环境变量：cmcc_data / cmcc_claim(默认开) / cmcc_task / cmcc_seckill / cmcc_sk_min(默认 11:00) / cmcc_video /
  *          cmcc_saturday / cmcc_seed / cmcc_seed_channel / cmcc_lucky3 / cmcc_lucky3_draw(默认开) / cmcc_lucky3_task / cmcc_lucky3_pools / cmcc_lucky3_page /
  *          TOOLS_API + TOOLS_API_TOKEN(取凭证网关，代抽 wasmparams 时用) /
+ *          cmcc_lucky3_risk_p3(抽奖口的 ZWRisk 设备令牌，抓取或手填，缺了不代抽) / cmcc_lucky3_zw(同一条接口收的 _zw_kvani5r) /
+ *          cmcc_lucky3_jar(权益市场整套设备 cookie：_zw+User-Token+页面态 gdp_*，抓到就整串同源复用) /
  *          cmcc_gold(默认关，会真扣 AI 豆) / cmcc_gold_at(默认 08:00 放量时刻) /
  *          cmcc_wed / cmcc_wed_sk / cmcc_wed_sk_at(留空=听服务端场次) / cmcc_task_skip_days / cmcc_debug；cmcc_task_fail 自动维护
  * 执行次序（定时 `58 0,7,11 * * *`）：00:58 那轮做签到+领奖+AI豆任务+追剧+周六游戏中心+豆苗+幸运三日签+周三拼图；
@@ -19,34 +21,40 @@
 [Script]
 中国移动获取Cookie = type=http-request,pattern=^https?:\/\/wx\.10086\.cn\/qwhdsso\/appTokenLogin,requires-body=1,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,script-update-interval=0
 中国移动抓autoLogin传参 = type=http-request,pattern=^https?:\/\/client\.app\.coc\.10086\.cn\/.*uamrandcodelogin\/autoLogin,requires-body=1,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,script-update-interval=0
+中国移动抓风控令牌 = type=http-response,pattern=^https?:\/\/yxfk\.market\.chinamobile\.com:8081\/mgt\/decision-engine\/udid\/c1,requires-body=1,max-size=0,timeout=60,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,script-update-interval=0
+中国移动抓权益市场Cookie = type=http-request,pattern=^https?:\/\/dev\.coc\.10086\.cn\/coc3\/(gr|coc3-market[^/]*|gateway-route)\/,requires-body=0,max-size=0,timeout=60,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,script-update-interval=0
 
 中国移动签到 = type=cron,cronexp="58 0,7,11 * * *",wake-system=1,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,script-update-interval=0
 
 [MITM]
-hostname = wx.10086.cn, client.app.coc.10086.cn
+hostname = wx.10086.cn, client.app.coc.10086.cn, yxfk.market.chinamobile.com, dev.coc.10086.cn
 
 ------------------- Loon 配置 -------------------
 
 [Script]
 http-request ^https?:\/\/wx\.10086\.cn\/qwhdsso\/appTokenLogin script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,requires-body=true,timeout=600,tag=中国移动获取Cookie
 http-request ^https?:\/\/client\.app\.coc\.10086\.cn\/.*uamrandcodelogin\/autoLogin script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,requires-body=true,timeout=600,tag=中国移动抓autoLogin传参
+http-response ^https?:\/\/yxfk\.market\.chinamobile\.com:8081\/mgt\/decision-engine\/udid\/c1 script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,requires-body=true,timeout=60,tag=中国移动抓风控令牌
+http-request ^https?:\/\/dev\.coc\.10086\.cn\/coc3\/(gr|coc3-market[^/]*|gateway-route)\/ script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,requires-body=false,timeout=60,tag=中国移动抓权益市场Cookie
 
 cron "58 0,7,11 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js, timeout=600, tag=中国移动签到
 
 [MITM]
-hostname = wx.10086.cn, client.app.coc.10086.cn
+hostname = wx.10086.cn, client.app.coc.10086.cn, yxfk.market.chinamobile.com, dev.coc.10086.cn
 
 --------------- Quantumult X 配置 ---------------
 
 [rewrite_local]
 ^https?:\/\/wx\.10086\.cn\/qwhdsso\/appTokenLogin url script-request-body https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js
 ^https?:\/\/client\.app\.coc\.10086\.cn\/.*uamrandcodelogin\/autoLogin url script-request-body https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js
+^https?:\/\/yxfk\.market\.chinamobile\.com:8081\/mgt\/decision-engine\/udid\/c1 url script-response-body https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js
+^https?:\/\/dev\.coc\.10086\.cn\/coc3\/(gr|coc3-market[^/]*|gateway-route)\/ url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js
 
 [task_local]
 "58 0,7,11 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js, tag=中国移动签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/cmcc.png, enabled=true
 
 [MITM]
-hostname = wx.10086.cn, client.app.coc.10086.cn
+hostname = wx.10086.cn, client.app.coc.10086.cn, yxfk.market.chinamobile.com, dev.coc.10086.cn
 
  */
 
@@ -140,6 +148,16 @@ function gioUserUuid(seed) {
 }
 const L3_GDP_COOKIE_ENV = getEnv('cmcc_lucky3_gdp') || '';
 function l3GdpCookie(phone) { return L3_GDP_COOKIE_ENV || `gdp_user_id=${gioencStr(gioUserUuid(phone || 'l3-anon'))}`; }
+// 抽奖口的风控令牌 `gr-risk-p3`（真机只挂在 lottery/lottery 上，签到/查次数/豆苗都不挂）：
+// 页面拿 ZWRisk 原生 SDK 产的 param 打 yxfk.market.chinamobile.com:8081/mgt/decision-engine/udid/c1，
+// 回 {"data":…,"status":1|2} 后 sessionStorage.setItem('risk-device-token', data)，抽奖时原样带上。
+// param 本地造不出（同 xk/getSecurityid），只能收割；观测寿命：11-02 07:39 签发的值 11-03 17:21 仍在用。
+// 同一条接口按形状还能收到 `_zw_kvani5r`（status=-4 那次回的 72hex 就是它，真机抽奖 cookie 里也在）。
+const L3_RISK_P3_ENV = String(getEnv('cmcc_lucky3_risk_p3') || '').trim();
+const L3_ZW_ENV = String(getEnv('cmcc_lucky3_zw') || '').trim();
+// 真机那一整套设备 cookie（抓一次就有）：里面有 _zw_kvani5r、User-Token、页面态 9e4e…_gdp_*、gdp_user_id。
+// 抓到过就整串原样复用（三套身份同源），没抓到才退回"zw + 按号现造 gdp"的零散形态。
+const L3_JAR_ENV = String(getEnv('cmcc_lucky3_jar') || '').trim();
 // 两个活动共用同一套「读状态→签到」，只有这几个常量不同；infoBody 保持与抓包完全一致的字段顺序
 const SEED_SIGN_CFG = { taskId: SEED_SIGN_TASK_ID, channelCode: SEED_CHANNEL, wtAc: SEED_WTAC, tag: '豆苗', referer: SEED_PAGE_URL, countAsSigned: true, infoBody: { taskId: SEED_SIGN_TASK_ID, needQyCredits: 1, needLimit: 0 } };
 const L3_SIGN_CFG = { taskId: L3_TASK_ID, channelCode: SEED_CHANNEL, wtAc: L3_WTAC, tag: '三日签', referer: L3_PAGE_URL, countAsSigned: false, infoBody: { taskId: L3_TASK_ID, needLimit: 0 } };
@@ -282,6 +300,61 @@ function GetAutoLogin() {
         $.log('🎉已抓到 autoLogin 传参');
     } catch (e) {
         $.log('❌ autoLogin 传参获取失败'), $.log(e);
+    }
+}
+
+// ZWRisk 决策引擎 (/mgt/decision-engine/udid/c1) 的回包按形状分流：
+//   40 位左右的字母数字串 → 抽奖专用的 gr-risk-p3（页面存进 sessionStorage['risk-device-token']，只挂在 lottery/lottery 上）
+//   72 位十六进制串       → 设备 cookie _zw_kvani5r（同一接口 status=-4 那次回的，真机每条 coc3 请求都带）
+// 两者的 param 都由 App 原生 SDK 现算，脚本造不出 ⇒ 只能收割；同值不写、不重复提醒。
+function GetRiskToken(res) {
+    try {
+        const j = $.toObj(String((res && res.body) || '')) || {};
+        const data = String(j.data || '').trim();
+        const isZw = /^[0-9a-f]{72}$/.test(data);
+        const isP3 = !isZw && /^[0-9A-Za-z_-]{20,64}$/.test(data);
+        const key = isZw ? 'cmcc_lucky3_zw' : isP3 ? 'cmcc_lucky3_risk_p3' : '';
+        if (!key) return;
+        if ($.getdata(key) === data) return;
+        $.setdata(data, key);
+        const label = isZw ? '_zw_kvani5r' : 'gr-risk-p3';
+        $.Messages.push(`🎉已抓到 ${label}（${data.length} 字符）→ ${key}`);
+        $.log(`🎉已抓到 ${label}（${data.length} 字符）`);
+    } catch (e) {
+        $.log('❌ 风控令牌获取失败'), $.log(e);
+    }
+}
+
+// 权益市场页（dev.coc.10086.cn/coc3/）请求头里那一整套 cookie：真机同一发抽奖请求带的就是这一串
+//   _zw_kvani5r(72hex) / 9e4e5fa7244c6b6e_gdp_cs1·gio_id·user_key·user_id / User-Token        ← 设备身份 + 短命会话票
+//   9e4e5fa7244c6b6e_gdp_sequence_ids·session_id·session_id_sent / JSESSIONID                ← 每个事件都在变
+// 三层处理：整串一模一样→静默不写；只有易变项或 User-Token 变→写新值但不推送；设备身份变→写并推一条确认。
+// JSESSIONID 收割时剔掉：抽奖链的 JSESSIONID 由 lottery 响应自己下发并逐发回带（真机就这形态），拿旧值反而串会话。
+// User-Token 是 loginCheck 签的 30 分钟票（Max-Age=1800）：留着过期值不如实，所以发之前按抓取时刻判定，超期就当没有。
+const L3_JAR_KEY = 'cmcc_lucky3_jar', L3_JAR_AT_KEY = 'cmcc_lucky3_jar_at', UT_TTL = 30 * 60 * 1000;
+const splitJar = jar => String(jar || '').split(/;\s*/).filter(Boolean);
+// "设备身份"那几项：换号/换机才会变；User-Token 与 GrowingIO 的计数/会话 id 都不算（不然每进一次页面都推一条）
+const DEVICE_ITEM = /^(_zw_kvani5r|[\w]+_gdp_(cs1|gio_id|user_key)|gdp_user_id)=/;
+const jarDevice = jar => splitJar(jar).filter(x => DEVICE_ITEM.test(x)).sort().join(';');
+function GetCoc3Jar(req) {
+    try {
+        const hs = (req && req.headers) || {};
+        const raw = String(hs.cookie || hs.Cookie || '');
+        if (!raw || !/_zw_kvani5r=|User-Token=|gdp_user_id=/.test(raw)) return;
+        const jar = splitJar(raw).filter(x => !/^JSESSIONID=/i.test(x)).join('; ');
+        const old = $.getdata(L3_JAR_KEY) || '';
+        if (old === jar) return;                                  // 整串没变：静默
+        const deviceChanged = jarDevice(old) !== jarDevice(jar);
+        $.setdata(jar, L3_JAR_KEY);
+        $.setdata(String(Date.now()), L3_JAR_AT_KEY);
+        if (deviceChanged) {
+            $.Messages.push(`🎉已抓到权益市场 cookie（${splitJar(jar).length} 条 / ${jar.length} 字符）→ ${L3_JAR_KEY}`);
+            $.log(`🎉已抓到权益市场 cookie（${splitJar(jar).length} 条，设备身份有变化）`);
+        } else {
+            $.log(`[抓取] 权益市场 cookie 已刷新（${splitJar(jar).length} 条，只变了会话票/事件计数，不另提醒）`);
+        }
+    } catch (e) {
+        $.log('❌ 权益市场 cookie 获取失败'), $.log(e);
     }
 }
 
@@ -1216,18 +1289,32 @@ function coc3Headers(cred, referer = SEED_PAGE_URL) {
 }
 
 // 统一 POST；网关偶发非 JSON 或网络抖动按失败结构返回，不抛异常（网络错误重试一次）
-async function coc3Post(cred, path, body, referer = SEED_PAGE_URL, extraHeaders = null) {
+async function coc3Post(cred, path, body, referer = SEED_PAGE_URL, extraHeaders = null, wantResp = false) {
     for (const retry of [0, 1000]) {
         try {
-            const r = await Request({ url: `${SEED_BASE}${path}`, method: 'post', headers: Object.assign(coc3Headers(cred, referer), extraHeaders || {}), body: body || {}, _timeout: 30000 });
-            if (r) return r;
-            return { resultCode: 'NO_RESP', msg: '响应非 JSON' };
+            const r = await Request({ url: `${SEED_BASE}${path}`, method: 'post', headers: Object.assign(coc3Headers(cred, referer), extraHeaders || {}), body: body || {}, _respType: wantResp ? 'all' : 'body', _timeout: 30000 });
+            if (!r) return wantResp ? { json: { resultCode: 'NO_RESP', msg: '响应非 JSON' }, resp: null } : { resultCode: 'NO_RESP', msg: '响应非 JSON' };
+            return wantResp ? { json: $.toObj(r.body, {}) || {}, resp: r } : r;
         } catch (e) {
             if (!retry) { await $.wait(1000); continue; }
-            return { resultCode: 'NETWORK_ERROR', msg: String((e && e.message) || e) };
+            return wantResp ? { json: { resultCode: 'NETWORK_ERROR', msg: String((e && e.message) || e) }, resp: null } : { resultCode: 'NETWORK_ERROR', msg: String((e && e.message) || e) };
         }
     }
-    return { resultCode: 'NETWORK_ERROR', msg: 'unreachable' };
+    return wantResp ? { json: { resultCode: 'NETWORK_ERROR', msg: 'unreachable' }, resp: null } : { resultCode: 'NETWORK_ERROR', msg: 'unreachable' };
+}
+
+// 从响应头里挑一条 cookie 的值：各端 set-cookie 形态不一（数组 / 逗号拼接串），且逗号串里还混着其它 cookie
+function pickSetCookie(headers, name) {
+    const raw = headers && (headers['set-cookie'] || headers['Set-Cookie']);
+    if (!raw) return '';
+    const items = [];
+    for (const one of Array.isArray(raw) ? raw : String(raw).split(/,(?=\s*[A-Za-z0-9_.-]+=)/)) {
+        for (const kv of String(one).split(';')) {
+            const i = kv.indexOf('=');
+            if (i > 0 && kv.slice(0, i).trim() === name) items.push(kv.slice(i + 1).trim());
+        }
+    }
+    return items.length ? items[items.length - 1] : '';
 }
 
 // 凭证身份：只记长度与尾 4 位，不存明文，用于检测 coc3_phone 被更换
@@ -1459,12 +1546,13 @@ async function l3PoolCount(cred, activityId) {
 
 // 网关产 wasmparams：入参只有本次现签的 phone（+活动页 URL/UA），网关内跑 wheel_bg-0.0.8.wasm
 // 走页面同款 g_dt_with_custom_url(gettoken) → roto_simple("{}")。配了 TOOLS_API/TOOLS_API_TOKEN 才可用。
-async function l3WasmParams(cred) {
+async function l3WasmParams(cred, cookie) {
     if (!TOOLS_API || !TOOLS_API_TOKEN) return { ok: false, why: '未配 @tools.address/@tools.token' };
     const r = await Request({
         url: `${TOOLS_API}/api/cmcc/wasmparams`, method: 'post',
         headers: { 'content-type': 'application/json', 'x-token': TOOLS_API_TOKEN },
-        body: { phone: cred, url: L3_PAGE_URL, ua: USER_AGENT },
+        // 真机第二抽的 gettoken 也带着上一发下发的 JSESSIONID（同一个 WebView 会话），所以这条要透传给网关
+        body: { phone: cred, url: L3_PAGE_URL, ua: USER_AGENT, fetchHeaders: cookie ? { cookie } : undefined },
         _timeout: 30000,
     });
     const arr = r && r.wasmparams;
@@ -1474,18 +1562,56 @@ async function l3WasmParams(cred) {
     return { ok: true, header: JSON.stringify(arr) };
 }
 
+// 抽奖这一路的 cookie：优先整套复用抓到的真机 jar（_zw + User-Token + 页面态 gdp_* + gdp_user_id 同源），
+// 其次按号现造 gdp_user_id（+抓到的 zw）；JSESSIONID 只在连抽时由上一发响应下发后回带（真机就这形态）。
+// jar 里的 User-Token 是 30 分钟票：抓取时刻超期就剔掉它（真机会让它自然过期，我们留着废票反而更假）
+function l3CookieOf(sess, gdpCookie) {
+    const jar = [];
+    if (sess && sess.jsessionid) jar.push(`JSESSIONID=${sess.jsessionid}`);
+    if (L3_JAR_ENV) {
+        const at = Number($.getdata(L3_JAR_AT_KEY) || 0);
+        const stale = at > 0 && Date.now() - at > UT_TTL;    // 手填的 jar（没有抓取时刻）按未超期处理
+        for (const kv of splitJar(L3_JAR_ENV)) {
+            if (/^JSESSIONID=/i.test(kv)) continue;
+            if (stale && /^User-Token=/i.test(kv)) continue;
+            jar.push(kv);
+        }
+        return jar.join('; ');
+    }
+    if (L3_ZW_ENV) jar.push(`_zw_kvani5r=${L3_ZW_ENV}`);
+    if (gdpCookie) jar.push(gdpCookie);
+    return jar.join('; ');
+}
+
 // 抽一次：拿到 wasmparams 才能发。成功码实测是字符串 "60000" 且带 activitySales；
 // 其它码含义未知（未中奖/超限/风控都可能是别的码），只原样回报码和 msg，不替它下结论。
 // 11-04 真机抓包对齐：wtAcId 不是随机数，是 JSESSIONID（会话绑定）；请求头带 gdp_user_id cookie、
 // referer 带 ?pageRecorded=true。sessionId 缺失时退回随机（真机形态优先）。
-async function l3Draw(cred, pool, sessionId, gdpCookie) {
-    const p = await l3WasmParams(cred);
+// 11-04 二次对齐：真机**只在抽奖这一发**多带 `gr-risk-p3`（ZWRisk 设备令牌，见上面常量注释），
+// 并把 cookie 一次拆成多条（_zw_kvani5r + gdp_*），还带 sec-fetch-* / priority；少 gr-risk-p3 会被判 SCORE_REFUSE。
+async function l3Draw(cred, pool, sessionId, gdpCookie, sess) {
+    // 没抓到令牌就别硬发：缺 gr-risk-p3 的形态实测就是 SCORE_REFUSE，而且产 wasmparams 要先向 gettoken 真发一次
+    if (!L3_RISK_P3_ENV) return { ok: false, why: '缺 gr-risk-p3（抽奖口专用的 ZWRisk 设备令牌，本地造不出，需抓一次）' };
+    const p = await l3WasmParams(cred, l3CookieOf(sess, gdpCookie) || undefined);
     if (!p.ok) return { ok: false, why: `wasmparams: ${p.why}` };
     const body = {
         activityId: pool.id, channelNo: SEED_CHANNEL, referer: L3_DRAW_REFER,
         wtAc: L3_DRAW_WTAC, wtAcId: sessionId || coc3Uuid(), operDfp: null,
     };
-    const r = await coc3Post(cred, '/cmpp-manage/lottery/lottery', body, L3_DRAW_REFERER, { wasmparams: p.header, cookie: gdpCookie || L3_GDP_COOKIE_ENV || `gdp_user_id=${gioencStr(gioUserUuid('l3-anon'))}` });
+    // 真机第 2 抽的 cookie 比第 1 抽多一条 JSESSIONID，值就是第 1 抽响应下发的 ⇒ 连抽在同一会话里滚着走
+    const cookie = l3CookieOf(sess, gdpCookie);
+    const extra = {
+        wasmparams: p.header,
+        cookie: cookie || L3_GDP_COOKIE_ENV || `gdp_user_id=${gioencStr(gioUserUuid('l3-anon'))}`,
+        'sec-fetch-site': 'same-origin', 'sec-fetch-mode': 'cors', 'sec-fetch-dest': 'empty',
+        priority: 'u=3, i',
+        'gr-risk-p3': L3_RISK_P3_ENV,
+    };
+    const { json: r, resp } = await coc3Post(cred, '/cmpp-manage/lottery/lottery', body, L3_DRAW_REFERER, extra, true);
+    if (sess && resp) {
+        const js = pickSetCookie(resp.headers, 'JSESSIONID');
+        if (js) sess.jsessionid = js;
+    }
     if (!r) return { ok: false, why: '无响应' };
     const won = String(r.code) === '60000';
     const sales = (r.data && r.data.activitySales) || {};
@@ -1533,9 +1659,10 @@ async function runLucky3(user) {
     if (free && RUN_LUCKY3_DRAW) {
         const got = [];
         let left = L3_DRAW_MAX, fatal = '';
+        const sess = { jsessionid: '' };   // 连抽共用一次会话：上一发响应下发的 JSESSIONID 要带进下一发（真机形态）
         for (const x of open) {
             for (let i = 0; i < x.n && left > 0; i++, left--) {
-                const d = await l3Draw(cred, x, jsessionid, gdpCookie);
+                const d = await l3Draw(cred, x, jsessionid, gdpCookie, sess);
                 if (!d.ok) { fatal = d.why; left = 0; break; }
                 got.push(`${x.name}${d.won ? `中:${d.prize || '?'}` : `回${d.code}${d.msg ? '(' + d.msg.slice(0, 10) + ')' : ''}`}`);
                 $.log(`[三日签·抽奖] ${x.name}(${x.id}) → ${got[got.length - 1]}`);
@@ -1545,7 +1672,7 @@ async function runLucky3(user) {
         }
         // 网关或 wasmparams 取不到时退回手动提示，不能把"没抽成"说成"抽了没中"
         drawPart = got.length ? `｜已抽 ${got.length} 次：${got.join('、')}`
-            : `｜${fatal ? `代抽没走通(${fatal})，` : ''}还有 ${free} 次机会（${open.map(x => x.name).join('、')}），请在 App 活动页手动抽`;
+            : `｜${fatal ? `代抽没走通(${fatal}${/gr-risk-p3/.test(fatal) ? '：开「捕获抽奖身份」在 App 进一次权益市场页' : ''})，` : ''}还有 ${free} 次机会（${open.map(x => x.name).join('、')}），请在 App 活动页手动抽`;
     } else if (free) {
         drawPart = `｜${free} 次抽奖机会（${open.map(x => `${x.name}×${x.n}`).join('、')}），代抽开关 cmcc_lucky3_draw 未开，请在 App 活动页手动抽`;
     }
@@ -2392,10 +2519,14 @@ async function sendMsg(message) {
     }
 }
 
-// 脚本执行入口: $request 存在 → 抓取模式(按 URL 分流), 否则 → 定时任务模式
+// 脚本执行入口: 抓取模式按 URL 分流(风控令牌走响应侧、autoLogin 与 Cookie 走请求侧), 否则 → 定时任务模式
 !(async () => {
-    if (typeof $request !== `undefined`) {
-        if (/uamrandcodelogin\/autoLogin/i.test($request.url || '')) GetAutoLogin();
+    if (typeof $response !== 'undefined' && /decision-engine\/udid\/c1/i.test(($response.url || ($request || {}).url || ''))) {
+        GetRiskToken($response);
+    } else if (typeof $request !== `undefined`) {
+        const u = $request.url || '';
+        if (/uamrandcodelogin\/autoLogin/i.test(u)) GetAutoLogin();
+        else if (/dev\.coc\.10086\.cn\/coc3\/(gr|coc3-market[^/]*|gateway-route)\//i.test(u)) GetCoc3Jar($request);   // 权益市场页的整套设备 cookie（抽奖要用同源身份）
         else GetCookie();
     } else {
         await main();  // 主函数
