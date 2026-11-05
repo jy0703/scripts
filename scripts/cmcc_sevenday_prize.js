@@ -276,17 +276,24 @@ async function runAccount(account) {
             msg = String(e.message || e).slice(0, 80);
             $.log(`[七日打卡] clockIn 异常: ${msg}`);
         }
-        const after = await cocPost('/coc/activities/prize/consecutiveClockInQuery', { activityId: cfg.clockInActivityId });
-        const daysAfter = ((after.code === '0' && after.data) || {}).clockInDateList || [];
-        // 服务端明确回「当日已签到」（如 1000007034）时以它为准——进度查询在某些登录通道下可能查不到当期
-        // 数据（11-04 实测：SuZhou 通道的会话复查为空，但 App 与 gate 都显示已签），不能只信进度列表
+        // 判定三层：立即查 → 延迟查（落地有秒级延迟，11-05 实测 clockIn 回 40 但日期延迟记上）→ 回「已签到」类
+        // 回码也按已签处理。三层都不满足才报失败。
+        const qProgress = async () => {
+            const r = await cocPost('/coc/activities/prize/consecutiveClockInQuery', { activityId: cfg.clockInActivityId });
+            return ((r.code === '0' && r.data) || {}).clockInDateList || [];
+        };
+        let daysAfter = await qProgress();
+        if (!daysAfter.includes(today) && !/已签到/.test(msg) && code !== '0') {
+            await $.wait(5000);
+            daysAfter = await qProgress();
+        }
         if (daysAfter.includes(today) || /已签到/.test(msg)) {
             const got = daysAfter.length || Number(days.length) + 1;
             const reward = cfg.clockInRewards[got - 1];
-            say(`✅ 七日打卡完成：进度 ${got}/${cfg.clockInRewards.length} 天 · 累计 ${clockInAmount(got)} 元${reward ? `（今日 ${reward} 元）` : ''}${code === '0' ? '' : `；clockIn 回 code=${code} 属领奖那一层，打卡本身已成功`}`);
+            say(`✅ 七日打卡完成：进度 ${got}/${cfg.clockInRewards.length} 天 · 累计 ${clockInAmount(got)} 元${reward ? `（今日 ${reward} 元）` : ''}${code === '0' ? '' : `；clockIn 回 code=${code} 属风控层判罚，打卡已落地`}`);
             if (got >= cfg.clockInRewards.length) say(`✅ 已集满 ${cfg.clockInRewards.length} 天，可领 ${cfg.clockInTotal} 元话费券`);
         } else {
-            say(`❌ 打卡失败: code=${code || '-'} ${msg || ''}（复查进度里没有今天）`);
+            say(`❌ 打卡失败: code=${code || '-'} ${msg || ''}（两层复查进度里都没有今天）`);
         }
     } else if (days.length >= cfg.clockInRewards.length) {
         say(`✅ 七日打卡已满 ${cfg.clockInRewards.length} 天：累计 ${clockInAmount(days.length)} 元，可领 ${cfg.clockInTotal} 元话费券`);

@@ -6,7 +6,7 @@
  * 环境变量：cmcc_data / cmcc_claim(默认开) / cmcc_task / cmcc_seckill / cmcc_sk_min(默认 11:00) / cmcc_video /
  *          cmcc_saturday / cmcc_seed / cmcc_seed_channel / cmcc_lucky3 / cmcc_lucky3_draw(默认开) / cmcc_lucky3_task / cmcc_lucky3_pools / cmcc_lucky3_page /
  *          TOOLS_API + TOOLS_API_TOKEN(取凭证网关，代抽 wasmparams 时用) /
- *          cmcc_lucky3_risk_p3(抽奖口的 ZWRisk 设备令牌，抓取或手填，缺了不代抽) / cmcc_lucky3_zw(同一条接口收的 _zw_kvani5r) /
+ *          cmcc_lucky3_risk_p3(抽奖口的 ZWRisk 设备令牌，抓取或手填；带上也被拒过，只当补齐形态) / cmcc_lucky3_zw(同一条接口收的 _zw_kvani5r) /
  *          cmcc_lucky3_jar(权益市场整套设备 cookie：_zw+User-Token+页面态 gdp_*，抓到就整串同源复用) /
  *          cmcc_gold(默认关，会真扣 AI 豆) / cmcc_gold_at(默认 08:00 放量时刻) /
  *          cmcc_wed / cmcc_wed_sk / cmcc_wed_sk_at(留空=听服务端场次) / cmcc_task_skip_days / cmcc_debug；cmcc_task_fail 自动维护
@@ -126,17 +126,14 @@ const L3_TASK_ID = Number(getEnv('cmcc_lucky3_task') || 3157);
 const L3_WTAC = 'P00000138744_';       // 页面累签组件的埋点位，随包原样上送
 const L3_POOLS = parsePools(String(getEnv('cmcc_lucky3_pools') || '17788:累签第2日,17789:累签第3日,17790:每满3签'));
 const L3_STATE_KEY = 'cmcc_lucky3_state';
-// 代抽开关与常量：抽奖接口已还原（真机抓包 60000=中奖），参数 wasmparams 由 tools 网关跑 coc3 的 wasm 现产
 const RUN_LUCKY3_DRAW = !isOff(getEnv('cmcc_lucky3_draw'));   // 默认代抽；显式填 false 只查次数不抽
 const L3_DRAW_MAX = 8;                                        // 单次运行的代抽上限（服务端本来就按次数扣，纯兜底）
-const L3_DRAW_WTAC = 'P00000001090_';                         // 抽奖位的埋点位（11-04 真机抓包实测，两个奖池同值；旧值 8211 是误读别的组件）
+const L3_DRAW_WTAC_MAP = { 17788: 'P00000008211_', 17789: 'P00000001090_', 17790: 'P00000001090_' };
+const L3_DRAW_WTAC = 'P00000001090_';                         // 兜底：奖池不在 map 里时用这条
 const L3_DRAW_REFER = '264xysrqtybld';                        // body.referer 是 layout 的页面键，带"4"，与 URL 里那段页面码不同
 const L3_DRAW_REFERER = L3_PAGE_URL + '?pageRecorded=true';   // 抽奖请求头的 referer 带 pageRecorded（真机同款）
-// GrowingIO gdp_user_id：按手机号现造（算法逆自 gdp-full-H5.js：逐字符 charCode^1，直通 A a Z z @ {），
-// 同号永远同一设备身份、异号隔离——不再用抓包静态值（跨账号错配是风控破绽）；boxjs cmcc_lucky3_gdp 仍可覆盖
 const gioencStr = s => 'gioenc-' + String(s).split('').map(c => 'AaZz@{'.includes(c) ? c : String.fromCharCode(c.charCodeAt(0) ^ 1)).join('').replace(/,/g, '%2C');
 function gioUserUuid(seed) {
-    // 纯 JS 确定性 16 字节（代理环境没有 crypto）：FNV-1a 四轮搅动出种子，xorshift 填充
     let h0 = 0x811c9dc5, h1 = 0x01000193;
     for (const ch of String(seed)) { h0 = ((h0 ^ ch.charCodeAt(0)) >>> 0); h0 = (Math.imul(h0, 0x01000193) >>> 0); h1 = ((h1 ^ (ch.charCodeAt(0) << 5)) >>> 0); h1 = (Math.imul(h1, 0x85ebca6b) >>> 0); }
     let s0 = h0 || 1, s1 = h1 || 2;
@@ -148,15 +145,8 @@ function gioUserUuid(seed) {
 }
 const L3_GDP_COOKIE_ENV = getEnv('cmcc_lucky3_gdp') || '';
 function l3GdpCookie(phone) { return L3_GDP_COOKIE_ENV || `gdp_user_id=${gioencStr(gioUserUuid(phone || 'l3-anon'))}`; }
-// 抽奖口的风控令牌 `gr-risk-p3`（真机只挂在 lottery/lottery 上，签到/查次数/豆苗都不挂）：
-// 页面拿 ZWRisk 原生 SDK 产的 param 打 yxfk.market.chinamobile.com:8081/mgt/decision-engine/udid/c1，
-// 回 {"data":…,"status":1|2} 后 sessionStorage.setItem('risk-device-token', data)，抽奖时原样带上。
-// param 本地造不出（同 xk/getSecurityid），只能收割；观测寿命：11-02 07:39 签发的值 11-03 17:21 仍在用。
-// 同一条接口按形状还能收到 `_zw_kvani5r`（status=-4 那次回的 72hex 就是它，真机抽奖 cookie 里也在）。
 const L3_RISK_P3_ENV = String(getEnv('cmcc_lucky3_risk_p3') || '').trim();
 const L3_ZW_ENV = String(getEnv('cmcc_lucky3_zw') || '').trim();
-// 真机那一整套设备 cookie（抓一次就有）：里面有 _zw_kvani5r、User-Token、页面态 9e4e…_gdp_*、gdp_user_id。
-// 抓到过就整串原样复用（三套身份同源），没抓到才退回"zw + 按号现造 gdp"的零散形态。
 const L3_JAR_ENV = String(getEnv('cmcc_lucky3_jar') || '').trim();
 // 两个活动共用同一套「读状态→签到」，只有这几个常量不同；infoBody 保持与抓包完全一致的字段顺序
 const SEED_SIGN_CFG = { taskId: SEED_SIGN_TASK_ID, channelCode: SEED_CHANNEL, wtAc: SEED_WTAC, tag: '豆苗', referer: SEED_PAGE_URL, countAsSigned: true, infoBody: { taskId: SEED_SIGN_TASK_ID, needQyCredits: 1, needLimit: 0 } };
@@ -1545,7 +1535,6 @@ async function l3PoolCount(cred, activityId) {
 }
 
 // 网关产 wasmparams：入参只有本次现签的 phone（+活动页 URL/UA），网关内跑 wheel_bg-0.0.8.wasm
-// 走页面同款 g_dt_with_custom_url(gettoken) → roto_simple("{}")。配了 TOOLS_API/TOOLS_API_TOKEN 才可用。
 async function l3WasmParams(cred, cookie) {
     if (!TOOLS_API || !TOOLS_API_TOKEN) return { ok: false, why: '未配 @tools.address/@tools.token' };
     const r = await Request({
@@ -1583,30 +1572,22 @@ function l3CookieOf(sess, gdpCookie) {
     return jar.join('; ');
 }
 
-// 抽一次：拿到 wasmparams 才能发。成功码实测是字符串 "60000" 且带 activitySales；
-// 其它码含义未知（未中奖/超限/风控都可能是别的码），只原样回报码和 msg，不替它下结论。
-// 11-04 真机抓包对齐：wtAcId 不是随机数，是 JSESSIONID（会话绑定）；请求头带 gdp_user_id cookie、
-// referer 带 ?pageRecorded=true。sessionId 缺失时退回随机（真机形态优先）。
-// 11-04 二次对齐：真机**只在抽奖这一发**多带 `gr-risk-p3`（ZWRisk 设备令牌，见上面常量注释），
-// 并把 cookie 一次拆成多条（_zw_kvani5r + gdp_*），还带 sec-fetch-* / priority；少 gr-risk-p3 会被判 SCORE_REFUSE。
+// 抽一次：成功码 "60000" 且带 activitySales；其它码只原样回报不替服务端下结论。
 async function l3Draw(cred, pool, sessionId, gdpCookie, sess) {
-    // 没抓到令牌就别硬发：缺 gr-risk-p3 的形态实测就是 SCORE_REFUSE，而且产 wasmparams 要先向 gettoken 真发一次
-    if (!L3_RISK_P3_ENV) return { ok: false, why: '缺 gr-risk-p3（抽奖口专用的 ZWRisk 设备令牌，本地造不出，需抓一次）' };
     const p = await l3WasmParams(cred, l3CookieOf(sess, gdpCookie) || undefined);
     if (!p.ok) return { ok: false, why: `wasmparams: ${p.why}` };
     const body = {
         activityId: pool.id, channelNo: SEED_CHANNEL, referer: L3_DRAW_REFER,
-        wtAc: L3_DRAW_WTAC, wtAcId: sessionId || coc3Uuid(), operDfp: null,
+        wtAc: L3_DRAW_WTAC_MAP[pool.id] || L3_DRAW_WTAC, wtAcId: sessionId || coc3Uuid(), operDfp: null,
     };
-    // 真机第 2 抽的 cookie 比第 1 抽多一条 JSESSIONID，值就是第 1 抽响应下发的 ⇒ 连抽在同一会话里滚着走
     const cookie = l3CookieOf(sess, gdpCookie);
     const extra = {
         wasmparams: p.header,
-        cookie: cookie || L3_GDP_COOKIE_ENV || `gdp_user_id=${gioencStr(gioUserUuid('l3-anon'))}`,
+        cookie: cookie || l3GdpCookie(''),
         'sec-fetch-site': 'same-origin', 'sec-fetch-mode': 'cors', 'sec-fetch-dest': 'empty',
         priority: 'u=3, i',
-        'gr-risk-p3': L3_RISK_P3_ENV,
     };
+    if (L3_RISK_P3_ENV) extra['gr-risk-p3'] = L3_RISK_P3_ENV;   // 抓到就带上（真机必带），没抓到不再拦着不发——带上也照样被拒
     const { json: r, resp } = await coc3Post(cred, '/cmpp-manage/lottery/lottery', body, L3_DRAW_REFERER, extra, true);
     if (sess && resp) {
         const js = pickSetCookie(resp.headers, 'JSESSIONID');
@@ -1615,7 +1596,7 @@ async function l3Draw(cred, pool, sessionId, gdpCookie, sess) {
     if (!r) return { ok: false, why: '无响应' };
     const won = String(r.code) === '60000';
     const sales = (r.data && r.data.activitySales) || {};
-    return { ok: true, won, code: String(r.code), msg: String(r.msg || ''), prize: sales.salesUnitName || sales.showName || '' };
+    return { ok: true, won, code: String(r.code), msg: String(r.msg || ''), prize: sales.salesUnitName || sales.showName || '', noP3: !L3_RISK_P3_ENV, risk: !!(r.data && r.data.risk) };
 }
 
 // 签到 + 回报当月累签与各奖池次数；次数>0 且代抽开关开着时，向网关要一份 wasmparams 再真抽。
@@ -1626,9 +1607,7 @@ async function runLucky3(user) {
     const signed = await coc3Cred(user);
     const cred = signed.token;
     if (!cred) { say(`[三日签] ticket 签不出 phone(${signed.err})，本次跳过——ticket 只在 App 刚登录后几小时内有效，开着获取Cookie在 App 里点任意一页重抓`); return lines; }
-    // 抽奖的 wtAcId 是 JSESSIONID 本身（11-04 真机抓包）：服务端拿它核对会话，随机 UUID 就是破绽
     const jsessionid = (String(user.token || '').match(/JSESSIONID=([^;\s]+)/) || [, ''])[1];
-    // gdp_user_id 按本号手机号现造（设备身份与账号一致，不再用抓包静态值——跨账号错配是破绽）
     const l3phone = (() => { const d = String(user.phone || '').replace(/\D/g, ''); if (/^1\d{10}$/.test(d)) return d; try { const p = BigInt('0x' + user.userCheckId).toString(); if (/^1\d{10}$/.test(p)) return p; } catch (e) { } return ''; })();
     const gdpCookie = l3GdpCookie(l3phone || user.userCheckId);
 
@@ -1658,12 +1637,14 @@ async function runLucky3(user) {
     let drawPart = '';
     if (free && RUN_LUCKY3_DRAW) {
         const got = [];
-        let left = L3_DRAW_MAX, fatal = '';
+        let left = L3_DRAW_MAX, fatal = '', noP3 = false, refused = false;
         const sess = { jsessionid: '' };   // 连抽共用一次会话：上一发响应下发的 JSESSIONID 要带进下一发（真机形态）
         for (const x of open) {
             for (let i = 0; i < x.n && left > 0; i++, left--) {
                 const d = await l3Draw(cred, x, jsessionid, gdpCookie, sess);
                 if (!d.ok) { fatal = d.why; left = 0; break; }
+                if (d.noP3) noP3 = true;
+                if (d.risk) refused = true;
                 got.push(`${x.name}${d.won ? `中:${d.prize || '?'}` : `回${d.code}${d.msg ? '(' + d.msg.slice(0, 10) + ')' : ''}`}`);
                 $.log(`[三日签·抽奖] ${x.name}(${x.id}) → ${got[got.length - 1]}`);
                 await $.wait(randomInt(800, 1600));
@@ -1671,8 +1652,8 @@ async function runLucky3(user) {
             if (!left) break;
         }
         // 网关或 wasmparams 取不到时退回手动提示，不能把"没抽成"说成"抽了没中"
-        drawPart = got.length ? `｜已抽 ${got.length} 次：${got.join('、')}`
-            : `｜${fatal ? `代抽没走通(${fatal}${/gr-risk-p3/.test(fatal) ? '：开「捕获抽奖身份」在 App 进一次权益市场页' : ''})，` : ''}还有 ${free} 次机会（${open.map(x => x.name).join('、')}），请在 App 活动页手动抽`;
+        drawPart = got.length ? `｜已抽 ${got.length} 次：${got.join('、')}${refused && noP3 ? '（没抓到 gr-risk-p3 设备令牌，形态不全；开「捕获抽奖身份」进一次权益市场页）' : refused ? '（风控拒绝：带真机令牌也被拒过，问题不在这个头）' : ''}`
+            : `｜${fatal ? `代抽没走通(${fatal})，` : ''}还有 ${free} 次机会（${open.map(x => x.name).join('、')}），请在 App 活动页手动抽`;
     } else if (free) {
         drawPart = `｜${free} 次抽奖机会（${open.map(x => `${x.name}×${x.n}`).join('、')}），代抽开关 cmcc_lucky3_draw 未开，请在 App 活动页手动抽`;
     }

@@ -636,7 +636,6 @@
         "cmcc_lucky3_risk_p3",
         "cmcc_lucky3_zw",
         "cmcc_lucky3_jar",
-        "cmcc_lucky3_jar_at",
         "cmcc_lucky3_task",
         "cmcc_lucky3_pools",
         "cmcc_lucky3_page",
@@ -747,7 +746,7 @@
           "name": "三日签代抽",
           "val": true,
           "type": "boolean",
-          "desc": "默认开：有次数时连「lottery/lottery」也一起代抽（走页面同款 wasm 风控参数，由取凭证网关 tools 的 /api/cmcc/wasmparams 现产，需配好 @tools.address / @tools.token）。抽奖口另要 ZWRisk 设备令牌 gr-risk-p3 与权益市场那整套设备 cookie（见下面两项），没抓到时代抽会直接跳过并提示，不会谎称抽过。填 false 则只签到+报次数"
+          "desc": "默认开：有次数时连「lottery/lottery」也一起代抽（走页面同款 wasm 风控参数，由取凭证网关 tools 的 /api/cmcc/wasmparams 现产，需配好 @tools.address / @tools.token）。抽奖口另要 ZWRisk 设备令牌 gr-risk-p3 与权益市场那整套设备 cookie（见下面三项，开「捕获抽奖身份」进一次权益市场页就自动填）——补齐这些形态后仍可能被风控拒（11-04 用真机自己的令牌实测过），所以通知里被拒会照实说回码，不会谎称抽过。填 false 则只签到+报次数"
         },
         {
           "id": "cmcc_lucky3_jar",
@@ -757,7 +756,7 @@
           "autoGrow": true,
           "rows": 2,
           "placeholder": "开「捕获抽奖身份」进一次权益市场页自动填，也可手填整串",
-          "desc": "真机抽奖请求带的一整套 cookie：_zw_kvani5r + User-Token + 页面态 9e4e5fa7244c6b6e_gdp_cs1/gio_id/user_key + gdp_user_id。抓到后抽奖与产参(gettoken)都整串原样复用，保证与 gr-risk-p3 同一台设备同源——只填这一串时下面两项不用管。留空=退回旧形态（_zw + 按手机号现造的 gdp_user_id，没有 User-Token）。会话 JSESSIONID 不在这里存：由每次抽奖响应下发、连抽自动回带。注意这串是设备级的：多账号且分别在不同手机上时，抓取会互相覆盖，需要各号手填自己那台的串"
+          "desc": "真机抽奖请求带的一整套 cookie：_zw_kvani5r + User-Token + 页面态 9e4e5fa7244c6b6e_gdp_cs1/gio_id/user_key + gdp_user_id。抓到后抽奖与产参(gettoken)都整串原样复用，保证与 gr-risk-p3 同一台设备同源——只填这一串时下面两项不用管。留空=退回旧形态（_zw + 按手机号现造的 gdp_user_id，没有 User-Token）。会话 JSESSIONID 不在这里存：由每次抽奖响应下发、连抽自动回带；抓取时刻记在内部键 cmcc_lucky3_jar_at（只用来判断里面那张 30 分钟的 User-Token 是否过期，超期会自动不带头，不用管它）。注意这串是设备级的：多账号且分别在不同手机上时，抓取会互相覆盖，需要各号手填自己那台的串"
         },
         {
           "id": "cmcc_lucky3_risk_p3",
@@ -767,7 +766,7 @@
           "autoGrow": true,
           "rows": 1,
           "placeholder": "开「捕获抽奖身份」进一次权益市场页自动填，也可手填",
-          "desc": "幸运三日签「lottery/lottery」专用的 gr-risk-p3 请求头（约 40 位）。真机只在抽奖这一发带它，签到/查次数都不带；值由 App 原生 ZWRisk SDK 现算的 param 找 yxfk.market.chinamobile.com:8081/mgt/decision-engine/udid/c1 换回来，本地造不出，只能抓。观测：11-02 抓的令牌 11-03 仍在用（≥34 小时），过期表现为代抽一直回 SCORE_REFUSE——重开抓取进一次权益市场页即可刷新。留空=不代抽，只报次数"
+          "desc": "幸运三日签「lottery/lottery」专用的 gr-risk-p3 请求头（约 40 位）。真机只在抽奖这一发带它，签到/查次数都不带；值由 App 原生 ZWRisk SDK 现算的 param 找 yxfk.market.chinamobile.com:8081/mgt/decision-engine/udid/c1 换回来，本地造不出，只能抓。观测：11-02 抓的令牌 11-03 仍在用（≥34 小时）。⚠ 但它不是被拒的原因：11-04 拿同一台设备自己的 gr-risk-p3 + 整套真机 cookie + 本号现签的 phone 凭证照抽，仍回 SCORE_REFUSE——所以这条只算补齐形态，缺了也照发（只报回码，不谎称抽过）"
         },
         {
           "id": "cmcc_lucky3_zw",
