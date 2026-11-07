@@ -142,7 +142,7 @@ const baseHeaders = {
 	}
 })()
 	.catch((e) => $.logErr(e))
-	.finally(() => $.done())
+	.finally(() => $.isNode() || $.done())
 
 async function getCookie() {
 	const qrCode = await getQrcode()

@@ -2273,7 +2273,7 @@ async function main() {
     .catch((e) => $.Messages.push(e.message || e) && $.logErr(e))
     .finally(async () => {
         await sendMsg($.Messages.join('\n').trimStart().trimEnd());
-        $.done();
+        $.isNode() || $.done();
     })
 
 async function Request(options) {

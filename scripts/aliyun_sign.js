@@ -732,7 +732,7 @@ async function sendMsg(message, avatar, title) {
     .finally(async () => {
         // 抓取模式与致命错误走这里；定时任务的每账号通知已在 main 内推送
         if ($.Messages.length) await sendMsg($.Messages.join('\n').trimStart().trimEnd());
-        $.done();
+        $.isNode() || $.done();
     });
 
 // prettier-ignore

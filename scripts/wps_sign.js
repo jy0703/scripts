@@ -2040,7 +2040,7 @@ async function GetCookie() {
     })
     .finally(async () => {
         await sendMsg($.Messages.join('\n').trimStart().trimEnd(), alertSubtitle());  // 推送通知,前置失败走 subtitle
-        $.done();
+        $.isNode() || $.done();
     })
 
 // 在 [min,max] 秒区间取随机毫秒

@@ -1173,7 +1173,7 @@ async function sendMsg(message, subtitle = '') {
         if ($.shouldNotify || $.Subtitle.length) {
             await sendMsg($.Messages.join('\n').trim(), $.Subtitle.join('\n').trim());
         }
-        $.done();
+        $.isNode() || $.done();
     });
 
 // prettier-ignore

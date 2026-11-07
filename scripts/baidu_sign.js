@@ -525,7 +525,7 @@ function Crypt(type, a, b, c) { function MD5(string) { function RotateLeft(lValu
     .catch(e => { $.logErr(e); $.Subtitle.push(`❌ ${e.message || e}`); })
     .finally(async () => {
         await sendMsg($.Messages.join('\n').trim(), $.Subtitle.join('\n').trim());
-        $.done();
+        $.isNode() || $.done();
     });
 
 

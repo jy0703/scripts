@@ -285,7 +285,7 @@ function getAccountId(capture) {
     .catch((e) => $.Messages.push(e.message || e) && $.logErr(e))
     .finally(async () => {
         await sendMsg($.Messages.join('\n').trimStart().trimEnd());  // 推送通知
-        $.done();
+        $.isNode() || $.done();
     })
 
 

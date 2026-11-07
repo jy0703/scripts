@@ -143,7 +143,7 @@ async function main() {
     .catch((e) => $.Messages.push(e.message || e) && $.logErr(e))
     .finally(async () => {
         if (!MUTE) await sendMsg($.Messages.join('\n').trimStart().trimEnd());  // 推送通知
-        $.done();
+        $.isNode() || $.done();
     })
 
 
