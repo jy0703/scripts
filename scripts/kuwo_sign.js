@@ -939,6 +939,8 @@ button { width: 100%; padding: 14px; margin-top: 8px; border: none; border-radiu
 function loadAccounts() {
     const raw = getEnv(DATA_KEY) || '';
     if (!raw) return [];
+    const merged = parseAccountList(raw);
+    if (merged.length) return merged.map(normalizeAccount).filter(Boolean);
     const parsed = $.toObj(raw);
     if (Array.isArray(parsed)) return parsed.map(normalizeAccount).filter(Boolean);
     if (parsed && typeof parsed === 'object') return [normalizeAccount(parsed)].filter(Boolean);
@@ -1122,6 +1124,24 @@ function isLastRun() {
 class LoginError extends Error {}
 
 // 获取环境变量
+// 账号变量兼容面板同名多行合并格式：row&row（每行一台手机的 JSON），也兼容单数组/单对象
+function parseAccountList(raw) {
+    if (!raw) return [];
+    const out = [];
+    const s = String(raw);
+    let depth = 0, inStr = false, esc = false, start = 0;
+    const emit = seg => { const a = $.toObj(seg); if (Array.isArray(a)) out.push(...a); else if (a && typeof a === "object") out.push(a); };
+    for (let i = 0; i < s.length; i++) {
+        const ch = s[i];
+        if (inStr) { if (esc) esc = false; else if (ch === "\\") esc = true; else if (ch === '"') inStr = false; continue; }
+        if (ch === '"') inStr = true;
+        else if (ch === "[" || ch === "{") depth++;
+        else if (ch === "]" || ch === "}") depth--;
+        else if (ch === "&" && depth <= 0) { emit(s.slice(start, i)); start = i + 1; }
+    }
+    emit(s.slice(start));
+    return out;
+}
 function getEnv(...keys) {
     for (let key of keys) {
         var value = $.isNode() ? process.env[key] || process.env[key.toUpperCase()] || process.env[key.toLowerCase()] || $.getdata(key) : $.getdata(key);

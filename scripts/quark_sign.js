@@ -358,18 +358,22 @@ function convertBytes(value) {
 
 // 收两种形状：网页导出的 {手机号:{service_ticket,kps_wg,ua}} 与早期/手填的数组 [{st,uid,nick,ua,user}]
 function loadAccounts() {
-    const cache = $.toObj(getEnv(DATA_KEY) || '', null);
     const out = [];
+    // 多行合并格式(row&row)逐段解析；单段时与原逻辑一致
+    const segs = String(getEnv(DATA_KEY) || '').split(/&(?=\s*[\[{])/).filter(s => s.trim());
     const push = acc => {
         if (!acc || !acc.st || !acc.uid) return;
         const hit = out.find(e => e.uid === acc.uid);
         if (hit) { hit.st = acc.st; hit.nick = acc.nick || hit.nick; if (acc.ua) hit.ua = acc.ua; if (acc.user) hit.user = acc.user; if (acc.mobile) hit.mobile = acc.mobile; if (acc.utdid) hit.utdid = acc.utdid; if (acc.ve) hit.ve = acc.ve; return; }
         out.push(acc);
     };
-    if (!cache) return out;
+    if (!segs.length) return out;
 
-    if (Array.isArray(cache)) cache.forEach(e => e && typeof e === 'object' && push({ st: e.st, uid: String(e.uid || ''), nick: e.nick || '', ua: e.ua || '', user: e.user || '' }));
-    else Object.entries(cache).forEach(([key, e]) => {
+    for (const seg of segs) {
+        const cache = $.toObj(seg, null);
+        if (!cache) continue;
+        if (Array.isArray(cache)) cache.forEach(e => e && typeof e === 'object' && push({ st: e.st, uid: String(e.uid || ''), nick: e.nick || '', ua: e.ua || '', user: e.user || '' }));
+        else Object.entries(cache).forEach(([key, e]) => {
         if (!e || typeof e !== 'object' || !e.kps_wg) return;
         const isMobile = /^1\d{10}$/.test(key);
         try {
@@ -384,7 +388,8 @@ function loadAccounts() {
         } catch (err) {
             $.log(`❌ 跳过 ${key}：${err.message || err}`);
         }
-    });
+        });
+    }
     return out;
 }
 
@@ -407,6 +412,24 @@ function persistAccounts(list) {
 
 // ---------- 工具函数 ----------
 
+// 账号变量兼容面板同名多行合并格式：row&row（每行一台手机的 JSON），也兼容单数组/单对象
+function parseAccountList(raw) {
+    if (!raw) return [];
+    const out = [];
+    const s = String(raw);
+    let depth = 0, inStr = false, esc = false, start = 0;
+    const emit = seg => { const a = $.toObj(seg); if (Array.isArray(a)) out.push(...a); else if (a && typeof a === "object") out.push(a); };
+    for (let i = 0; i < s.length; i++) {
+        const ch = s[i];
+        if (inStr) { if (esc) esc = false; else if (ch === "\\") esc = true; else if (ch === '"') inStr = false; continue; }
+        if (ch === '"') inStr = true;
+        else if (ch === "[" || ch === "{") depth++;
+        else if (ch === "]" || ch === "}") depth--;
+        else if (ch === "&" && depth <= 0) { emit(s.slice(start, i)); start = i + 1; }
+    }
+    emit(s.slice(start));
+    return out;
+}
 function getEnv(...keys) {
     for (let key of keys) {
         var value = $.isNode() ? process.env[key] || process.env[key.toUpperCase()] || process.env[key.toLowerCase()] || $.getdata(key) : $.getdata(key);

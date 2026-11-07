@@ -47,8 +47,8 @@ $.Messages = [];
 
 // 把 manmanbuy_data 解析成内部账号对象数组
 function parseUsers(raw) {
-    const list = $.toObj(raw, null);
-    if (!Array.isArray(list)) return [];
+    const list = parseAccountList(raw);
+    if (!list.length) return [];
     const out = [];
     list.forEach(e => {
         const name = String((e && e.username) || '').trim();
@@ -350,6 +350,24 @@ function pushDaidai(payload) {
     } catch (e) { $.log(`[呆呆推送] 异常已忽略: ${e.message || e}`); }
 }
 
+// 账号变量兼容面板同名多行合并格式：row&row（每行一台手机的 JSON），也兼容单数组/单对象
+function parseAccountList(raw) {
+    if (!raw) return [];
+    const out = [];
+    const s = String(raw);
+    let depth = 0, inStr = false, esc = false, start = 0;
+    const emit = seg => { const a = $.toObj(seg); if (Array.isArray(a)) out.push(...a); else if (a && typeof a === "object") out.push(a); };
+    for (let i = 0; i < s.length; i++) {
+        const ch = s[i];
+        if (inStr) { if (esc) esc = false; else if (ch === "\\") esc = true; else if (ch === '"') inStr = false; continue; }
+        if (ch === '"') inStr = true;
+        else if (ch === "[" || ch === "{") depth++;
+        else if (ch === "]" || ch === "}") depth--;
+        else if (ch === "&" && depth <= 0) { emit(s.slice(start, i)); start = i + 1; }
+    }
+    emit(s.slice(start));
+    return out;
+}
 function getEnv(...keys) {
     for (let key of keys) {
         var value = $.isNode() ? process.env[key] || process.env[key.toUpperCase()] || process.env[key.toLowerCase()] || $.getdata(key) : $.getdata(key);

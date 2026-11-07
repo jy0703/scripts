@@ -370,11 +370,9 @@ async function apiGet(cookie, path, params = {}, stage = '') {
 function loadAccounts() {
     const raw = getEnv(DATA_KEY);
     if (!raw) return [];
-    const parsed = $.toObj(raw, null);
-    let list = [];
-    if (Array.isArray(parsed)) list = parsed.filter(a => a && a.cookie);
-    else if (parsed && typeof parsed === 'object' && parsed.cookie) list = [parsed];
-    else if (typeof raw === 'string' && /BDUSS=/.test(raw)) list = [{ cookie: raw }];
+    const parsed = parseAccountList(raw);
+    let list = parsed.filter(a => a && a.cookie);
+    if (!list.length && typeof raw === 'string' && /BDUSS=/.test(raw)) list = [{ cookie: raw }];
     // 同一 BDUSS 只保留一条，防止重复抓取后重复执行
     const seen = new Set();
     return list.filter(a => {
@@ -448,6 +446,24 @@ function debug(content, title = 'debug') {
     $.log(`\n----- ${title} -----\n${text}\n----- ${$.time('HH:mm:ss')} -----\n`);
 }
 
+// 账号变量兼容面板同名多行合并格式：row&row（每行一台手机的 JSON），也兼容单数组/单对象
+function parseAccountList(raw) {
+    if (!raw) return [];
+    const out = [];
+    const s = String(raw);
+    let depth = 0, inStr = false, esc = false, start = 0;
+    const emit = seg => { const a = $.toObj(seg); if (Array.isArray(a)) out.push(...a); else if (a && typeof a === "object") out.push(a); };
+    for (let i = 0; i < s.length; i++) {
+        const ch = s[i];
+        if (inStr) { if (esc) esc = false; else if (ch === "\\") esc = true; else if (ch === '"') inStr = false; continue; }
+        if (ch === '"') inStr = true;
+        else if (ch === "[" || ch === "{") depth++;
+        else if (ch === "]" || ch === "}") depth--;
+        else if (ch === "&" && depth <= 0) { emit(s.slice(start, i)); start = i + 1; }
+    }
+    emit(s.slice(start));
+    return out;
+}
 function getEnv(...keys) {
     for (const key of keys) {
         const value = $.isNode()
