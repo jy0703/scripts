@@ -20,7 +20,7 @@ hostname = app.mixcapp.com
 [Script]
 http-request ^https?:\/\/app\.mixcapp\.com\/mixc\/api\/v4\/member\/getPersonalData script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/mixc_sign.js,requires-body=false,timeout=600,tag=一点万象获取Cookie
 
-cron "0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/mixc_sign.js, timeout=600, tag=一点万象签到
+cron "0 1 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/mixc_sign.js, timeout=600, tag=一点万象签到
 
 [MITM]
 hostname = app.mixcapp.com
@@ -31,7 +31,7 @@ hostname = app.mixcapp.com
 ^https?:\/\/app\.mixcapp\.com\/mixc\/api\/v4\/member\/getPersonalData url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/mixc_sign.js
 
 [task_local]
-"0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/mixc_sign.js, tag=一点万象签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/mixc.png, enabled=true
+0 1 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/mixc_sign.js, tag=一点万象签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/mixc.png, enabled=true
 
 [MITM]
 hostname = app.mixcapp.com

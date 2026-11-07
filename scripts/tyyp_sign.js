@@ -18,12 +18,12 @@
 ------------------- Loon 配置 -------------------
 
 [Script]
-cron "30 7 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/tyyp_sign.js, timeout=600, tag=天翼云盘签到
+cron "30 7 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/tyyp_sign.js, timeout=600, tag=天翼云盘签到
 
 --------------- Quantumult X 配置 ---------------
 
 [task_local]
-"30 7 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/tyyp_sign.js, tag=天翼云盘签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/tianyiyunpan.png, enabled=true
+30 7 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/tyyp_sign.js, tag=天翼云盘签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/tianyiyunpan.png, enabled=true
 
  */
 

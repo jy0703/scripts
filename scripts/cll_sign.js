@@ -21,7 +21,7 @@ hostname = web.chelaile.net.cn
 [Script]
 http-request ^https?:\/\/web\.chelaile\.net\.cn\/api\/op-activity-api\/daily-act\/(signin|config|task\/complete) script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js, timeout=600, tag=车来了获取签到参数
 
-cron "0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js, timeout=600, tag=车来了签到
+cron "0 1 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js, timeout=600, tag=车来了签到
 
 [MITM]
 hostname = web.chelaile.net.cn
@@ -32,7 +32,7 @@ hostname = web.chelaile.net.cn
 ^https?:\/\/web\.chelaile\.net\.cn\/api\/op-activity-api\/daily-act\/(signin|config|task\/complete) url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js
 
 [task_local]
-"0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js, tag=车来了签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/cll.png, enabled=true
+0 1 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js, tag=车来了签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/cll.png, enabled=true
 
 [MITM]
 hostname = web.chelaile.net.cn

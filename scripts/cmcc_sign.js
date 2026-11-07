@@ -37,7 +37,7 @@ http-request ^https?:\/\/client\.app\.coc\.10086\.cn\/.*uamrandcodelogin\/autoLo
 http-response ^https?:\/\/yxfk\.market\.chinamobile\.com:8081\/mgt\/decision-engine\/udid\/c1 script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,requires-body=true,timeout=60,tag=中国移动抓风控令牌
 http-request ^https?:\/\/dev\.coc\.10086\.cn\/coc3\/(gr|coc3-market[^/]*|gateway-route)\/ script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,requires-body=false,timeout=60,tag=中国移动抓权益市场Cookie
 
-cron "58 0,7,11 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js, timeout=600, tag=中国移动签到
+cron "58 0,7,11 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js, timeout=600, tag=中国移动签到
 
 [MITM]
 hostname = wx.10086.cn, client.app.coc.10086.cn, yxfk.market.chinamobile.com, dev.coc.10086.cn
@@ -51,7 +51,7 @@ hostname = wx.10086.cn, client.app.coc.10086.cn, yxfk.market.chinamobile.com, de
 ^https?:\/\/dev\.coc\.10086\.cn\/coc3\/(gr|coc3-market[^/]*|gateway-route)\/ url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js
 
 [task_local]
-"58 0,7,11 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js, tag=中国移动签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/cmcc.png, enabled=true
+58 0,7,11 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js, tag=中国移动签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/cmcc.png, enabled=true
 
 [MITM]
 hostname = wx.10086.cn, client.app.coc.10086.cn, yxfk.market.chinamobile.com, dev.coc.10086.cn

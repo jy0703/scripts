@@ -20,12 +20,12 @@ OPPO会员中心签到 = type=cron,cronexp="0 9 * * *",script-path=https://raw.g
 ------------------- Loon 配置 -------------------
 
 [Script]
-cron "0 9 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/oppo_sign.js, timeout=600, tag=OPPO会员中心签到
+cron "0 9 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/oppo_sign.js, timeout=600, tag=OPPO会员中心签到
 
 --------------- Quantumult X 配置 ---------------
 
 [task_local]
-"0 9 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/oppo_sign.js, tag=OPPO会员中心签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/oppo.png, enabled=true
+0 9 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/oppo_sign.js, tag=OPPO会员中心签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/oppo.png, enabled=true
 
  */
 

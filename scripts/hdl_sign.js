@@ -24,12 +24,12 @@
 ------------------- Loon 配置 -------------------
 
 [Script]
-cron "0 9 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/hdl_sign.js, timeout=600, tag=海底捞签到
+cron "0 9 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/hdl_sign.js, timeout=600, tag=海底捞签到
 
 --------------- Quantumult X 配置 ---------------
 
 [task_local]
-"0 9 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/hdl_sign.js, tag=海底捞签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/hdl.png, enabled=true
+0 9 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/hdl_sign.js, tag=海底捞签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/hdl.png, enabled=true
 
  */
 

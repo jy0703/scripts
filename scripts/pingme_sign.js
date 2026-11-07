@@ -20,7 +20,7 @@ hostname = api.pingmeapp.net
 [Script]
 http-request ^https?:\/\/api\.pingmeapp\.net\/app\/queryBalanceAndBonus script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/pingme_sign.js, timeout=600, tag=PingMe获取签到参数
 
-cron "30 8,20 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/pingme_sign.js, timeout=600, tag=PingMe签到
+cron "30 8,20 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/pingme_sign.js, timeout=600, tag=PingMe签到
 
 [MITM]
 hostname = api.pingmeapp.net
@@ -31,7 +31,7 @@ hostname = api.pingmeapp.net
 ^https?:\/\/api\.pingmeapp\.net\/app\/queryBalanceAndBonus url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/pingme_sign.js
 
 [task_local]
-"30 8,20 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/pingme_sign.js, tag=PingMe签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/pingme.png, enabled=true
+30 8,20 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/pingme_sign.js, tag=PingMe签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/pingme.png, enabled=true
 
 [MITM]
 hostname = api.pingmeapp.net

@@ -24,7 +24,7 @@ http-request ^https?:\/\/gw2c\-hw\-open\.longfor\.com\/lmarketing\-task\-api\-mv
 
 http-request ^https?:\/\/gw2c\-hw\-open\.longfor\.com\/llt\-gateway\-prod\/api\/v1\/activity\/auth\/lottery\/(sign|chance|click) script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/lhtj.js, requires-body=true, timeout=600, tag=龙湖天街获取抽奖ID
 
-cron "0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/lhtj.js, timeout=600, tag=龙湖天街
+cron "0 1 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/lhtj.js, timeout=600, tag=龙湖天街
 
 [MITM]
 hostname = gw2c-hw-open.longfor.com
@@ -37,7 +37,7 @@ hostname = gw2c-hw-open.longfor.com
 ^https?:\/\/gw2c\-hw\-open\.longfor\.com\/llt\-gateway\-prod\/api\/v1\/activity\/auth\/lottery\/(sign|chance|click) url script-request-body https://raw.githubusercontent.com/jy0703/scripts/main/scripts/lhtj.js
 
 [task_local]
-"0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/lhtj.js, tag=龙湖天街, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/lhtj.png, enabled=true
+0 1 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/lhtj.js, tag=龙湖天街, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/lhtj.png, enabled=true
 
 [MITM]
 hostname = gw2c-hw-open.longfor.com

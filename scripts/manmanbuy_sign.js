@@ -20,7 +20,7 @@ hostname = apapia.manmanbuy.com
 [Script]
 http-response ^https?:\/\/apapia\.manmanbuy\.com\/index_json\.ashx script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/manmanbuy_sign.js, requires-body=true, timeout=600, tag=慢慢买获取Cookie
 
-cron "0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/manmanbuy_sign.js, timeout=600, tag=慢慢买签到
+cron "0 1 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/manmanbuy_sign.js, timeout=600, tag=慢慢买签到
 
 [MITM]
 hostname = apapia.manmanbuy.com
@@ -31,7 +31,7 @@ hostname = apapia.manmanbuy.com
 ^https?:\/\/apapia\.manmanbuy\.com\/index_json\.ashx url script-response-body https://raw.githubusercontent.com/jy0703/scripts/main/scripts/manmanbuy_sign.js
 
 [task_local]
-"0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/manmanbuy_sign.js, tag=慢慢买签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/manmanbuy.png, enabled=true
+0 1 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/manmanbuy_sign.js, tag=慢慢买签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/manmanbuy.png, enabled=true
 
 [MITM]
 hostname = apapia.manmanbuy.com

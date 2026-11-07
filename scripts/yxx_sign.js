@@ -23,12 +23,12 @@
 ------------------- Loon 配置 -------------------
 
 [Script]
-cron "0 9 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/yxx_sign.js, timeout=600, tag=印享星签到
+cron "0 9 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/yxx_sign.js, timeout=600, tag=印享星签到
 
 --------------- Quantumult X 配置 ---------------
 
 [task_local]
-"0 9 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/yxx_sign.js, tag=印享星签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/yxx.png, enabled=true
+0 9 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/yxx_sign.js, tag=印享星签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/yxx.png, enabled=true
 
  */
 

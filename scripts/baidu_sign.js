@@ -31,7 +31,7 @@ hostname = pan.baidu.com
 [Script]
 http-request ^https?:\/\/pan\.baidu\.com\/(coins|api|rest)\/ script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/baidu_sign.js,requires-body=false,timeout=600,tag=百度网盘获取Cookie
 
-cron "30 8 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/baidu_sign.js, timeout=600, tag=百度网盘签到
+cron "30 8 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/baidu_sign.js, timeout=600, tag=百度网盘签到
 
 [MITM]
 hostname = pan.baidu.com
@@ -42,7 +42,7 @@ hostname = pan.baidu.com
 ^https?:\/\/pan\.baidu\.com\/(coins|api|rest)\/ url script-request-header https://raw.githubusercontent.com/jy0703/scripts/main/scripts/baidu_sign.js
 
 [task_local]
-"30 8 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/baidu_sign.js, tag=百度网盘签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/baidu.png, enabled=true
+30 8 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/baidu_sign.js, tag=百度网盘签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/baidu.png, enabled=true
 
 [MITM]
 hostname = pan.baidu.com

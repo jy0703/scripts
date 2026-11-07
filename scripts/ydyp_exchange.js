@@ -18,12 +18,12 @@
 ------------------- Loon 配置 -------------------
 
 [Script]
-cron "0 10,16,0 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp_exchange.js, timeout=600, tag=移动云盘商品抢兑
+cron "0 10,16,0 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp_exchange.js, timeout=600, tag=移动云盘商品抢兑
 
 --------------- Quantumult X 配置 ---------------
 
 [task_local]
-"0 10,16,0 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp_exchange.js, tag=移动云盘商品抢兑, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/ydyp.png, enabled=true
+0 10,16,0 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp_exchange.js, tag=移动云盘商品抢兑, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/ydyp.png, enabled=true
 
  */
 

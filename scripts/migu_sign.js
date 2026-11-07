@@ -28,12 +28,12 @@
 ------------------- Loon 配置 -------------------
 
 [Script]
-cron "0 8 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/migu_sign.js, timeout=3600, tag=咪咕音乐签到
+cron "0 8 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/migu_sign.js, timeout=3600, tag=咪咕音乐签到
 
 --------------- Quantumult X 配置 ---------------
 
 [task_local]
-"0 8 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/migu_sign.js, tag=咪咕音乐签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/migu.png, enabled=true
+0 8 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/migu_sign.js, tag=咪咕音乐签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/migu.png, enabled=true
 
  */
 

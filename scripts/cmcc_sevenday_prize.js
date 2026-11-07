@@ -39,7 +39,7 @@ hostname = %APPEND% dev.coc.10086.cn
 ------------------- Loon 配置 -------------------
 
 [Script]
-cron "5 8 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sevenday_prize.js, timeout=600, tag=移动七日夺宝
+cron "5 8 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sevenday_prize.js, timeout=600, tag=移动七日夺宝
 http-request ^https?:\/\/dev\.coc\.10086\.cn\/coc\/(web6\/dailyLoginEvent(?!\/assets)|activities\/prize\/(drawDayNum|consecutiveClockInQuery)) script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sevenday_prize.js,requires-body=true,timeout=60,tag=移动抓活动参数
 http-response ^https?:\/\/dev\.coc\.10086\.cn\/coc\/web6\/dailyLoginEvent\/assets\/index- script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sevenday_prize.js,requires-body=true,timeout=60,tag=移动抓七日金额
 
@@ -53,7 +53,7 @@ hostname = dev.coc.10086.cn
 ^https?:\/\/dev\.coc\.10086\.cn\/coc\/web6\/dailyLoginEvent\/assets\/index- url script-response-body https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sevenday_prize.js
 
 [task_local]
-"5 8 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sevenday_prize.js, tag=移动七日夺宝, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/cmcc.png, enabled=true
+5 8 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sevenday_prize.js, tag=移动七日夺宝, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/cmcc.png, enabled=true
 
 [MITM]
 hostname = dev.coc.10086.cn

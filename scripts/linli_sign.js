@@ -15,12 +15,12 @@
 ------------------- Loon 配置 -------------------
 
 [Script]
-cron "0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/linli_sign.js, timeout=600, tag=林里签到
+cron "0 1 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/linli_sign.js, timeout=600, tag=林里签到
 
 --------------- Quantumult X 配置 ---------------
 
 [task_local]
-"0 1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/linli_sign.js, tag=林里签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/linli.png, enabled=true
+0 1 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/linli_sign.js, tag=林里签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/linli.png, enabled=true
 
  */
 

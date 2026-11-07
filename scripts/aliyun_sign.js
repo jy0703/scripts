@@ -21,7 +21,7 @@ hostname = developer.aliyun.com
 [Script]
 http-response ^https?:\/\/developer\.aliyun\.com\/developer\/api\/my\/user\/getUser script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aliyun_sign.js, requires-body=true, timeout=600, tag=阿里云社区获取Cookie
 
-cron "0 7,13 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aliyun_sign.js, timeout=600, tag=阿里云社区签到
+cron "0 7,13 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aliyun_sign.js, timeout=600, tag=阿里云社区签到
 
 [MITM]
 hostname = developer.aliyun.com
@@ -32,7 +32,7 @@ hostname = developer.aliyun.com
 ^https?:\/\/developer\.aliyun\.com\/developer\/api\/my\/user\/getUser url script-response-body https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aliyun_sign.js
 
 [task_local]
-"0 7,13 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aliyun_sign.js, tag=阿里云社区签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/aliyun.png, enabled=true
+0 7,13 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aliyun_sign.js, tag=阿里云社区签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/aliyun.png, enabled=true
 
 [MITM]
 hostname = developer.aliyun.com

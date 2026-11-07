@@ -34,7 +34,7 @@ hostname = 360.com
 [Script]
 http-request ^https?:\/\/360\.com\/kuwo script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/kuwo_sign.js,requires-body=true,timeout=600,tag=酷我音乐登录
 
-cron "15 7-23/1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/kuwo_sign.js, timeout=600, tag=酷我音乐签到
+cron "15 7-23/1 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/kuwo_sign.js, timeout=600, tag=酷我音乐签到
 
 [MITM]
 hostname = 360.com
@@ -45,7 +45,7 @@ hostname = 360.com
 ^https?:\/\/360\.com\/kuwo url script-analyze-echo-response https://raw.githubusercontent.com/jy0703/scripts/main/scripts/kuwo_sign.js
 
 [task_local]
-"15 7-23/1 * * *", script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/kuwo_sign.js, tag=酷我音乐签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/kuwo.png, enabled=true
+15 7-23/1 * * * https://raw.githubusercontent.com/jy0703/scripts/main/scripts/kuwo_sign.js, tag=酷我音乐签到, img-url=https://raw.githubusercontent.com/jy0703/scripts/main/icons/kuwo.png, enabled=true
 
 [MITM]
 hostname = 360.com
