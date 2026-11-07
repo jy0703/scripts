@@ -250,6 +250,7 @@ function saveAccount(username, nickName) {
     }
     $.userArr.push({ username, nickName });
     persistUsers();
+    pushDaidai({ envs: [['manmanbuy_data', $.getdata('manmanbuy_data')]] });
     $.Messages.push(`🎉获取慢慢买账号成功: ${nickName}`);
     $.log(`🎉获取慢慢买账号成功: ${username} (${nickName})`);
 }
@@ -331,6 +332,23 @@ function formBody(obj) {
 
 // key 转小写 (抓包头大小写不定)
 function ObjectKeys2LowerCase(obj = {}) { return Object.fromEntries(Object.entries(obj).map(([k, v]) => [k.toLowerCase(), v])); }
+
+// 重写抓到的数据即时推呆呆面板（仅手机侧；网关同值跳过，失败静默不影响主流程）
+function pushDaidai(payload) {
+    try {
+        if ($.isNode()) return;
+        const api = (getEnv('TOOLS_API', '@tools.address') || '').replace(/\/+$/, '');
+        const token = getEnv('TOOLS_API_TOKEN', '@tools.token') || '';
+        const envs = (payload.envs || []).map(([name, value]) => ({ name, value: String(value) }));
+        const boxjs = (payload.boxjs || []).map(([key, value]) => ({ key, value: String(value) }));
+        if (!api || !token || (!envs.length && !boxjs.length)) return;
+        $.post({ url: `${api}/api/daidai/env/sync`, headers: { 'X-Token': token, 'Content-Type': 'application/json' }, body: $.toStr({ envs, boxjs }) }, (err, resp, data) => {
+            const r = $.toObj(data);
+            const fail = (r && r.failed || []).map(f => f.name || f.key).join(',');
+            (err || (r && r.error) || fail) && $.log(`[呆呆推送] 异常已忽略: ${err && (err.message || err) || (r && r.error) || fail}`);
+        });
+    } catch (e) { $.log(`[呆呆推送] 异常已忽略: ${e.message || e}`); }
+}
 
 function getEnv(...keys) {
     for (let key of keys) {

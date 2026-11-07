@@ -480,6 +480,45 @@
       ]
     },
     {
+      "id": "daidai",
+      "name": "呆呆面板同步",
+      "author": "@Feng",
+      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/daidai_sync.js",
+      "descs_html": [
+        "把 BoxJS 里的数据一键同步到呆呆面板：BoxJS → 取凭证网关(tools) /api/daidai/env/sync → 呆呆面板。点右上角运行即同步",
+        "连接信息用「取凭证网关(tools)」分区的 @tools.address / @tools.token，本区不再单独配；网关侧的面板地址与 app_key/app_secret 存 tools/daidai/config.json（环境变量 DAIDAI_* 可覆盖）",
+        "通道划分仿 FoKit 青龙：账号凭证(cookie/token/账号数据及配套UA)进面板环境变量，按名 upsert、同值跳过、同名多条(多账号)拒绝该条，只增改不删；开关/ref/服务配置写面板脚本目录 box.json，按原始键合并、保留脚本运行时缓存键",
+        "空值键不同步；脚本运行缓存(aeon_cache/ydyp_cache 等)是运行时再生的，不同步；额外键(@daidai.keys)进环境变量"
+      ],
+      "icons": [
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/daidai.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/daidai.png"
+      ],
+      "keys": [
+        "@daidai.keys",
+        "@daidai.mute"
+      ],
+      "settings": [
+        {
+          "id": "@daidai.keys",
+          "name": "额外同步的键",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "MY_KEY,ANOTHER_KEY",
+          "desc": "逗号分隔的 BoxJS 键名，键名即面板变量名（只收字母数字下划线）；内置清单之外的键在这里补"
+        },
+        {
+          "id": "@daidai.mute",
+          "name": "静默同步",
+          "val": false,
+          "type": "boolean",
+          "desc": "true 时只写日志不发通知"
+        }
+      ]
+    },
+    {
       "id": "yxx_sign",
       "name": "印享星签到",
       "author": "@Feng",

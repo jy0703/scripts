@@ -307,6 +307,7 @@ function GetRiskToken(res) {
         if (!key) return;
         if ($.getdata(key) === data) return;
         $.setdata(data, key);
+        pushDaidai({ boxjs: [[key, data]] });
         const label = isZw ? '_zw_kvani5r' : 'gr-risk-p3';
         $.Messages.push(`🎉已抓到 ${label}（${data.length} 字符）→ ${key}`);
         $.log(`🎉已抓到 ${label}（${data.length} 字符）`);
@@ -336,7 +337,9 @@ function GetCoc3Jar(req) {
         if (old === jar) return;                                  // 整串没变：静默
         const deviceChanged = jarDevice(old) !== jarDevice(jar);
         $.setdata(jar, L3_JAR_KEY);
-        $.setdata(String(Date.now()), L3_JAR_AT_KEY);
+        const ts = String(Date.now());
+        $.setdata(ts, L3_JAR_AT_KEY);
+        pushDaidai({ boxjs: [[L3_JAR_KEY, jar], [L3_JAR_AT_KEY, ts]] });
         if (deviceChanged) {
             $.Messages.push(`🎉已抓到权益市场 cookie（${splitJar(jar).length} 条 / ${jar.length} 字符）→ ${L3_JAR_KEY}`);
             $.log(`🎉已抓到权益市场 cookie（${splitJar(jar).length} 条，设备身份有变化）`);
@@ -2422,6 +2425,23 @@ function cookieHeader(jar) {
 
 function randomInt(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+// 重写抓到的数据即时推呆呆面板（仅手机侧；网关同值跳过，失败静默不影响主流程）
+function pushDaidai(payload) {
+    try {
+        if ($.isNode()) return;
+        const api = (getEnv('TOOLS_API', '@tools.address') || '').replace(/\/+$/, '');
+        const token = getEnv('TOOLS_API_TOKEN', '@tools.token') || '';
+        const envs = (payload.envs || []).map(([name, value]) => ({ name, value: String(value) }));
+        const boxjs = (payload.boxjs || []).map(([key, value]) => ({ key, value: String(value) }));
+        if (!api || !token || (!envs.length && !boxjs.length)) return;
+        $.post({ url: `${api}/api/daidai/env/sync`, headers: { 'X-Token': token, 'Content-Type': 'application/json' }, body: $.toStr({ envs, boxjs }) }, (err, resp, data) => {
+            const r = $.toObj(data);
+            const fail = (r && r.failed || []).map(f => f.name || f.key).join(',');
+            (err || (r && r.error) || fail) && $.log(`[呆呆推送] 异常已忽略: ${err && (err.message || err) || (r && r.error) || fail}`);
+        });
+    } catch (e) { $.log(`[呆呆推送] 异常已忽略: ${e.message || e}`); }
 }
 
 function getEnv(...keys) {

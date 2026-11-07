@@ -461,7 +461,10 @@ function loadNativeCache(key) {
 }
 
 function saveNativeCache(key, ctx) {
-    $.setdata(JSON.stringify({ updateTime: Date.now(), config: { headers: ctx.headers, listen_params: ctx.listen_params } }), 'migu_native_' + key);
+    const cacheKey = 'migu_native_' + key;
+    const text = JSON.stringify({ updateTime: Date.now(), config: { headers: ctx.headers, listen_params: ctx.listen_params } });
+    $.setdata(text, cacheKey);
+    pushDaidai({ boxjs: [[cacheKey, text]] });
 }
 
 function clearNativeCache(key) {
@@ -1569,6 +1572,23 @@ async function runAccount(account, index) {
 }
 
 // ---- 通知 ----
+
+// 重写抓到的数据即时推呆呆面板（仅手机侧；网关同值跳过，失败静默不影响主流程）
+function pushDaidai(payload) {
+    try {
+        if ($.isNode()) return;
+        const api = (getEnv('TOOLS_API', '@tools.address') || '').replace(/\/+$/, '');
+        const token = getEnv('TOOLS_API_TOKEN', '@tools.token') || '';
+        const envs = (payload.envs || []).map(([name, value]) => ({ name, value: String(value) }));
+        const boxjs = (payload.boxjs || []).map(([key, value]) => ({ key, value: String(value) }));
+        if (!api || !token || (!envs.length && !boxjs.length)) return;
+        $.post({ url: `${api}/api/daidai/env/sync`, headers: { 'X-Token': token, 'Content-Type': 'application/json' }, body: $.toStr({ envs, boxjs }) }, (err, resp, data) => {
+            const r = $.toObj(data);
+            const fail = (r && r.failed || []).map(f => f.name || f.key).join(',');
+            (err || (r && r.error) || fail) && $.log(`[呆呆推送] 异常已忽略: ${err && (err.message || err) || (r && r.error) || fail}`);
+        });
+    } catch (e) { $.log(`[呆呆推送] 异常已忽略: ${e.message || e}`); }
+}
 
 function getEnv() {
     for (let i = 0; i < arguments.length; i++) {

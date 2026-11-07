@@ -369,6 +369,7 @@ function harvestDeviceCookies(req, url) {
     const zw = (ck.match(/_zw_kvani5r=([^;\s]+)/) || [])[1] || '';
     if (zw && $.getdata('cmcc_sevenday_prize_zw') !== zw) {
         $.setdata(zw, 'cmcc_sevenday_prize_zw');
+        pushDaidai({ boxjs: [['cmcc_sevenday_prize_zw', zw]] });
         $.log(`[抓取] _zw_kvani5r 已更新（${zw.length} 字符）→ cmcc_sevenday_prize_zw`);
     }
     const gdps = ck.split(/;\s*/).filter(c => /^[^=]*gdp_[a-z0-9_]+=/.test(c) && !/gdp_session_id_/.test(c));
@@ -376,6 +377,7 @@ function harvestDeviceCookies(req, url) {
         const jar = gdps.join('; ');
         if ($.getdata('cmcc_sevenday_prize_gdp') !== jar) {
             $.setdata(jar, 'cmcc_sevenday_prize_gdp');
+            pushDaidai({ boxjs: [['cmcc_sevenday_prize_gdp', jar]] });
             $.log(`[抓取] gdp cookie 已更新（${gdps.length} 条）→ cmcc_sevenday_prize_gdp`);
         }
     }
@@ -466,6 +468,23 @@ async function main() {
 // ---------- 工具函数 ----------
 
 function isOn(v) { return v === true || v === 'true' || v === 1 || v === '1'; }
+
+// 重写抓到的数据即时推呆呆面板（仅手机侧；网关同值跳过，失败静默不影响主流程）
+function pushDaidai(payload) {
+    try {
+        if ($.isNode()) return;
+        const api = (getEnv('TOOLS_API', '@tools.address') || '').replace(/\/+$/, '');
+        const token = getEnv('TOOLS_API_TOKEN', '@tools.token') || '';
+        const envs = (payload.envs || []).map(([name, value]) => ({ name, value: String(value) }));
+        const boxjs = (payload.boxjs || []).map(([key, value]) => ({ key, value: String(value) }));
+        if (!api || !token || (!envs.length && !boxjs.length)) return;
+        $.post({ url: `${api}/api/daidai/env/sync`, headers: { 'X-Token': token, 'Content-Type': 'application/json' }, body: $.toStr({ envs, boxjs }) }, (err, resp, data) => {
+            const r = $.toObj(data);
+            const fail = (r && r.failed || []).map(f => f.name || f.key).join(',');
+            (err || (r && r.error) || fail) && $.log(`[呆呆推送] 异常已忽略: ${err && (err.message || err) || (r && r.error) || fail}`);
+        });
+    } catch (e) { $.log(`[呆呆推送] 异常已忽略: ${e.message || e}`); }
+}
 
 function getEnv(...keys) {
     for (let key of keys) {

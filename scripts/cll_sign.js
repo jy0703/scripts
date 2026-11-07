@@ -105,6 +105,7 @@ function GetCookie() {
         const index = $.userArr.findIndex(e => getAccountId(e) === id);
         index !== -1 ? $.userArr[index] = capture : $.userArr.push(capture);
         $.setdata($.toStr($.userArr), 'cll_data');
+        pushDaidai({ envs: [['cll_data', $.toStr($.userArr)]] });
         $.Messages.push('🎉获取签到参数成功!');
         $.log('🎉获取签到参数成功!');
     } catch (e) {
@@ -350,6 +351,22 @@ async function sendMsg(message) {
 
 
 // 获取环境变量
+// 重写抓到的数据即时推呆呆面板（仅手机侧；网关同值跳过，失败静默不影响主流程）
+function pushDaidai(payload) {
+    try {
+        if ($.isNode()) return;
+        const api = (getEnv('TOOLS_API', '@tools.address') || '').replace(/\/+$/, '');
+        const token = getEnv('TOOLS_API_TOKEN', '@tools.token') || '';
+        const envs = (payload.envs || []).map(([name, value]) => ({ name, value: String(value) }));
+        const boxjs = (payload.boxjs || []).map(([key, value]) => ({ key, value: String(value) }));
+        if (!api || !token || (!envs.length && !boxjs.length)) return;
+        $.post({ url: `${api}/api/daidai/env/sync`, headers: { 'X-Token': token, 'Content-Type': 'application/json' }, body: $.toStr({ envs, boxjs }) }, (err, resp, data) => {
+            const r = $.toObj(data);
+            const fail = (r && r.failed || []).map(f => f.name || f.key).join(',');
+            (err || (r && r.error) || fail) && $.log(`[呆呆推送] 异常已忽略: ${err && (err.message || err) || (r && r.error) || fail}`);
+        });
+    } catch (e) { $.log(`[呆呆推送] 异常已忽略: ${e.message || e}`); }
+}
 function getEnv(...keys) {
     for (let key of keys) {
         var value = $.isNode() ? process.env[key] || process.env[key.toUpperCase()] || process.env[key.toLowerCase()] || $.getdata(key) : $.getdata(key);
