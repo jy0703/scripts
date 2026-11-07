@@ -2,10 +2,11 @@
  * 脚本名称：呆呆面板同步 - BoxJS 数据传入呆呆
  * 脚本说明：把 BoxJS 里的数据一键同步到呆呆面板（仿 FoKit/Scripts 的 BoxJS→青龙 思路，通道划分也一致：cookie 类进环境变量、其余进配置文件）。
  *           数据流向：BoxJS → 取凭证网关(tools) POST /api/daidai/env/sync → 呆呆面板。
- *           账号凭证（cookie/token/账号数据及配套 UA）→ 面板环境变量：按名 upsert，没有就建、有一条就改、同值跳过、
- *           面板同名多条(多账号)时拒绝该条；只增改，不删除、不禁用面板已有变量。
- *           开关/ref/服务配置/进度状态 → 面板脚本目录 box.dat（默认 tree_main/scripts/box.dat）：按原始键合并，保留脚本运行时写入的缓存键；
- *           各签到脚本自带 Env 在 Node 下的 getdata/setdata 就落在 cwd 的 box.dat（dataFile="box.dat"），同步过去即可被直接读到。
+ *           账号凭证（cookie/token/账号数据及配套 UA）→ 面板环境变量：同名多行按来源 upsert——推送值与某现有行的账号标识有交集=同一来源=更新该行，
+ *           无交集=新来源(另一台手机/新账号集)=同名新建一行（面板运行时按 & 合并注入，互不覆盖）；只增改，不删除、不禁用面板已有变量。
+ *           开关/ref/活动ID/抓包产物等配置键 → 面板 config.sh（UI「配置文件」页可见，任务运行前自动 source，脚本 getEnv 从 process.env 读到）；
+ *           进度状态/缓存键（xx_state、xx_cache、xx_jar_at、migu_native_xx、@键，脚本 $.getdata 读）→ 面板 box.dat（cwd 下，Env dataFile）；
+ *           两者都由网关在面板上完成读-改-写，只增改不删。
  *           在 BoxJS 订阅「呆呆面板同步」点运行即同步；不写 cron 声明（面板订阅不会为它建任务，面板上也没有 BoxJS 数据可同步）。
  *           空值键不同步。运行缓存键(aeon_cache/ydyp_cache 等)是脚本运行时再生的，不同步。
  * 环境变量：TOOLS_API / @tools.address、TOOLS_API_TOKEN / @tools.token（网关连接，必填）；
@@ -131,7 +132,11 @@ async function main() {
     if (bu.length) $.log(`✅ box.dat 写入 ${bu.length}: ${bu.join(', ')}`);
     if (bc.length) $.log(`⏭ box.dat 同值跳过 ${bc.length}: ${bc.join(', ')}`);
     for (const f of bf) $.log(`❌ box.dat ${f.key}: ${f.error}`);
-    $.Messages.push(`✅ 新建 ${created.length}　🔄 更新 ${updated.length}　⏭ 跳过 ${unchanged.length}　📄 box.dat 写 ${bu.length} 跳 ${bc.length}`);
+    const cs = result.config_sh || {}, cu = cs.updated || [], cc = cs.unchanged || [], cf = cs.failed || [];
+    if (cu.length) $.log(`✅ config.sh 写入 ${cu.length}: ${cu.join(', ')}`);
+    if (cc.length) $.log(`⏭ config.sh 同值跳过 ${cc.length}: ${cc.join(', ')}`);
+    for (const f of cf) $.log(`❌ config.sh ${f.key}: ${f.error}`);
+    $.Messages.push(`✅ 新建 ${created.length}　🔄 更新 ${updated.length}　⏭ 跳过 ${unchanged.length}　📄 box.dat 写 ${bu.length} 跳 ${bc.length}　🧾 config.sh 写 ${cu.length} 跳 ${cc.length}`);
     const fails = failed.map(f => `${f.name}(${f.error})`).concat(bf.map(f => `box.dat ${f.key}(${f.error})`));
     if (fails.length) $.Messages.push(`❌ 失败 ${fails.length}: ${fails.join('、')}`);
 }
