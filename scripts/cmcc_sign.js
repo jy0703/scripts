@@ -268,7 +268,9 @@ function GetCookie() {
 
         const index = $.userArr.findIndex(e => e.userCheckId == newData.userCheckId);
         index !== -1 ? $.userArr[index] = newData : $.userArr.push(newData);
-        $.setdata($.toStr($.userArr), 'cmcc_data');
+        const accountText = $.toStr($.userArr);
+        $.setdata(accountText, 'cmcc_data');
+        pushDaidai({ envs: [['cmcc_data', accountText]] });   // 账号凭证 → 面板环境变量（daidai_sync 同通道）
         $.Messages.push('🎉获取Cookie成功!');
         $.log('🎉获取Cookie成功!');
     } catch (e) {
@@ -285,9 +287,16 @@ function GetAutoLogin() {
         const h = ObjectKeys2LowerCase(req.headers || {});
         const autologin = { url: req.url, ua: h['user-agent'] || '', x_qen: h['x-qen'] || '14', body: String(body) };
         const old = $.getdata('cmcc_autologin_data');
-        if (old && $.toObj(old, {}) && $.toObj(old, {}).body === autologin.body) return;      // 同一个值不重复提醒
+        if (old && $.toObj(old, {}) && $.toObj(old, {}).body === autologin.body) {
+            // 同值不重复写、不提醒；但加推送之前抓的老数据可能从没进过面板，这里仍补推一次（网关同值会自行跳过）
+            pushDaidai({ envs: [['cmcc_autologin_data', old]] });
+            $.log('[抓取] autoLogin 传参未变化，已同步呆呆（网关同值会跳过）');
+            return;
+        }
         autologin.capturedAt = new Date().toISOString();
-        $.setdata($.toStr(autologin), 'cmcc_autologin_data');
+        const loginText = $.toStr(autologin);
+        $.setdata(loginText, 'cmcc_autologin_data');
+        pushDaidai({ envs: [['cmcc_autologin_data', loginText]] });   // 换票凭证 → 面板环境变量（daidai_sync 同通道）
         $.Messages.push(`🎉已抓到 autoLogin 传参`);
         $.log('🎉已抓到 autoLogin 传参');
     } catch (e) {
@@ -309,7 +318,7 @@ function GetRiskToken(res) {
         if (!key) return;
         if ($.getdata(key) === data) return;
         $.setdata(data, key);
-        pushDaidai({ boxjs: [[key, data]] });
+        // 风控令牌是手机侧设备票，面板用不上，不同步呆呆（只在本地 boxjs 留着）
         const label = isZw ? '_zw_kvani5r' : 'gr-risk-p3';
         $.Messages.push(`🎉已抓到 ${label}（${data.length} 字符）→ ${key}`);
         $.log(`🎉已抓到 ${label}（${data.length} 字符）`);
@@ -341,7 +350,7 @@ function GetCoc3Jar(req) {
         $.setdata(jar, L3_JAR_KEY);
         const ts = String(Date.now());
         $.setdata(ts, L3_JAR_AT_KEY);
-        pushDaidai({ boxjs: [[L3_JAR_KEY, jar], [L3_JAR_AT_KEY, ts]] });
+        // 权益市场 cookie 是手机侧短命会话票，面板用不上，不同步呆呆
         if (deviceChanged) {
             $.Messages.push(`🎉已抓到权益市场 cookie（${splitJar(jar).length} 条 / ${jar.length} 字符）→ ${L3_JAR_KEY}`);
             $.log(`🎉已抓到权益市场 cookie（${splitJar(jar).length} 条，设备身份有变化）`);
