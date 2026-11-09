@@ -776,6 +776,19 @@ function pushDaidai(payload) {
         const boxjs = (payload.boxjs || []).map(([key, value]) => ({ key, value: String(value) }));
         if (!api || !token) { $.log('[呆呆推送] 跳过：BoxJS「取凭证网关(tools)」的 @tools.address / @tools.token 未配置'); return; }
         if (!envs.length && !boxjs.length) return;
+        const url = `${api}/api/daidai/env/sync`;
+        const isLoon = typeof $.isLoon === 'function' && $.isLoon();
+        const isQuanX = typeof $.isQuanX === 'function' && $.isQuanX();
+        const opts = {
+            url,
+            headers: { 'X-Token': token, 'Content-Type': 'application/json' },
+            body: $.toStr({ envs, boxjs }),
+            // Loon 的 $httpClient 默认沿「当前路由」(代理节点) 发请求，局域网网关会被发到节点上超时；
+            // 且它默认超时只有 5000ms、单位是毫秒（Surge/Stash/Shadowrocket 是秒），必须按平台区分
+            timeout: (isLoon || isQuanX) ? 15000 : 15,
+        };
+        if (isLoon) opts.node = 'DIRECT';   // Loon 专用：强制直连，别把内网请求丢给代理节点
+        $.log(`[呆呆推送] → ${url}`);
         const task = new Promise((resolve) => {
             let settled = false;
             const finish = (line) => {
@@ -784,15 +797,15 @@ function pushDaidai(payload) {
                 if (line) $.log(line);
                 resolve();
             };
-            // 兜底超时：网关不通/隧道卡住也不能把重写脚本挂死
-            const timer = setTimeout(() => finish('[呆呆推送] 超时已忽略(8s)'), 8000);
+            // 兜底超时：网关不通/隧道卡住也不能把重写脚本挂死（要大于客户端 timeout）
+            const timer = setTimeout(() => finish('[呆呆推送] 超时已忽略(20s)'), 20000);
             try {
-                $.post({ url: `${api}/api/daidai/env/sync`, headers: { 'X-Token': token, 'Content-Type': 'application/json' }, body: $.toStr({ envs, boxjs }) }, (err, resp, data) => {
+                $.post(opts, (err, resp, data) => {
                     clearTimeout(timer);
                     const r = $.toObj(data) || {};
                     const fail = (r.failed || []).map(f => f.name || f.key).join(',');
                     if (err || r.error || fail) {
-                        finish(`[呆呆推送] 异常已忽略: ${err && (err.message || err) || r.error || fail}`);
+                        finish(`[呆呆推送] 异常已忽略(${url}): ${err && (err.message || err) || r.error || fail}`);
                     } else {
                         const parts = [
                             (r.created || []).length && `新建 ${r.created.length}`,
