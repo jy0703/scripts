@@ -160,6 +160,16 @@ async function Request(options) {
         const _respType = options?._respType || 'body';
         const _timeout = options?._timeout || 15000;
 
+        // Loon 的 $httpClient 默认沿「当前路由」(代理节点) 发请求、默认超时 5000ms：
+        // BoxJS 里手动点同步时，发往局域网网关的请求会被丢到节点上超时。强制直连并放宽客户端超时
+        // （Node 侧 got 的 timeout 单位不同，不设置，交给上面的 _timeout Promise.race 兜底）
+        if (!$.isNode()) {
+            const isLoon = typeof $.isLoon === 'function' && $.isLoon();
+            const isQuanX = typeof $.isQuanX === 'function' && $.isQuanX();
+            options.timeout = (isLoon || isQuanX) ? 30000 : 30;
+            if (isLoon) options.node = 'DIRECT';
+        }
+
         // 如果请求方法是post且有body，则将body序列化为JSON字符串
         if ((_method.toLowerCase() === 'post' || _method.toLowerCase() === 'put') && options.body && typeof options.body === 'object') {
             options.body = JSON.stringify(options.body);

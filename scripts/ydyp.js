@@ -68,6 +68,8 @@ $.is_debug = getEnv('ydyp_debug', 'is_debug') || 'false';  // 调试模式(boxjs
 $.userInfo = getEnv('ydyp_data') || '';  // 获取账号
 $.userArr = parseAccountList($.userInfo);  // 用户信息 [{Authorization, phone, deviceId}]
 $.Messages = [];
+// 抓包即时推送呆呆的未决请求：入口 $.done() 前必须等完，否则 Loon/Surge 会掐断异步 POST
+$.daidaiTasks = [];
 $.err_accounts = '';
 $.user_amount = '';
 
@@ -2779,6 +2781,8 @@ function GetCookie() {
     .catch((e) => $.Messages.push(e.message || e) && $.logErr(e))
     .finally(async () => {
         await sendMsg($.Messages.join('\n').trimStart().trimEnd());  // 推送通知
+        // 抓包即时推送是异步 POST：必须等它落地再 $.done()，Loon/Surge 在 $done() 后会丢弃未完成请求
+        if ($.daidaiTasks && $.daidaiTasks.length) await Promise.all($.daidaiTasks);
         $.isNode() || $.done();
     })
 
@@ -2798,6 +2802,8 @@ function ObjectKeys2LowerCase(obj = {}) {
 }
 
 // 重写抓到的数据即时推呆呆面板（仅手机侧；网关同值跳过，失败静默不影响主流程）
+// 注意：抓包脚本会在 finally 里立刻 $.done()，Loon/Surge 在 $done() 后结束脚本、丢弃未完成请求。
+// 所以这里把 POST 包成 Promise 登记进 $.daidaiTasks，由入口统一 await，否则「抓包成功但呆呆没数据」。
 function pushDaidai(payload) {
     try {
         if ($.isNode()) return;
@@ -2805,12 +2811,53 @@ function pushDaidai(payload) {
         const token = getEnv('TOOLS_API_TOKEN', '@tools.token') || '';
         const envs = (payload.envs || []).map(([name, value]) => ({ name, value: String(value) }));
         const boxjs = (payload.boxjs || []).map(([key, value]) => ({ key, value: String(value) }));
-        if (!api || !token || (!envs.length && !boxjs.length)) return;
-        $.post({ url: `${api}/api/daidai/env/sync`, headers: { 'X-Token': token, 'Content-Type': 'application/json' }, body: $.toStr({ envs, boxjs }) }, (err, resp, data) => {
-            const r = $.toObj(data);
-            const fail = (r && r.failed || []).map(f => f.name || f.key).join(',');
-            (err || (r && r.error) || fail) && $.log(`[呆呆推送] 异常已忽略: ${err && (err.message || err) || (r && r.error) || fail}`);
+        if (!api || !token) { $.log('[呆呆推送] 跳过：BoxJS「取凭证网关(tools)」的 @tools.address / @tools.token 未配置'); return; }
+        if (!envs.length && !boxjs.length) return;
+        const url = `${api}/api/daidai/env/sync`;
+        const isLoon = typeof $.isLoon === 'function' && $.isLoon();
+        const isQuanX = typeof $.isQuanX === 'function' && $.isQuanX();
+        const opts = {
+            url,
+            headers: { 'X-Token': token, 'Content-Type': 'application/json' },
+            body: $.toStr({ envs, boxjs }),
+            // Loon 的 $httpClient 默认沿「当前路由」(代理节点) 发请求，局域网网关会被发到节点上超时；
+            // 且它默认超时只有 5000ms、单位是毫秒（Surge/Stash/Shadowrocket 是秒），必须按平台区分
+            timeout: (isLoon || isQuanX) ? 15000 : 15,
+        };
+        if (isLoon) opts.node = 'DIRECT';   // Loon 专用：强制直连，别把内网请求丢给代理节点
+        $.log(`[呆呆推送] → ${url}`);
+        const task = new Promise((resolve) => {
+            let settled = false;
+            const finish = (line) => {
+                if (settled) return;
+                settled = true;
+                if (line) $.log(line);
+                resolve();
+            };
+            // 兜底超时：网关不通/隧道卡住也不能把重写脚本挂死（要大于客户端 timeout）
+            const timer = setTimeout(() => finish('[呆呆推送] 超时已忽略(20s)'), 20000);
+            try {
+                $.post(opts, (err, resp, data) => {
+                    clearTimeout(timer);
+                    const r = $.toObj(data) || {};
+                    const fail = (r.failed || []).map(f => f.name || f.key).join(',');
+                    if (err || r.error || fail) {
+                        finish(`[呆呆推送] 异常已忽略(${url}): ${err && (err.message || err) || r.error || fail}`);
+                    } else {
+                        const parts = [
+                            (r.created || []).length && `新建 ${r.created.length}`,
+                            (r.updated || []).length && `更新 ${r.updated.length}`,
+                            (r.unchanged || []).length && `同值跳过 ${r.unchanged.length}`,
+                            (r.boxjs && r.boxjs.updated || []).length && `box.dat 写 ${r.boxjs.updated.length}`,
+                            (r.config_sh && r.config_sh.updated || []).length && `config.sh 写 ${r.config_sh.updated.length}`,
+                        ].filter(Boolean).join('、');
+                        finish(`[呆呆推送] 完成: ${parts || '网关已受理'}`);
+                    }
+                });
+            } catch (e) { clearTimeout(timer); finish(`[呆呆推送] 异常已忽略: ${e.message || e}`); }
         });
+        $.daidaiTasks.push(task);
+        return task;
     } catch (e) { $.log(`[呆呆推送] 异常已忽略: ${e.message || e}`); }
 }
 
