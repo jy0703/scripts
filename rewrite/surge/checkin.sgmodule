@@ -1,0 +1,58 @@
+#!name=checkin
+#!desc=抓包插件合集：每条抓包规则一个独立参数，参数名就是抓包项名称，默认 generic（关闭）
+#!用法：Surge「模块」里点开本模块编辑参数，把要抓的那项从 generic 改成它下面注释里写的 http-request / http-response，抓完改回 generic；参数按原文替换，别填 true/false
+#!每条规则上方的注释就是该开关的启用值；脚本每天更新一次（script-update-interval=86400）
+#!arguments=百度网盘获取Cookie:generic,中国移动抓活动参数:generic,中国移动抓七日金额:generic,艾克帮签到获取Token2:generic,阿里云社区获取Cookie:generic,车来了获取签到参数:generic,中国移动获取Cookie:generic,中国移动抓autoLogin传参:generic,中国移动抓风控令牌:generic,中国移动抓权益市场Cookie:generic,酷我音乐登录:generic,龙湖天街获取Cookie:generic,龙湖天街获取抽奖ID:generic,慢慢买获取Cookie:generic,一点万象获取Cookie:generic,PingMe获取签到参数:generic,泉水签到获取Token:generic,什么值得买获取Cookie:generic,WPS签到获取Cookie:generic,移动云盘获取Token:generic,中通快递签到获取Token2:generic,奶茶品牌收录:generic,B站Cookie扫码:generic,B站CookieAPP:generic
+
+[Script]
+# 开关「百度网盘获取Cookie」：填 http-request 启用（默认 generic 关闭）
+百度网盘获取Cookie = type={{{百度网盘获取Cookie}}},pattern=^https?:\/\/pan\.baidu\.com\/(coins|api|rest)\/,requires-body=0,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/baidu_sign.js,script-update-interval=86400
+# 开关「中国移动抓活动参数」：填 http-request 启用（默认 generic 关闭）
+中国移动抓活动参数 = type={{{中国移动抓活动参数}}},pattern=^https?:\/\/dev\.coc\.10086\.cn\/coc\/(web6\/dailyLoginEvent(?!\/assets)|activities\/prize\/(drawDayNum|consecutiveClockInQuery)),requires-body=1,max-size=0,timeout=60,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sevenday_prize.js,script-update-interval=86400
+# 开关「中国移动抓七日金额」：填 http-response 启用（默认 generic 关闭）
+中国移动抓七日金额 = type={{{中国移动抓七日金额}}},pattern=^https?:\/\/dev\.coc\.10086\.cn\/coc\/web6\/dailyLoginEvent\/assets\/index-,requires-body=1,max-size=2097152,timeout=60,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sevenday_prize.js,script-update-interval=86400
+# 开关「艾克帮签到获取Token2」：填 http-response 启用（默认 generic 关闭）
+艾克帮签到获取Token2 = type={{{艾克帮签到获取Token2}}},pattern=^https?:\/\/api\.ikbang\.cn\/v2\/iclick-new\/usercenter\/getUserDetails,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aikebang_sign.js,script-update-interval=86400
+# 开关「阿里云社区获取Cookie」：填 http-response 启用（默认 generic 关闭）
+阿里云社区获取Cookie = type={{{阿里云社区获取Cookie}}},pattern=^https?:\/\/developer\.aliyun\.com\/developer\/api\/my\/user\/getUser,requires-body=1,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aliyun_sign.js,script-update-interval=86400
+# 开关「车来了获取签到参数」：填 http-request 启用（默认 generic 关闭）
+车来了获取签到参数 = type={{{车来了获取签到参数}}},pattern=^https?:\/\/web\.chelaile\.net\.cn\/api\/op-activity-api\/daily-act\/(signin|config|task\/complete),requires-body=0,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js,script-update-interval=86400
+# 开关「中国移动获取Cookie」：填 http-request 启用（默认 generic 关闭）
+中国移动获取Cookie = type={{{中国移动获取Cookie}}},pattern=^https?:\/\/wx\.10086\.cn\/qwhdsso\/appTokenLogin,requires-body=1,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,script-update-interval=86400
+# 开关「中国移动抓autoLogin传参」：填 http-request 启用（默认 generic 关闭）
+中国移动抓autoLogin传参 = type={{{中国移动抓autoLogin传参}}},pattern=^https?:\/\/client\.app\.coc\.10086\.cn\/.*uamrandcodelogin\/autoLogin,requires-body=1,max-size=0,timeout=60,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,script-update-interval=86400
+# 开关「中国移动抓风控令牌」：填 http-response 启用（默认 generic 关闭）
+中国移动抓风控令牌 = type={{{中国移动抓风控令牌}}},pattern=^https?:\/\/yxfk\.market\.chinamobile\.com:8081\/mgt\/decision-engine\/udid\/c1,requires-body=1,max-size=0,timeout=60,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,script-update-interval=86400
+# 开关「中国移动抓权益市场Cookie」：填 http-request 启用（默认 generic 关闭）
+中国移动抓权益市场Cookie = type={{{中国移动抓权益市场Cookie}}},pattern=^https?:\/\/dev\.coc\.10086\.cn\/coc3\/(gr|coc3-market[^/]*|gateway-route)\/,requires-body=0,max-size=0,timeout=60,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,script-update-interval=86400
+# 开关「酷我音乐登录」：填 http-request 启用（默认 generic 关闭）
+酷我音乐登录 = type={{{酷我音乐登录}}},pattern=^https?:\/\/360\.com\/kuwo,requires-body=1,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/kuwo_sign.js,script-update-interval=86400
+# 开关「龙湖天街获取Cookie」：填 http-request 启用（默认 generic 关闭）
+龙湖天街获取Cookie = type={{{龙湖天街获取Cookie}}},pattern=^https?:\/\/gw2c\-hw\-open\.longfor\.com\/lmarketing\-task\-api\-mvc\-prod\/openapi\/task\/v1\/signature\/clock,requires-body=0,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/lhtj.js,script-update-interval=86400
+# 开关「龙湖天街获取抽奖ID」：填 http-request 启用（默认 generic 关闭）
+龙湖天街获取抽奖ID = type={{{龙湖天街获取抽奖ID}}},pattern=^https?:\/\/gw2c\-hw\-open\.longfor\.com\/llt\-gateway\-prod\/api\/v1\/activity\/auth\/lottery\/(sign|chance|click),requires-body=1,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/lhtj.js,script-update-interval=86400
+# 开关「慢慢买获取Cookie」：填 http-response 启用（默认 generic 关闭）
+慢慢买获取Cookie = type={{{慢慢买获取Cookie}}},pattern=^https?:\/\/apapia\.manmanbuy\.com\/index_json\.ashx,requires-body=1,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/manmanbuy_sign.js,script-update-interval=86400
+# 开关「一点万象获取Cookie」：填 http-request 启用（默认 generic 关闭）
+一点万象获取Cookie = type={{{一点万象获取Cookie}}},pattern=^https?:\/\/app\.mixcapp\.com\/mixc\/api\/v4\/member\/getPersonalData,requires-body=0,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/mixc_sign.js,script-update-interval=86400
+# 开关「PingMe获取签到参数」：填 http-request 启用（默认 generic 关闭）
+PingMe获取签到参数 = type={{{PingMe获取签到参数}}},pattern=^https?:\/\/api\.pingmeapp\.net\/app\/queryBalanceAndBonus,requires-body=0,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/pingme_sign.js,script-update-interval=86400
+# 开关「泉水签到获取Token」：填 http-request 启用（默认 generic 关闭）
+泉水签到获取Token = type={{{泉水签到获取Token}}},pattern=^https?:\/\/java-uapi\.quanzhan888\.com\/u\/user-center\/index,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/quanshui_sign.js,script-update-interval=86400
+# 开关「什么值得买获取Cookie」：填 http-request 启用（默认 generic 关闭）
+什么值得买获取Cookie = type={{{什么值得买获取Cookie}}},pattern=^https?:\/\/user-api\.smzdm\.com\/(checkin|task\/list_v2),requires-body=1,max-size=0,timeout=60,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/smzdm.js,script-update-interval=86400
+# 开关「WPS签到获取Cookie」：填 http-request 启用（默认 generic 关闭）
+WPS签到获取Cookie = type={{{WPS签到获取Cookie}}},pattern=^https?:\/\/personal-act\.wps\.cn\/rubik2\/portal\/,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js,script-update-interval=86400
+# 开关「移动云盘获取Token」：填 http-request 启用（默认 generic 关闭）
+移动云盘获取Token = type={{{移动云盘获取Token}}},pattern=^https?:\/\/user-njs\.yun\.139\.com\/user\/,requires-body=0,max-size=0,timeout=600,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,script-update-interval=86400
+# 开关「中通快递签到获取Token2」：填 http-response 启用（默认 generic 关闭）
+中通快递签到获取Token2 = type={{{中通快递签到获取Token2}}},pattern=^https?:\/\/membergateway\.zto\.com\/getMember,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,script-update-interval=86400
+# 开关「奶茶品牌收录」：填 http-response 启用（默认 generic 关闭）
+奶茶品牌收录 = type={{{奶茶品牌收录}}},pattern=^https?:\/\/webapi\.qmai\.cn\/web\/account-center\/oauth\/mini-app-login,requires-body=1,max-size=0,timeout=60,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/milk_tea_sign.js,script-update-interval=86400
+# 开关「B站Cookie扫码」：填 http-response 启用（默认 generic 关闭）
+B站Cookie扫码 = type={{{B站Cookie扫码}}},pattern=^https?:\/\/app\.bilibili\.com\/x\/resource\/fingerprint\?,requires-body=0,max-size=0,timeout=150,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/BiliBiliDailyBonus.js,script-update-interval=86400
+# 开关「B站CookieAPP」：填 http-request 启用（默认 generic 关闭）
+B站CookieAPP = type={{{B站CookieAPP}}},pattern=^https?:\/\/app\.bilibili\.com\/x\/resource\/fingerprint\?,requires-body=0,max-size=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/BiliBiliDailyBonus.js,script-update-interval=86400
+
+[MITM]
+hostname = %APPEND% 360.com, apapia.manmanbuy.com, api.ikbang.cn, api.pingmeapp.net, app.bilibili.com, app.mixcapp.com, client.app.coc.10086.cn, dev.coc.10086.cn, developer.aliyun.com, gw2c-hw-open.longfor.com, hdgateway.zto.com, java-uapi.quanzhan888.com, membergateway.zto.com, pan.baidu.com, personal-act.wps.cn, user-api.smzdm.com, user-njs.yun.139.com, web.chelaile.net.cn, webapi.qmai.cn, wx.10086.cn, yxfk.market.chinamobile.com

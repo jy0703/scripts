@@ -1,0 +1,62 @@
+#!name = checkin
+#!desc = 抓包插件合集：汇总 24 条 http-request / http-response 抓包规则，每条规则一个独立开关，只打开要抓的那一项；抓完请关掉对应开关，避免每次进页面重复覆盖凭证
+#!author = Fengzzzz
+#!homepage = https://github.com/jy0703/scripts
+#!icon = https://raw.githubusercontent.com/jy0703/scripts/main/icons/daidai.png
+#!tag = 抓包,签到,合集
+#!type = normal
+
+[Argument]
+aikebang_1 = switch,false,tag=艾克帮签到 · 艾克帮签到获取Token,desc=打开后进入艾克帮小程序自动抓取 Token，抓取完成后建议关闭
+aliyun_1 = switch,false,tag=阿里云社区签到 · 阿里云社区获取Cookie,desc=打开后按说明操作自动抓取，抓取完成后建议关闭
+baidu_1 = switch,false,tag=百度网盘签到 · 百度网盘获取Cookie,desc=打开后操作百度网盘 APP 触发 pan.baidu.com 请求即抓取，抓取完成后建议关闭
+bilibili_daily_1 = switch,false,tag=BiliBili每日等级任务 · B站Cookie(扫码),desc=开启后冷启动 B 站 APP 会推送二维码，约 115 秒内完成扫码，成功后请关闭；与「APPCookie」互斥，不可同开
+bilibili_daily_2 = switch,false,tag=BiliBili每日等级任务 · B站Cookie(APP),desc=常驻抓取 APP 请求头里的 Cookie，检测到变更自动更新；使用扫码方式时请关闭
+cll_1 = switch,false,tag=车来了签到 · 车来了获取签到参数,desc=打开后按说明操作自动抓取签到参数，抓取完成后建议关闭
+cmcc_sevenday_prize_1 = switch,false,tag=移动七日夺宝 · 移动抓活动参数,desc=打开后进一次「每日登录活动」页（七日打卡/天天来夺宝）：把 activityId、pageId、channelId、七日金额表写进 cmcc_sevenday_prize_cfg，并顺带收割设备 cookie（_zw_kvani5r、gdp_* 自动填进 boxjs，打卡风控用）；抓到会推一条确认，抓完建议关闭
+cmcc_sevenday_prize_2 = switch,false,tag=移动七日夺宝 · 移动抓七日金额,desc=打开后进一次「每日登录活动」页（七日打卡/天天来夺宝）：把 activityId、pageId、channelId、七日金额表写进 cmcc_sevenday_prize_cfg，并顺带收割设备 cookie（_zw_kvani5r、gdp_* 自动填进 boxjs，打卡风控用）；抓到会推一条确认，抓完建议关闭
+cmcc_1 = switch,false,tag=中国移动签到 · 中国移动获取Cookie,desc=打开后进一次签到页抓签到凭证（豆苗凭证复用其中的 token），抓完建议关闭
+cmcc_2 = switch,false,tag=中国移动签到 · 中国移动抓autoLogin传参,desc=打开后进一次中国移动 App(自动登录)抓 autoLogin 传参存进 cmcc_autologin_data，抓完建议关闭
+cmcc_3 = switch,false,tag=中国移动签到 · 中国移动抓风控令牌,desc=打开后进一次「权益市场/幸运三日签」页面，抓两样抽奖口要的东西：① ZWRisk 决策引擎回的令牌 gr-risk-p3（和同接口的 _zw_kvani5r）→ cmcc_lucky3_risk_p3 / cmcc_lucky3_zw；② 请求头里那一整套设备 cookie（_zw+User-Token+页面态 gdp_*）→ cmcc_lucky3_jar。都是设备级、能撑几天（观测 ≥34 小时），抓完建议关闭
+cmcc_4 = switch,false,tag=中国移动签到 · 中国移动抓权益市场Cookie,desc=打开后进一次「权益市场/幸运三日签」页面，抓两样抽奖口要的东西：① ZWRisk 决策引擎回的令牌 gr-risk-p3（和同接口的 _zw_kvani5r）→ cmcc_lucky3_risk_p3 / cmcc_lucky3_zw；② 请求头里那一整套设备 cookie（_zw+User-Token+页面态 gdp_*）→ cmcc_lucky3_jar。都是设备级、能撑几天（观测 ≥34 小时），抓完建议关闭
+kuwo_1 = switch,false,tag=酷我音乐签到 · 酷我音乐登录,desc=打开后在浏览器访问 http://360.com/kuwo 完成手机号登录并跑一次任务，登录完建议关闭
+lhtj_1 = switch,false,tag=龙湖天街签到 · 龙湖天街获取Cookie,desc=打开后按说明操作自动抓取 Cookie，抓取完成后建议关闭
+lhtj_2 = switch,false,tag=龙湖天街签到 · 龙湖天街获取抽奖ID,desc=打开后在 App 里进一次抽奖页，自动把当期组件ID写进 boxjs 的 lhtj_lottery_app，抓完建议关闭（定时任务的签到回包也会自动刷新，不用常开）
+manmanbuy_1 = switch,false,tag=慢慢买签到 · 慢慢买获取Cookie,desc=打开后回到 APP 首页自动抓取签到账号，抓取完成后建议关闭
+milk_tea_1 = switch,false,tag=企迈合集签到 · 奶茶品牌收录,desc=打开后逛任意企迈小程序完成一次登录即自动收录 storeId+appid 到 MILK_TEA_BRANDS，收录完建议关闭
+mixc_1 = switch,false,tag=一点万象签到 · 一点万象获取Cookie,desc=打开后按说明操作自动抓取签到凭证，抓取完成后建议关闭
+pingme_1 = switch,false,tag=PingMe签到 · PingMe获取签到参数,desc=打开后进入 PingMe App 自动抓取参数，抓取完成后建议关闭
+quanshui_1 = switch,false,tag=泉水签到 · 泉水签到获取Token,desc=打开后进入泉站订水小程序自动抓取 Token，抓取完成后建议关闭
+smzdm_1 = switch,false,tag=什么值得买 · 什么值得买获取Cookie,desc=打开后在什么值得买 App 触发签到请求自动抓取，抓取完成后建议关闭
+wps_1 = switch,false,tag=WPS签到 · WPS签到获取Cookie,desc=打开后进入 WPS 签到活动页自动抓取 Cookie，抓取完成后建议关闭
+ydyp_1 = switch,false,tag=移动云盘签到 · 移动云盘签到获取Token,desc=打开后进入移动云盘 App 首页自动抓取 Authorization，抓取完成后建议关闭
+zt_1 = switch,false,tag=中通快递签到 · 中通快递签到获取Token,desc=打开后进入中通快递小程序签到中心自动抓取 Token，抓取完成后建议关闭
+
+[Script]
+http-response ^https?:\/\/api\.ikbang\.cn\/v2\/iclick-new\/usercenter\/getUserDetails script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aikebang_sign.js,requires-body=true,timeout=30,tag=艾克帮签到获取Token2,enable={aikebang_1}
+http-response ^https?:\/\/developer\.aliyun\.com\/developer\/api\/my\/user\/getUser script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aliyun_sign.js,requires-body=true,timeout=600,tag=阿里云社区获取Cookie,enable={aliyun_1}
+http-request ^https?:\/\/pan\.baidu\.com\/(coins|api|rest)\/ script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/baidu_sign.js,requires-body=false,timeout=600,tag=百度网盘获取Cookie,enable={baidu_1}
+http-response ^https?:\/\/app\.bilibili\.com\/x\/resource\/fingerprint\? script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/BiliBiliDailyBonus.js,timeout=150,tag=B站Cookie(扫码),enable={bilibili_daily_1}
+http-request ^https?:\/\/app\.bilibili\.com\/x\/resource\/fingerprint\? script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/BiliBiliDailyBonus.js,timeout=30,tag=B站Cookie(APP),enable={bilibili_daily_2}
+http-request ^https?:\/\/web\.chelaile\.net\.cn\/api\/op-activity-api\/daily-act\/(signin|config|task\/complete) script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cll_sign.js,requires-body=false,timeout=600,tag=车来了获取签到参数,enable={cll_1}
+http-request ^https?:\/\/dev\.coc\.10086\.cn\/coc\/(web6\/dailyLoginEvent(?!\/assets)|activities\/prize\/(drawDayNum|consecutiveClockInQuery)) script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sevenday_prize.js,requires-body=true,timeout=60,tag=移动抓活动参数,enable={cmcc_sevenday_prize_1}
+http-response ^https?:\/\/dev\.coc\.10086\.cn\/coc\/web6\/dailyLoginEvent\/assets\/index- script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sevenday_prize.js,requires-body=true,timeout=60,tag=移动抓七日金额,enable={cmcc_sevenday_prize_2}
+http-request ^https?:\/\/wx\.10086\.cn\/qwhdsso\/appTokenLogin script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,requires-body=true,timeout=600,tag=中国移动获取Cookie,enable={cmcc_1}
+http-request ^https?:\/\/client\.app\.coc\.10086\.cn\/.*uamrandcodelogin\/autoLogin script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,requires-body=true,timeout=60,tag=中国移动抓autoLogin传参,enable={cmcc_2}
+http-response ^https?:\/\/yxfk\.market\.chinamobile\.com:8081\/mgt\/decision-engine\/udid\/c1 script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,requires-body=true,timeout=60,tag=中国移动抓风控令牌,enable={cmcc_3}
+http-request ^https?:\/\/dev\.coc\.10086\.cn\/coc3\/(gr|coc3-market[^/]*|gateway-route)\/ script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/cmcc_sign.js,requires-body=false,timeout=60,tag=中国移动抓权益市场Cookie,enable={cmcc_4}
+http-request ^https?:\/\/360\.com\/kuwo script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/kuwo_sign.js,requires-body=true,timeout=600,tag=酷我音乐登录,enable={kuwo_1}
+http-request ^https?:\/\/gw2c\-hw\-open\.longfor\.com\/lmarketing\-task\-api\-mvc\-prod\/openapi\/task\/v1\/signature\/clock script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/lhtj.js,requires-body=false,timeout=600,tag=龙湖天街获取Cookie,enable={lhtj_1}
+http-request ^https?:\/\/gw2c\-hw\-open\.longfor\.com\/llt\-gateway\-prod\/api\/v1\/activity\/auth\/lottery\/(sign|chance|click) script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/lhtj.js,requires-body=true,timeout=600,tag=龙湖天街获取抽奖ID,enable={lhtj_2}
+http-response ^https?:\/\/apapia\.manmanbuy\.com\/index_json\.ashx script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/manmanbuy_sign.js,requires-body=true,timeout=600,tag=慢慢买获取Cookie,enable={manmanbuy_1}
+http-response ^https?:\/\/webapi\.qmai\.cn\/web\/account-center\/oauth\/mini-app-login script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/milk_tea_sign.js,requires-body=true,timeout=60,tag=奶茶品牌收录,enable={milk_tea_1}
+http-request ^https?:\/\/app\.mixcapp\.com\/mixc\/api\/v4\/member\/getPersonalData script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/mixc_sign.js,requires-body=false,timeout=600,tag=一点万象获取Cookie,enable={mixc_1}
+http-request ^https?:\/\/api\.pingmeapp\.net\/app\/queryBalanceAndBonus script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/pingme_sign.js,requires-body=false,timeout=600,tag=PingMe获取签到参数,enable={pingme_1}
+http-request ^https?:\/\/java-uapi\.quanzhan888\.com\/u\/user-center\/index script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/quanshui_sign.js,requires-body=true,timeout=30,tag=泉水签到获取Token,enable={quanshui_1}
+http-request ^https?:\/\/user-api\.smzdm\.com\/(checkin|task\/list_v2) script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/smzdm.js,requires-body=true,timeout=60,tag=什么值得买获取Cookie,enable={smzdm_1}
+http-request ^https?:\/\/personal-act\.wps\.cn\/rubik2\/portal\/ script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js,requires-body=false,timeout=30,tag=WPS签到获取Cookie,enable={wps_1}
+http-request ^https?:\/\/user-njs\.yun\.139\.com\/user\/ script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,timeout=600,tag=移动云盘签到获取Token,enable={ydyp_1}
+http-response ^https?:\/\/membergateway\.zto\.com\/getMember script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,requires-body=true,timeout=30,tag=中通快递签到获取Token2,enable={zt_1}
+
+[Mitm]
+hostname = 360.com, apapia.manmanbuy.com, api.ikbang.cn, api.pingmeapp.net, app.bilibili.com, app.mixcapp.com, client.app.coc.10086.cn, dev.coc.10086.cn, developer.aliyun.com, gw2c-hw-open.longfor.com, hdgateway.zto.com, java-uapi.quanzhan888.com, membergateway.zto.com, pan.baidu.com, personal-act.wps.cn, user-api.smzdm.com, user-njs.yun.139.com, web.chelaile.net.cn, webapi.qmai.cn, wx.10086.cn, yxfk.market.chinamobile.com

@@ -11,7 +11,6 @@
 hostname = membergateway.zto.com, hdgateway.zto.com
 
 [Script]
-中通快递签到获取Token = type=http-request,pattern=^https?:\/\/membergateway\.zto\.com\/getMember,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,script-update-interval=0
 
 中通快递签到获取Token2 = type=http-response,pattern=^https?:\/\/membergateway\.zto\.com\/getMember,requires-body=1,max-size=0,binary-body-mode=0,timeout=30,script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,script-update-interval=0
 
