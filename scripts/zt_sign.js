@@ -429,6 +429,20 @@ async function sendMsg(message) {
 }
 
 
+// 每台手机一个稳定的来源标识：BoxJS「呆呆面板同步」分区的 @daidai.device 手填；
+// 没填就自动生成一次并写回本地，保证同一台手机以后每次抓包都落在面板的同一行。
+function getDaidaiSource() {
+    try {
+        let v = String($.getdata('@daidai.device') || $.getdata('DAIDAI_DEVICE') || '').trim();
+        v = v.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32);
+        if (v) return v;
+        v = 'dev_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        $.setdata(v, '@daidai.device');
+        $.log(`[呆呆推送] 未设置 @daidai.device，已自动生成来源标识: ${v}（可在 BoxJS 里改成好记的名字）`);
+        return v;
+    } catch (e) { return ''; }
+}
+
 // 重写抓到的数据即时推呆呆面板（仅手机侧；网关同值跳过，失败静默不影响主流程）
 // 注意：抓包脚本会在 finally 里立刻 $.done()，Loon/Surge 在 $done() 后结束脚本、丢弃未完成请求。
 // 所以这里把 POST 包成 Promise 登记进 $.daidaiTasks，由入口统一 await，否则「抓包成功但呆呆没数据」。
@@ -441,19 +455,20 @@ function pushDaidai(payload) {
         const boxjs = (payload.boxjs || []).map(([key, value]) => ({ key, value: String(value) }));
         if (!api || !token) { $.log('[呆呆推送] 跳过：BoxJS「取凭证网关(tools)」的 @tools.address / @tools.token 未配置'); return; }
         if (!envs.length && !boxjs.length) return;
+        const source = getDaidaiSource();   // 两台手机各占面板同名变量的一行
         const url = `${api}/api/daidai/env/sync`;
         const isLoon = typeof $.isLoon === 'function' && $.isLoon();
         const isQuanX = typeof $.isQuanX === 'function' && $.isQuanX();
         const opts = {
             url,
             headers: { 'X-Token': token, 'Content-Type': 'application/json' },
-            body: $.toStr({ envs, boxjs }),
+            body: $.toStr({ envs, boxjs, source }),
             // Loon 的 $httpClient 默认沿「当前路由」(代理节点) 发请求，局域网网关会被发到节点上超时；
             // 且它默认超时只有 5000ms、单位是毫秒（Surge/Stash/Shadowrocket 是秒），必须按平台区分
             timeout: (isLoon || isQuanX) ? 15000 : 15,
         };
         if (isLoon) opts.node = 'DIRECT';   // Loon 专用：强制直连，别把内网请求丢给代理节点
-        $.log(`[呆呆推送] → ${url}`);
+        $.log(`[呆呆推送] → ${url}${source ? ` (来源 ${source})` : ''}`);
         const task = new Promise((resolve) => {
             let settled = false;
             const finish = (line) => {
@@ -473,6 +488,7 @@ function pushDaidai(payload) {
                         finish(`[呆呆推送] 异常已忽略(${url}): ${err && (err.message || err) || r.error || fail}`);
                     } else {
                         const parts = [
+                            r.source && `来源 ${r.source}`,
                             (r.created || []).length && `新建 ${r.created.length}`,
                             (r.updated || []).length && `更新 ${r.updated.length}`,
                             (r.unchanged || []).length && `同值跳过 ${r.unchanged.length}`,

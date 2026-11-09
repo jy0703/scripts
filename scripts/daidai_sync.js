@@ -118,12 +118,13 @@ async function main() {
     const result = await Request({
         url: `${api}/api/daidai/env/sync`,
         headers: { 'X-Token': token },
-        body: { envs, boxjs },
+        body: { envs, boxjs, source: getDaidaiSource() },
         _timeout: 30000,
     });
     if (!result || result.error) throw new Error(`网关同步失败: ${result?.error || '无响应(服务没启动或地址不对)'} ❌`);
 
     const { created = [], updated = [], unchanged = [], failed = [], boxjs: br = {} } = result;
+    if (result.source) $.log(`📱 本机来源: ${result.source}（面板同名变量按来源分行，互不覆盖）`);
     if (created.length) $.log(`✅ 新建 ${created.length}: ${created.join(', ')}`);
     if (updated.length) $.log(`🔄 更新 ${updated.length}: ${updated.join(', ')}`);
     if (unchanged.length) $.log(`⏭ 同值跳过 ${unchanged.length}: ${unchanged.join(', ')}`);
@@ -150,6 +151,21 @@ async function main() {
         if (!MUTE) await sendMsg($.Messages.join('\n').trimStart().trimEnd());  // 推送通知
         $.isNode() || $.done();
     })
+
+
+// 每台手机一个稳定的来源标识：BoxJS 本区 @daidai.device 手填；没填就自动生成一次并写回本地，
+// 保证手动同步与抓包即时推送用的是同一个 source，落在面板同名变量的同一行。
+function getDaidaiSource() {
+    try {
+        let v = String(getEnv('DAIDAI_DEVICE', '@daidai.device') || '').trim();
+        v = v.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32);
+        if (v) return v;
+        v = 'dev_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        $.setdata(v, '@daidai.device');
+        $.log(`📱 未设置 @daidai.device，已自动生成来源标识: ${v}（可在 BoxJS 里改成好记的名字）`);
+        return v;
+    } catch (e) { return ''; }
+}
 
 
 // 请求函数二次封装

@@ -562,54 +562,67 @@ async function refreshAppTokenFromApi(user) {
     const fail = (msg) => { refreshNote = msg; $.log(`${tag} ${msg}`); return false; };
     if (!TOOLS_API) return fail('未填 @tools.address（boxjs「取凭证网关(tools)」分区）');
     if (!TOOLS_API_TOKEN) return fail('填了 @tools.address 但没填 @tools.token');
-    let autologin = getEnv('cmcc_autologin_data') || '';
-    if (typeof autologin === 'string') autologin = $.toObj(autologin, null);
-    if (!autologin || !autologin.url || !autologin.body) return fail('没有 cmcc_autologin_data：打开 App 进一次签到页（或触发自动登录）抓 autoLogin 传参');
+    // 面板同名多行会按 & 合并注入：每段是某台手机抓的单个 autologin 对象。
+    // 逐段试（新的优先），哪台手机的凭证还有效就用哪台，别让另一台把本机的换票打断。
+    const candidates = parseAccountList(getEnv('cmcc_autologin_data') || '')
+        .filter(a => a && a.url && a.body)
+        .sort((a, b) => (Date.parse(b.capturedAt || '') || 0) - (Date.parse(a.capturedAt || '') || 0));
+    if (!candidates.length) return fail('没有 cmcc_autologin_data：打开 App 进一次签到页（或触发自动登录）抓 autoLogin 传参');
     const t0 = Date.now();
-    const capAt = Date.parse(autologin.capturedAt || '');
-    // 抓太久更可能是被顶号，日志里带上抓取年龄
-    $.log(`${tag} 向网关要新票据${capAt ? `（autoLogin 抓于 ${((Date.now() - capAt) / 86400000).toFixed(1)} 天前）` : ''}…`);
-    try {
-        // 网关服务偶发抖动：和 code 服务一样最多试 3 次（1s/2s 退避）；214100/尾号不符这类终态直接收尾不浪费重试
-        let r = null, why = '', netErr = '';
-        for (let attempt = 1; attempt <= 3; attempt++) {
-            netErr = '';
-            try {
-                r = await Request({
-                    url: `${TOOLS_API}/api/cmcc/refresh`, method: 'post',
-                    headers: { 'content-type': 'application/json', 'x-token': TOOLS_API_TOKEN },
-                    body: autologin, _timeout: 30000,
-                });
-            } catch (e) {
-                r = null;
-                netErr = shortMsg(e.message || e);
+    let lastWhy = '';
+    for (let idx = 0; idx < candidates.length; idx++) {
+        const autologin = candidates[idx];
+        const capAt = Date.parse(autologin.capturedAt || '');
+        // 抓太久更可能是被顶号，日志里带上抓取年龄
+        $.log(`${tag} 用第 ${idx + 1}/${candidates.length} 份 autoLogin 向网关要新票据${capAt ? `（抓于 ${((Date.now() - capAt) / 86400000).toFixed(1)} 天前）` : ''}…`);
+        try {
+            // 网关服务偶发抖动：和 code 服务一样最多试 3 次（1s/2s 退避）；214100/尾号不符这类终态直接收尾不浪费重试
+            let r = null, why = '', netErr = '';
+            for (let attempt = 1; attempt <= 3; attempt++) {
+                netErr = '';
+                try {
+                    r = await Request({
+                        url: `${TOOLS_API}/api/cmcc/refresh`, method: 'post',
+                        headers: { 'content-type': 'application/json', 'x-token': TOOLS_API_TOKEN },
+                        body: autologin, _timeout: 30000,
+                    });
+                } catch (e) {
+                    r = null;
+                    netErr = shortMsg(e.message || e);
+                }
+                if (r && r.token) break;
+                why = netErr || shortMsg((r && r.error) || '响应为空');
+                if (!netErr) r = null;
+                if (why.includes('214100')) break;
+                if (attempt < 3) {
+                    $.log(`${tag} ⚠️ 网关请求失败，${attempt}s 后重试（${attempt}/3）：${why}`);
+                    await $.wait(1000 * attempt);
+                }
             }
-            if (r && r.token) break;
-            why = netErr || shortMsg((r && r.error) || '响应为空');
-            if (!netErr) r = null;
-            if (why.includes('214100')) break;
-            if (attempt < 3) {
-                $.log(`${tag} ⚠️ 网关请求失败，${attempt}s 后重试（${attempt}/3）：${why}`);
-                await $.wait(1000 * attempt);
+            if (!r && netErr) { lastWhy = `请求网关异常：${why}`; continue; }
+            if (!r) {
+                lastWhy = why.includes('214100') ? `${why} —— App 侧风控要求验证：开着抓取，在 App 里过一遍验证/重新登录再跑` : `网关未回票据：${why}`;
+                continue;
             }
+            if (r.userCheckId && user.userCheckId && r.userCheckId !== user.userCheckId) {
+                // 这一份多半是另一台手机的账号，换下一份再试
+                lastWhy = `换回的票据是尾号 ${phoneTail({ userCheckId: r.userCheckId })}，与当前账号尾号 ${phoneTail(user)} 不符`;
+                continue;
+            }
+            user.token = r.token;
+            // 顺手把大网 uid 存进 cmcc_data：签到自身的请求不用它，它对应网关的 /api/cmcc/uid 与 /api/cmcc/usertoken
+            const bigNetUid = String(r.sessionUid || ((/UID=([^;,\s]+)/.exec(String(r.token || '')) || [])[1] || ''));
+            if (bigNetUid) user.sessionUid = bigNetUid;      // 旧版网关没回 sessionUid 字段时，仍从 token 串里抠
+            if (r.provinceCode && !user.provinceCode) user.provinceCode = r.provinceCode;
+            if (r.cityCode && !user.cityCode) user.cityCode = r.cityCode;
+            saveUsers();
+            $.log(`${tag} 已换到新票据（第 ${idx + 1}/${candidates.length} 份，${((Date.now() - t0) / 1000).toFixed(1)}s，cellNum=${r.cellNumMode || 'script'}）`);
+            return true;
+        } catch (e) {
+            lastWhy = `请求网关异常：${shortMsg(e.message || e)}`;
         }
-        if (!r && netErr) return fail(`请求网关异常：${why}`);
-        if (!r) return fail(why.includes('214100') ? `${why} —— App 侧风控要求验证：开着抓取，在 App 里过一遍验证/重新登录再跑` : `网关未回票据：${why}`);
-        if (r.userCheckId && user.userCheckId && r.userCheckId !== user.userCheckId) {
-            return fail(`换回的票据是尾号 ${phoneTail({ userCheckId: r.userCheckId })}，与当前账号尾号 ${phoneTail(user)} 不符`);
-        }
-        user.token = r.token;
-        // 顺手把大网 uid 存进 cmcc_data：签到自身的请求不用它，它对应网关的 /api/cmcc/uid 与 /api/cmcc/usertoken
-        const bigNetUid = String(r.sessionUid || ((/UID=([^;,\s]+)/.exec(String(r.token || '')) || [])[1] || ''));
-        if (bigNetUid) user.sessionUid = bigNetUid;      // 旧版网关没回 sessionUid 字段时，仍从 token 串里抠
-        if (r.provinceCode && !user.provinceCode) user.provinceCode = r.provinceCode;
-        if (r.cityCode && !user.cityCode) user.cityCode = r.cityCode;
-        saveUsers();
-        $.log(`${tag} 已换到新票据（${((Date.now() - t0) / 1000).toFixed(1)}s，cellNum=${r.cellNumMode || 'script'}）`);
-        return true;
-    } catch (e) {
-        return fail(`请求网关异常：${shortMsg(e.message || e)}`);
     }
+    return fail(lastWhy || '所有来源的 autoLogin 换票都失败');
 }
 
 async function exchangeSession(user, entryUrl) {
@@ -2438,6 +2451,20 @@ function randomInt(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
+// 每台手机一个稳定的来源标识：BoxJS「呆呆面板同步」分区的 @daidai.device 手填；
+// 没填就自动生成一次并写回本地，保证同一台手机以后每次抓包都落在面板的同一行。
+function getDaidaiSource() {
+    try {
+        let v = String($.getdata('@daidai.device') || $.getdata('DAIDAI_DEVICE') || '').trim();
+        v = v.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32);
+        if (v) return v;
+        v = 'dev_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        $.setdata(v, '@daidai.device');
+        $.log(`[呆呆推送] 未设置 @daidai.device，已自动生成来源标识: ${v}（可在 BoxJS 里改成好记的名字）`);
+        return v;
+    } catch (e) { return ''; }
+}
+
 // 重写抓到的数据即时推呆呆面板（仅手机侧；网关同值跳过，失败静默不影响主流程）
 // 注意：抓包脚本会在 finally 里立刻 $.done()，Loon/Surge 在 $done() 后结束脚本、丢弃未完成请求。
 // 所以这里把 POST 包成 Promise 登记进 $.daidaiTasks，由入口统一 await，否则「抓包成功但呆呆没数据」。
@@ -2450,19 +2477,20 @@ function pushDaidai(payload) {
         const boxjs = (payload.boxjs || []).map(([key, value]) => ({ key, value: String(value) }));
         if (!api || !token) { $.log('[呆呆推送] 跳过：BoxJS「取凭证网关(tools)」的 @tools.address / @tools.token 未配置'); return; }
         if (!envs.length && !boxjs.length) return;
+        const source = getDaidaiSource();   // 两台手机各占面板同名变量的一行
         const url = `${api}/api/daidai/env/sync`;
         const isLoon = typeof $.isLoon === 'function' && $.isLoon();
         const isQuanX = typeof $.isQuanX === 'function' && $.isQuanX();
         const opts = {
             url,
             headers: { 'X-Token': token, 'Content-Type': 'application/json' },
-            body: $.toStr({ envs, boxjs }),
+            body: $.toStr({ envs, boxjs, source }),
             // Loon 的 $httpClient 默认沿「当前路由」(代理节点) 发请求，局域网网关会被发到节点上超时；
             // 且它默认超时只有 5000ms、单位是毫秒（Surge/Stash/Shadowrocket 是秒），必须按平台区分
             timeout: (isLoon || isQuanX) ? 15000 : 15,
         };
         if (isLoon) opts.node = 'DIRECT';   // Loon 专用：强制直连，别把内网请求丢给代理节点
-        $.log(`[呆呆推送] → ${url}`);
+        $.log(`[呆呆推送] → ${url}${source ? ` (来源 ${source})` : ''}`);
         const task = new Promise((resolve) => {
             let settled = false;
             const finish = (line) => {
@@ -2482,6 +2510,7 @@ function pushDaidai(payload) {
                         finish(`[呆呆推送] 异常已忽略(${url}): ${err && (err.message || err) || r.error || fail}`);
                     } else {
                         const parts = [
+                            r.source && `来源 ${r.source}`,
                             (r.created || []).length && `新建 ${r.created.length}`,
                             (r.updated || []).length && `更新 ${r.updated.length}`,
                             (r.unchanged || []).length && `同值跳过 ${r.unchanged.length}`,

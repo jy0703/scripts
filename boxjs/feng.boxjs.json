@@ -488,6 +488,7 @@
         "把 BoxJS 里的数据一键同步到呆呆面板：BoxJS → 取凭证网关(tools) /api/daidai/env/sync → 呆呆面板。点右上角运行即同步",
         "连接信息用「取凭证网关(tools)」分区的 @tools.address / @tools.token，本区不再单独配；网关侧的面板地址与 app_key/app_secret 存 tools/daidai/config.json（环境变量 DAIDAI_* 可覆盖）",
         "通道划分仿 FoKit 青龙：账号凭证(cookie/token/账号数据及配套UA)进面板环境变量，按名 upsert、同值跳过、同名多条(多账号)拒绝该条，只增改不删；开关/ref/服务配置写面板脚本目录 box.json，按原始键合并、保留脚本运行时缓存键",
+        "多手机：两台手机各填不同的「本机来源标识」(@daidai.device)，抓包上传时同名变量各占一行、互不覆盖，面板运行时按 & 合并注入、脚本按段解析；旧脚本不带来源时沿用账号标识匹配。多设备部署前建议先删掉面板上旧的同名变量",
         "空值键不同步；脚本运行缓存(aeon_cache/ydyp_cache 等)是运行时再生的，不同步；额外键(@daidai.keys)进环境变量"
       ],
       "icons": [
@@ -495,10 +496,21 @@
         "https://raw.githubusercontent.com/jy0703/scripts/main/icons/daidai.png"
       ],
       "keys": [
+        "@daidai.device",
         "@daidai.keys",
         "@daidai.mute"
       ],
       "settings": [
+        {
+          "id": "@daidai.device",
+          "name": "本机来源标识",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 1,
+          "placeholder": "phone1",
+          "desc": "两台手机各填不同名字（如 phone1 / phone2），抓包上传呆呆时同名变量各占一行、互不覆盖；留空则首次抓包自动生成一个 ID 并保存到本机。改动后请勿与另一台手机重名"
+        },
         {
           "id": "@daidai.keys",
           "name": "额外同步的键",
