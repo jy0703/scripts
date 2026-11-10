@@ -1,4 +1,4 @@
-#!name = checkin
+#!name = checkin抓包合集
 #!desc = 抓包插件合集：汇总 24 条 http-request / http-response 抓包规则，每条规则一个独立开关，只打开要抓的那一项；抓完请关掉对应开关，避免每次进页面重复覆盖凭证
 #!author = Fengzzzz
 #!homepage = https://github.com/jy0703/scripts
@@ -33,7 +33,7 @@ ydyp_1 = switch,false,tag=移动云盘签到 · 移动云盘签到获取Token,de
 zt_1 = switch,false,tag=中通快递签到 · 中通快递签到获取Token,desc=打开后进入中通快递小程序签到中心自动抓取 Token，抓取完成后建议关闭
 
 [Script]
-http-response ^https?:\/\/api\.ikbang\.cn\/v2\/iclick-new\/usercenter\/getUserDetails script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aikebang_sign.js,requires-body=true,timeout=30,tag=艾克帮签到获取Token2,enable={aikebang_1}
+http-response ^https?:\/\/api\.ikbang\.cn\/v2\/iclick-new\/usercenter\/getUserDetails script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aikebang_sign.js,requires-body=true,timeout=30,tag=艾克帮签到获取Token,enable={aikebang_1}
 http-response ^https?:\/\/developer\.aliyun\.com\/developer\/api\/my\/user\/getUser script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/aliyun_sign.js,requires-body=true,timeout=600,tag=阿里云社区获取Cookie,enable={aliyun_1}
 http-request ^https?:\/\/pan\.baidu\.com\/(coins|api|rest)\/ script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/baidu_sign.js,requires-body=false,timeout=600,tag=百度网盘获取Cookie,enable={baidu_1}
 http-response ^https?:\/\/app\.bilibili\.com\/x\/resource\/fingerprint\? script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/BiliBiliDailyBonus.js,timeout=150,tag=B站Cookie(扫码),enable={bilibili_daily_1}
@@ -56,7 +56,7 @@ http-request ^https?:\/\/java-uapi\.quanzhan888\.com\/u\/user-center\/index scri
 http-request ^https?:\/\/user-api\.smzdm\.com\/(checkin|task\/list_v2) script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/smzdm.js,requires-body=true,timeout=60,tag=什么值得买获取Cookie,enable={smzdm_1}
 http-request ^https?:\/\/personal-act\.wps\.cn\/rubik2\/portal\/ script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/wps_sign.js,requires-body=false,timeout=30,tag=WPS签到获取Cookie,enable={wps_1}
 http-request ^https?:\/\/user-njs\.yun\.139\.com\/user\/ script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/ydyp.js,timeout=600,tag=移动云盘签到获取Token,enable={ydyp_1}
-http-response ^https?:\/\/membergateway\.zto\.com\/getMember script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,requires-body=true,timeout=30,tag=中通快递签到获取Token2,enable={zt_1}
+http-response ^https?:\/\/membergateway\.zto\.com\/getMember script-path=https://raw.githubusercontent.com/jy0703/scripts/main/scripts/zt_sign.js,requires-body=true,timeout=30,tag=中通快递签到获取Token,enable={zt_1}
 
 [Mitm]
 hostname = 360.com, apapia.manmanbuy.com, api.ikbang.cn, api.pingmeapp.net, app.bilibili.com, app.mixcapp.com, client.app.coc.10086.cn, dev.coc.10086.cn, developer.aliyun.com, gw2c-hw-open.longfor.com, hdgateway.zto.com, java-uapi.quanzhan888.com, membergateway.zto.com, pan.baidu.com, personal-act.wps.cn, user-api.smzdm.com, user-njs.yun.139.com, web.chelaile.net.cn, webapi.qmai.cn, wx.10086.cn, yxfk.market.chinamobile.com

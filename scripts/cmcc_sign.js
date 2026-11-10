@@ -562,9 +562,10 @@ async function refreshAppTokenFromApi(user) {
     const fail = (msg) => { refreshNote = msg; $.log(`${tag} ${msg}`); return false; };
     if (!TOOLS_API) return fail('未填 @tools.address（boxjs「取凭证网关(tools)」分区）');
     if (!TOOLS_API_TOKEN) return fail('填了 @tools.address 但没填 @tools.token');
-    // 面板同名多行会按 & 合并注入：每段是某台手机抓的单个 autologin 对象。
-    // 逐段试（新的优先），哪台手机的凭证还有效就用哪台，别让另一台把本机的换票打断。
-    const candidates = parseAccountList(getEnv('cmcc_autologin_data') || '')
+    // 面板同名多行会冲突导致 process.env 拿不到值：面板侧直接从网关拉全部同名行（每台手机占一行），
+    // 按 & 拼回再 parseAccountList 拆成多段 autologin，逐段试（新的优先），哪台手机的凭证还有效就用哪台。
+    const allRaw = await getAllEnvByName('cmcc_autologin_data');
+    const candidates = parseAccountList(allRaw.join('&'))
         .filter(a => a && a.url && a.body)
         .sort((a, b) => (Date.parse(b.capturedAt || '') || 0) - (Date.parse(a.capturedAt || '') || 0));
     if (!candidates.length) return fail('没有 cmcc_autologin_data：打开 App 进一次签到页（或触发自动登录）抓 autoLogin 传参');
@@ -2555,6 +2556,32 @@ function getEnv(...keys) {
 // BoxJS 的 boolean 项在 Quantumult X 里 $prefs.valueForKey 回的是真布尔，Loon/Surge 回字符串 'true'
 function isOn(v) { return v === true || v === 'true' || v === 1 || v === '1'; }
 function isOff(v) { return v === false || v === 'false' || v === 0 || v === '0'; }
+
+// 面板按名注入环境变量时同名会冲突（同名多行 → 脚本 process.env 拿不到值）。
+// 面板侧改成直接从网关拉全部同名行（含被面板注入的 1 条 + 网关里其余行），手机侧维持 $.getdata。
+// 返回原始值数组（每个元素是一段 JSON 串），调用方用 parseAccountList 按 & 拆。
+async function getAllEnvByName(name) {
+    if (!$.isNode()) return [$.getdata(name) || ''].filter(Boolean);
+    const raw = [];
+    const pe = process.env[name] || process.env[name.toUpperCase()] || process.env[name.toLowerCase()];
+    if (pe) raw.push(pe);
+    if (TOOLS_API && TOOLS_API_TOKEN) {
+        try {
+            const r = await Request({
+                url: `${TOOLS_API}/api/daidai/env/list`, method: 'post',
+                headers: { 'content-type': 'application/json', 'x-token': TOOLS_API_TOKEN },
+                body: { name }, _timeout: 15000,
+            });
+            for (const it of (r && r.items) || []) {
+                if (it.masked) { $.log(`[换票] ${name} 第 ${it.id} 行被面板遮蔽，跳过（请在呆呆面板取消遮蔽）`); continue; }
+                if (it.value && !raw.includes(it.value)) raw.push(it.value);
+            }
+        } catch (e) {
+            $.log(`[换票] 从网关拉取 ${name} 失败（沿用 process.env）：${shortMsg(e.message || e)}`);
+        }
+    }
+    return raw;
+}
 
 function debug(content, title = 'debug') {
     let start = `\n----- ${title} -----\n`;
