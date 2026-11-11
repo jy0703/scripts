@@ -374,20 +374,20 @@ function loadAccounts() {
         if (!cache) continue;
         if (Array.isArray(cache)) cache.forEach(e => e && typeof e === 'object' && push({ st: e.st, uid: String(e.uid || ''), nick: e.nick || '', ua: e.ua || '', user: e.user || '' }));
         else Object.entries(cache).forEach(([key, e]) => {
-        if (!e || typeof e !== 'object' || !e.kps_wg) return;
-        const isMobile = /^1\d{10}$/.test(key);
-        try {
-            const acc = parseKps(e.kps_wg);
-            if (e.service_ticket) acc.st = e.service_ticket;      // 以显式给的票为准（同一次导出里两者一致）
-            acc.ua = e.ua || '';
-            acc.utdid = e.utdid || '';      // 扫描王签到要用它现算公参 ut，回写时得原样带回去
-            acc.ve = e.ve || '';
-            acc.mobile = isMobile ? key : '';
-            acc.user = e.user || (isMobile ? key : '');
-            push(acc);
-        } catch (err) {
-            $.log(`❌ 跳过 ${key}：${err.message || err}`);
-        }
+            if (!e || typeof e !== 'object' || !e.kps_wg) return;
+            const isMobile = /^1\d{10}$/.test(key);
+            try {
+                const acc = parseKps(e.kps_wg);
+                if (e.service_ticket) acc.st = e.service_ticket;      // 以显式给的票为准（同一次导出里两者一致）
+                acc.ua = e.ua || '';
+                acc.utdid = e.utdid || '';      // 扫描王签到要用它现算公参 ut，回写时得原样带回去
+                acc.ve = e.ve || '';
+                acc.mobile = isMobile ? key : '';
+                acc.user = e.user || (isMobile ? key : '');
+                push(acc);
+            } catch (err) {
+                $.log(`❌ 跳过 ${key}：${err.message || err}`);
+            }
         });
     }
     return out;
@@ -412,24 +412,6 @@ function persistAccounts(list) {
 
 // ---------- 工具函数 ----------
 
-// 账号变量兼容面板同名多行合并格式：row&row（每行一台手机的 JSON），也兼容单数组/单对象
-function parseAccountList(raw) {
-    if (!raw) return [];
-    const out = [];
-    const s = String(raw);
-    let depth = 0, inStr = false, esc = false, start = 0;
-    const emit = seg => { const a = $.toObj(seg); if (Array.isArray(a)) out.push(...a); else if (a && typeof a === "object") out.push(a); };
-    for (let i = 0; i < s.length; i++) {
-        const ch = s[i];
-        if (inStr) { if (esc) esc = false; else if (ch === "\\") esc = true; else if (ch === '"') inStr = false; continue; }
-        if (ch === '"') inStr = true;
-        else if (ch === "[" || ch === "{") depth++;
-        else if (ch === "]" || ch === "}") depth--;
-        else if (ch === "&" && depth <= 0) { emit(s.slice(start, i)); start = i + 1; }
-    }
-    emit(s.slice(start));
-    return out;
-}
 function getEnv(...keys) {
     for (let key of keys) {
         var value = $.isNode() ? process.env[key] || process.env[key.toUpperCase()] || process.env[key.toLowerCase()] || $.getdata(key) : $.getdata(key);
@@ -502,7 +484,7 @@ async function sendMsg(message) {
     }
 }
 
-// 脚本执行入口: 只有定时任务模式（凭证由 tools 的 /quark 取凭证页产出，不再抓包）
+// 脚本执行入口
 !(async () => {
     await main();
 })()

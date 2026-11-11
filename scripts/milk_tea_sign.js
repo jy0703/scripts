@@ -25,9 +25,8 @@ cron "0 1 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/ma
 
 ------------- 品牌收录(可选, 与 cron 分开) -------------
 
-同一份脚本挂 http-response 到 mini-app-login：逛任意企迈系小程序一次，自动把 storeId+品牌名+appid 追加进 MILK_TEA_BRANDS。
-抓取正则(三处一致): ^https?:\/\/webapi\.qmai\.cn\/web\/account-center\/oauth\/mini-app-login
-Loon: 本模块「捕获品牌」开关(默认关)    Surge: 模块里的 http-response 行(随模块启用)
+挂 http-response 到 ^https?:\/\/webapi\.qmai\.cn\/web\/account-center\/oauth\/mini-app-login（脚本内为宽松 includes 判断）：
+逛任意企迈系小程序一次，自动把 storeId+品牌名+appid 追加进 MILK_TEA_BRANDS。Loon: 本模块「捕获品牌」开关(默认关)  Surge: 模块里的 http-response 行(随模块启用)
 
  */
 

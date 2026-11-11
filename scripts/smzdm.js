@@ -1,5 +1,6 @@
 /**
  * 脚本名称：什么值得买 - 签到 + 每日任务
+ * 活动规则：每日签到领金币/碎银奖励，并完成浏览、分享、关注、评论等任务领取对应奖励。
  * 脚本说明：参考 lhtj 的单文件框架，合并 smzdm_checkin 与 smzdm_task。
  * 平台画像：对齐 iOS 11.2.3 (f=iphone, v=11.2.3, rv=174.7)，签名盐取自 iOS 包内常量；
  *           安卓盐与 iOS 盐服务端按 f 区分，混用会回 check Sign Fail，不要互换。
@@ -148,15 +149,6 @@ function getSk(cookie = '') {
     if (!userId) return '';
     const deviceId = String((String(cookie).match(/device_id=([^;]*)/) || [])[1] || '') || random32();
     return Crypt('des-ecb', userId + deviceId, SK_DES_KEY);
-}
-
-function updateCookie(cookie = '', name = '', value = '') {
-    if (!cookie) return `${name}=${encodeURIComponent(value)}`;
-    const re = new RegExp(`(^|;\\s*)${escapeRegex(name)}=[^;]*`, 'i');
-    if (re.test(cookie)) {
-        return cookie.replace(re, `$1${name}=${encodeURIComponent(value)}`);
-    }
-    return `${cookie.replace(/;?\s*$/, '')}; ${name}=${encodeURIComponent(value)}`;
 }
 
 function splitMultiValue(value = '') {
@@ -346,7 +338,7 @@ function getHeadersForWeb(ctx) {    let userAgent = ctx.userAgentWeb || getEnv('
     };
 }
 
-function getOneByRandom(ctx, listing = []) {
+function getOneByRandom(listing = []) {
     return listing[Math.floor(Math.random() * listing.length)];
 }
 
@@ -495,41 +487,41 @@ async function doTasks(ctx, tasks) {
     };
 
     for (let i = 0; i < tasks.length; i++) {
-      const task = tasks[i];
+        const task = tasks[i];
 
-      // claimable task
-      if (task.task_status == '3') {
-        ctx.$env.log(`\u9886\u53D6[${task.task_name}]\u5956\u52B1:`);
+        // claimable task
+        if (task.task_status == '3') {
+            ctx.$env.log(`\u9886\u53D6[${task.task_name}]\u5956\u52B1:`);
 
-        const { isSuccess } = await receiveReward(ctx, task.task_id);
+            const { isSuccess } = await receiveReward(ctx, task.task_id);
 
-        notifyMsg += `${isSuccess ? '🟢' : '❌'}\u9886\u53D6[${task.task_name}]\u5956\u52B1${isSuccess ? '\u6210\u529F' : '\u5931\u8D25\uFF01\u8BF7\u67E5\u770B\u65E5\u5FD7'}\n`;
+            notifyMsg += `${isSuccess ? '🟢' : '❌'}\u9886\u53D6[${task.task_name}]\u5956\u52B1${isSuccess ? '\u6210\u529F' : '\u5931\u8D25\uFF01\u8BF7\u67E5\u770B\u65E5\u5FD7'}\n`;
+
+            await wait(5, 15);
+            continue;
+        }
+
+        // unfinished task
+        if (task.task_status != '2') {
+            continue;
+        }
+
+        const taskHandler = taskHandlers[task.task_event_type];
+        if (!taskHandler) {
+            continue;
+        }
+
+        if (taskHandler.guard && !taskHandler.guard(task, ctx)) {
+            taskHandler.onGuardFail && taskHandler.onGuardFail(ctx, task);
+            continue;
+        }
+
+        const result = await taskHandler.handler(ctx, task);
+        if (!taskHandler.shouldNotify || taskHandler.shouldNotify(result, task, ctx)) {
+            notifyMsg += getTaskNotifyMessage(ctx, result, task);
+        }
 
         await wait(5, 15);
-        continue;
-      }
-
-      // unfinished task
-      if (task.task_status != '2') {
-        continue;
-      }
-
-      const taskHandler = taskHandlers[task.task_event_type];
-      if (!taskHandler) {
-        continue;
-      }
-
-      if (taskHandler.guard && !taskHandler.guard(task, ctx)) {
-        taskHandler.onGuardFail && taskHandler.onGuardFail(ctx, task);
-        continue;
-      }
-
-      const result = await taskHandler.handler(ctx, task);
-      if (!taskHandler.shouldNotify || taskHandler.shouldNotify(result, task, ctx)) {
-        notifyMsg += getTaskNotifyMessage(ctx, result, task);
-      }
-
-      await wait(5, 15);
     }
 
     return notifyMsg;
@@ -566,50 +558,50 @@ async function runActionSequence(ctx, steps = [], waitRange = [3, 10]) {
 // 评论任务只认好价: 任务图标 pinlunhaojia, App 评完好价进度立刻 +1, 评长图文(channel 11/66)不进进度
 async function getHaojiaArticleList(ctx, num = 1) {
     const { isSuccess, data, response } = await requestApi('https://homepage-api.smzdm.com/v3/home', {
-      headers: getHeaders(ctx),
-      data: {
-        page: 1,
-        limit: 20,
-        tab_id: 0,
-        past_num: 0,
-        filter_time_flow: 0,
-        time_sort: '',
-        with_filter: 1,
-        is_cache: 1,
-        reflow_page: 1,
-        reflow_position: 1,
-        customized_log: '{"love":"2"}',
-        haojia_title_abtest: 'b',
-        ...getDeviceParams(ctx)
-      }
+        headers: getHeaders(ctx),
+        data: {
+            page: 1,
+            limit: 20,
+            tab_id: 0,
+            past_num: 0,
+            filter_time_flow: 0,
+            time_sort: '',
+            with_filter: 1,
+            is_cache: 1,
+            reflow_page: 1,
+            reflow_position: 1,
+            customized_log: '{"love":"2"}',
+            haojia_title_abtest: 'b',
+            ...getDeviceParams(ctx)
+        }
     });
 
     if (!isSuccess) {
-      ctx.$env.log(`获取好价列表失败: ${response}`);
-      return [];
+        ctx.$env.log(`获取好价列表失败: ${response}`);
+        return [];
     }
 
     const items = [];
 
     const walk = (o) => {
-      if (Array.isArray(o)) return o.forEach(walk);
-      if (!o || typeof o !== 'object') return;
+        if (Array.isArray(o)) return o.forEach(walk);
+        if (!o || typeof o !== 'object') return;
 
-      const id = String(o.article_id || '');
+        const id = String(o.article_id || '');
 
-      if (/^\d+$/.test(id) && String(o.article_channel_id || '') === '1' && !items.some(x => x.article_id === id)) {
-        // hashcode/h5hash 是详情接口要的, App 从列表项里带过去
-        items.push({ article_id: id, article_channel_id: '1', article_title: o.article_title || '', hashcode: o.hashcode || '', h5hash: o.h5hash || '' });
-      }
+        if (/^\d+$/.test(id) && String(o.article_channel_id || '') === '1' && !items.some(x => x.article_id === id)) {
+            // hashcode/h5hash 是详情接口要的, App 从列表项里带过去
+            items.push({ article_id: id, article_channel_id: '1', article_title: o.article_title || '', hashcode: o.hashcode || '', h5hash: o.h5hash || '' });
+        }
 
-      Object.values(o).forEach(walk);
+        Object.values(o).forEach(walk);
     };
 
     walk(data);
 
     if (!items.length) {
-      ctx.$env.log(`好价列表为空: ${(response || '').slice(0, 150)}`);
-      return [];
+        ctx.$env.log(`好价列表为空: ${(response || '').slice(0, 150)}`);
+        return [];
     }
 
     return items.slice(0, num);
@@ -650,8 +642,8 @@ async function doCommentTask(ctx, task) {
     // 老版本任务没有这两个字段时退回解析文案「发表3条评论，每条评论不少于10个字」
     // 条数已满但还没领奖(状态可能还没变成可领取): 直接补领, 不能再发评论
     if (total && done >= total) {
-      ctx.$env.log(`评论任务已达标 ${done}/${total}，直接领奖`);
-      return await claimTaskReward(ctx, task);
+        ctx.$env.log(`评论任务已达标 ${done}/${total}，直接领奖`);
+        return await claimTaskReward(ctx, task);
     }
     const remain = total > done ? total - done : Number((String(task.task_description || task.task_name).match(/(\d+)\s*条/) || [])[1]) || 1;
     // 有些任务要几十条(如「评论赢限定勋章 20 条」), 单次跑太多既会触发提交频率限制也像刷量, 每次只补上限内的量
@@ -668,22 +660,22 @@ async function doCommentTask(ctx, task) {
     let articles;
 
     if (fixedId) {
-      // 评论频道以文章详情为准: 社区文章的 channel_id(11) 才是评论频道,
-      // article_channel_id(76)/任务里的 channel_id 是栏目号, 用错会回「无效的参数」
-      const detail = await getArticleDetail(ctx, fixedId);
-      const channelId = String((detail && (detail.channel_id || detail.article_channel_id)) || task.channel_id || '11');
+        // 评论频道以文章详情为准: 社区文章的 channel_id(11) 才是评论频道,
+        // article_channel_id(76)/任务里的 channel_id 是栏目号, 用错会回「无效的参数」
+        const detail = await getArticleDetail(ctx, fixedId);
+        const channelId = String((detail && (detail.channel_id || detail.article_channel_id)) || task.channel_id || '11');
 
-      ctx.$env.log(`任务指定文章: ${fixedId} (channel ${channelId})`);
-      articles = [{ article_id: fixedId, article_channel_id: channelId, article_title: redirect.link_title || '', hashcode: '', h5hash: '' }];
+        ctx.$env.log(`任务指定文章: ${fixedId} (channel ${channelId})`);
+        articles = [{ article_id: fixedId, article_channel_id: channelId, article_title: redirect.link_title || '', hashcode: '', h5hash: '' }];
     }
     else {
-      articles = await getHaojiaArticleList(ctx, Math.min(20, need * 2 + 2));
+        articles = await getHaojiaArticleList(ctx, Math.min(20, need * 2 + 2));
     }
 
     if (articles.length < 1) {
-      return {
-        isSuccess: false
-      };
+        return {
+            isSuccess: false
+        };
     }
 
     const commentIds = [];
@@ -693,81 +685,81 @@ async function doCommentTask(ctx, task) {
     let finished = total ? done : 0;
 
     while (commentIds.length < need && commentIds.length < articleQueue.length && tried < pool.length) {
-      const content = pool[tried++];
-      const article = articleQueue[commentIds.length];
+        const content = pool[tried++];
+        const article = articleQueue[commentIds.length];
 
-      await wait(3, 10);
+        await wait(3, 10);
 
-      // 照 App 流程先打开详情再评论: 好价带列表里的 hashcode/h5hash, 社区文章走 detail 接口
-      if (fixedId) await getArticleDetail(ctx, article.article_id);
-      else await getHaojiaDetail(ctx, article.article_id, article.hashcode, article.h5hash);
+        // 照 App 流程先打开详情再评论: 好价带列表里的 hashcode/h5hash, 社区文章走 detail 接口
+        if (fixedId) await getArticleDetail(ctx, article.article_id);
+        else await getHaojiaDetail(ctx, article.article_id, article.hashcode, article.h5hash);
 
-      const {isSuccess, data, response} = await submitComment(ctx, {
-        articleId: article.article_id,
-        channelId: article.article_channel_id,
-        content
-      });
+        const {isSuccess, data, response} = await submitComment(ctx, {
+            articleId: article.article_id,
+            channelId: article.article_channel_id,
+            content
+        });
 
-      if (!isSuccess) {
-        // 服务端按文案判重(换文章也拦), 换池子里下一条继续
-        if (/重复提交/.test(response)) {
-          ctx.$env.log(`文案被服务端判重，换下一条: ${content}`);
-          await wait(20, 40);
-          continue;
+        if (!isSuccess) {
+            // 服务端按文案判重(换文章也拦), 换池子里下一条继续
+            if (/重复提交/.test(response)) {
+                ctx.$env.log(`文案被服务端判重，换下一条: ${content}`);
+                await wait(20, 40);
+                continue;
+            }
+
+            ctx.$env.log(`评论只发成功 ${commentIds.length}/${need} 条，本次不领奖`);
+            await removeComments(ctx, commentIds);
+            return {
+                isSuccess: false
+            };
         }
 
-        ctx.$env.log(`评论只发成功 ${commentIds.length}/${need} 条，本次不领奖`);
-        await removeComments(ctx, commentIds);
-        return {
-          isSuccess: false
-        };
-      }
+        commentIds.push(data.data.comment_ID);
 
-      commentIds.push(data.data.comment_ID);
+        // 每条发完立刻查进度: 平台不把这条计入任务时，这里就能看出来
+        if (total) {
+            await wait(10, 20);
+            finished = await getTaskProgress(ctx, task);
+            ctx.$env.log(`第 ${commentIds.length} 条评论后进度 ${finished}/${total}`);
 
-      // 每条发完立刻查进度: 平台不把这条计入任务时，这里就能看出来
-      if (total) {
-        await wait(10, 20);
-        finished = await getTaskProgress(ctx, task);
-        ctx.$env.log(`第 ${commentIds.length} 条评论后进度 ${finished}/${total}`);
+            if (finished >= total) break;
+        }
 
-        if (finished >= total) break;
-      }
-
-      if (commentIds.length < need) {
-        // 连续提交会触发「您提交评论的速度太快了」
-        await wait(20, 40);
-      }
+        if (commentIds.length < need) {
+            // 连续提交会触发「您提交评论的速度太快了」
+            await wait(20, 40);
+        }
     }
 
     // 服务端统计可能滞后，进度没满再等两轮
     if (total) {
-      for (let round = 0; round < 2 && finished < total; round++) {
-        await wait(20, 35);
-        finished = await getTaskProgress(ctx, task);
-        ctx.$env.log(`评论任务进度 ${finished}/${total}`);
-      }
+        for (let round = 0; round < 2 && finished < total; round++) {
+            await wait(20, 35);
+            finished = await getTaskProgress(ctx, task);
+            ctx.$env.log(`评论任务进度 ${finished}/${total}`);
+        }
     }
 
     const complete = total ? finished >= total : commentIds.length >= need;
 
     if (!complete) {
-      ctx.$env.log(`评论 ${commentIds.length}/${need} 条${total ? `，服务端进度 ${finished}/${total}` : ''}，本次不领奖${commentIds.length < need ? `（可用文案 ${pool.length} 条 / 可选好价 ${articleQueue.length} 篇已用尽，记得补新文案）` : ''}`);
-      await removeComments(ctx, commentIds);
-      return {
-        isSuccess: false,
-        // 本次配额发完但任务是多天累计的: 通知里标 🟡, 不算失败
-        partial: total > 0 && commentIds.length >= need,
-        note: `已发 ${commentIds.length} 条，进度 ${finished}/${total}，分次补`
-      };
+        ctx.$env.log(`评论 ${commentIds.length}/${need} 条${total ? `，服务端进度 ${finished}/${total}` : ''}，本次不领奖${commentIds.length < need ? `（可用文案 ${pool.length} 条 / 可选好价 ${articleQueue.length} 篇已用尽，记得补新文案）` : ''}`);
+        await removeComments(ctx, commentIds);
+        return {
+            isSuccess: false,
+            // 本次配额发完但任务是多天累计的: 通知里标 🟡, 不算失败
+            partial: total > 0 && commentIds.length >= need,
+            note: `已发 ${commentIds.length} 条，进度 ${finished}/${total}，分次补`
+        };
     }
 
     // 评论留着让服务端计入任务进度，领完奖再统一清掉
     try {
-      return await claimTaskReward(ctx, task);
+        return await claimTaskReward(ctx, task);
     }
     finally {
-      await removeComments(ctx, commentIds);
+        await removeComments(ctx, commentIds);
     }
 }
 
@@ -813,7 +805,7 @@ async function doRatingTask(ctx, task) {
         };
       }
 
-      article = getOneByRandom(ctx, articles);
+      article = getOneByRandom(articles);
     }
     else if (task.task_redirect_url.link_type === 'lanmu') {
       // 从栏目获取文章
@@ -825,7 +817,7 @@ async function doRatingTask(ctx, task) {
         };
       }
 
-      article = getOneByRandom(ctx, articles);
+      article = getOneByRandom(articles);
     }
     else if (task.task_redirect_url.link != '' && task.task_redirect_url.link_val != '') {
       const channelId = await getArticleChannelIdForTesting(ctx, task.task_redirect_url.link);
@@ -921,7 +913,7 @@ async function doFavoriteTask(ctx, task) {
         };
       }
 
-      const article = getOneByRandom(ctx, articles);
+      const article = getOneByRandom(articles);
 
       articleId = article.article_id;
       channelId = article.article_channel_id;
@@ -936,7 +928,7 @@ async function doFavoriteTask(ctx, task) {
         };
       }
 
-      const article = getOneByRandom(ctx, articles);
+      const article = getOneByRandom(articles);
 
       articleId = article.article_id;
       channelId = article.article_channel_id;
@@ -951,7 +943,7 @@ async function doFavoriteTask(ctx, task) {
         };
       }
 
-      const article = getOneByRandom(ctx, articles);
+      const article = getOneByRandom(articles);
 
       articleId = article.article_id;
       channelId = article.article_channel_id;
@@ -1244,7 +1236,7 @@ async function follow(ctx, {keywordId, keyword, type, method}) {
     let touchstone = '';
 
     if (type === 'user') {
-      touchstone = getTouchstoneEvent(ctx, {
+      touchstone = getTouchstoneEvent({
         event_value: {
           cid: 'null',
           is_detail: false,
@@ -1256,7 +1248,7 @@ async function follow(ctx, {keywordId, keyword, type, method}) {
       });
     }
     else if (type === 'tag') {
-      touchstone = getTouchstoneEvent(ctx, {
+      touchstone = getTouchstoneEvent({
         event_value: {
           cid: 'null',
           is_detail: false
@@ -1384,11 +1376,11 @@ async function getCrowd(ctx, name, price) {
 
         if (!crowd) {
           ctx.$env.log('未找到符合关键词的抽奖，执行随机选取');
-          crowd = getOneByRandom(ctx, crowds);
+          crowd = getOneByRandom(crowds);
         }
       }
       else {
-        crowd = getOneByRandom(ctx, crowds);
+        crowd = getOneByRandom(crowds);
       }
 
       const matchCrowd = crowd.match(/data-crowd_id="(\d+)"/i);
@@ -1454,7 +1446,7 @@ async function shareCallback(ctx, articleId, channelId) {
         token: ctx.token,
         article_id: articleId,
         channel_id: channelId,
-        touchstone_event: getTouchstoneEvent(ctx, {
+        touchstone_event: getTouchstoneEvent({
           event_value: {
             aid: articleId,
             cid: channelId,
@@ -1665,7 +1657,7 @@ async function favorite(ctx, {id, channelId, method}) {
     const { isSuccess, response } = await postApi(`https://user-api.smzdm.com/favorites/${method}`, {
       headers: getHeaders(ctx),
       data: {
-        touchstone_event: getTouchstoneEvent(ctx, {
+        touchstone_event: getTouchstoneEvent({
           event_value: {
             aid: id,
             cid: channelId,
@@ -1694,7 +1686,7 @@ async function favorite(ctx, {id, channelId, method}) {
     };
 }
 
-function getTouchstoneEvent(ctx, obj) {
+function getTouchstoneEvent(obj) {
     const defaultObj = {
       search_tv: 'f',
       sourceRoot: '个人中心',
@@ -1706,7 +1698,7 @@ function getTouchstoneEvent(ctx, obj) {
 }
 
 async function followBrand(ctx, {keywordId, keyword, method}) {
-    const touchstone = getTouchstoneEvent(ctx, {
+    const touchstone = getTouchstoneEvent({
       event_value: {
         cid: '44',
         is_detail: true,
@@ -1803,7 +1795,7 @@ async function rating(ctx, {id, channelId, method, type}) {
     const { isSuccess, response } = await postApi(`https://user-api.smzdm.com/rating/${method}`, {
       headers: getHeaders(ctx),
       data: {
-        touchstone_event: getTouchstoneEvent(ctx, {
+        touchstone_event: getTouchstoneEvent({
           event_value: {
             aid: id,
             cid: channelId,
@@ -1838,7 +1830,7 @@ async function submitComment(ctx, { articleId, channelId, content }) {
       headers: getHeaders(ctx),
       data: {
         // 埋点照 App 在好价页评论时的形态: 来源首页推荐/好价, is_detail=false
-        touchstone_event: getTouchstoneEvent(ctx, {
+        touchstone_event: getTouchstoneEvent({
           event_key: '评论',
           user_id: (ctx.user && ctx.user.uid) || '',
           event_value: {
@@ -1978,265 +1970,265 @@ async function getArticleChannelIdForTesting(ctx, url) {
 
 
 async function runAccount(ctx) {
-        let notifyMsg = '';
+    let notifyMsg = '';
 
-        const { msg: msg1 } = await checkin(ctx);
-        notifyMsg += msg1 || '';
+    const { msg: msg1 } = await checkin(ctx);
+    notifyMsg += msg1 || '';
 
-        await wait(2, 4);
-        const { msg: msg2 } = await allReward(ctx);
-        notifyMsg += msg2 || '';
+    await wait(2, 4);
+    const { msg: msg2 } = await allReward(ctx);
+    notifyMsg += msg2 || '';
 
-        await wait(2, 4);
-        const { msg: msg3 } = await extraReward(ctx);
-        notifyMsg += msg3 || '';
+    await wait(2, 4);
+    const { msg: msg3 } = await extraReward(ctx);
+    notifyMsg += msg3 || '';
 
-        await wait(3, 5);
-        notifyMsg += await runTasks(ctx);
+    await wait(3, 5);
+    notifyMsg += await runTasks(ctx);
 
-        return notifyMsg.trim();
+    return notifyMsg.trim();
 }
 
 async function runTasks(ctx) {
-        $.log('获取任务列表');
-        const { tasks, detail } = await getTaskList(ctx);
-        if (!tasks.length) {
-            return '🟡 未获取到可执行任务\n';
-        }
+    $.log('获取任务列表');
+    const { tasks, detail } = await getTaskList(ctx);
+    if (!tasks.length) {
+        return '🟡 未获取到可执行任务\n';
+    }
 
+    await wait(3, 5);
+    let notifyMsg = await doTasks(ctx, tasks);
+
+    $.log('查询是否有限时累计活动阶段奖励');
+    await wait(3, 5);
+    if (detail?.cell_data && detail.cell_data.activity_reward_status == '1') {
+        $.log('有奖励，领取奖励');
         await wait(3, 5);
-        let notifyMsg = await doTasks(ctx, tasks);
+        const { isSuccess } = await receiveActivity(ctx, detail.cell_data);
+        notifyMsg += `${isSuccess ? '🟢' : '❌'}限时累计活动阶段奖励领取${isSuccess ? '成功' : '失败！请查看日志'}\n`;
+    } else {
+        $.log('无阶段奖励');
+    }
 
-        $.log('查询是否有限时累计活动阶段奖励');
-        await wait(3, 5);
-        if (detail?.cell_data && detail.cell_data.activity_reward_status == '1') {
-            $.log('有奖励，领取奖励');
-            await wait(3, 5);
-            const { isSuccess } = await receiveActivity(ctx, detail.cell_data);
-            notifyMsg += `${isSuccess ? '🟢' : '❌'}限时累计活动阶段奖励领取${isSuccess ? '成功' : '失败！请查看日志'}\n`;
-        } else {
-            $.log('无阶段奖励');
-        }
-
-        return notifyMsg || '无可执行任务\n';
+    return notifyMsg || '无可执行任务\n';
 }
 
 async function checkin(ctx) {
-        const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/checkin', {
-            headers: getHeaders(ctx),
-            data: {
-                touchstone_event: '',
-                sk: ctx.sk || '1',
-                token: ctx.token,
-                captcha: ''
-            }
-        });
-
-        if (isSuccess) {
-            let msg = `⭐ 签到成功 ${data.data.daily_num} 天\n🏅 金币: ${data.data.cgold}\n🏅 碎银: ${data.data.pre_re_silver}\n🏅 补签卡: ${data.data.cards}`;
-            await wait(2, 4);
-            const vip = await getVipInfo(ctx);
-            if (vip?.vip) {
-                msg += `\n🏅 经验: ${vip.vip.exp_current}\n🏅 值会员等级: ${vip.vip.exp_level}\n🏅 值会员经验: ${vip.vip.exp_current_level}\n🏅 值会员有效期至: ${vip.vip.exp_level_expire}`;
-            }
-            $.log(`${msg}\n`);
-            return {
-                isSuccess,
-                msg: `${msg}\n\n`
-            };
+    const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/checkin', {
+        headers: getHeaders(ctx),
+        data: {
+            touchstone_event: '',
+            sk: ctx.sk || '1',
+            token: ctx.token,
+            captcha: ''
         }
+    });
 
-        $.log(`签到失败！${response}`);
+    if (isSuccess) {
+        let msg = `⭐ 签到成功 ${data.data.daily_num} 天\n🏅 金币: ${data.data.cgold}\n🏅 碎银: ${data.data.pre_re_silver}\n🏅 补签卡: ${data.data.cards}`;
+        await wait(2, 4);
+        const vip = await getVipInfo(ctx);
+        if (vip?.vip) {
+            msg += `\n🏅 经验: ${vip.vip.exp_current}\n🏅 值会员等级: ${vip.vip.exp_level}\n🏅 值会员经验: ${vip.vip.exp_current_level}\n🏅 值会员有效期至: ${vip.vip.exp_level_expire}`;
+        }
+        $.log(`${msg}\n`);
         return {
             isSuccess,
-            msg: '❌ 签到失败！\n'
+            msg: `${msg}\n\n`
         };
+    }
+
+    $.log(`签到失败！${response}`);
+    return {
+        isSuccess,
+        msg: '❌ 签到失败！\n'
+    };
 }
 
 async function allReward(ctx) {
-        const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/checkin/all_reward', {
-            headers: getHeaders(ctx),
-            debug: $.is_debug === 'true'
-        });
+    const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/checkin/all_reward', {
+        headers: getHeaders(ctx),
+        debug: $.is_debug === 'true'
+    });
 
-        if (isSuccess) {
-            const reward = (data.data && data.data.normal_reward) || {};
-            const add = reward.reward_add || {};
-            const gift = reward.gift || {};
-            const msgs = [];
+    if (isSuccess) {
+        const reward = (data.data && data.data.normal_reward) || {};
+        const add = reward.reward_add || {};
+        const gift = reward.gift || {};
+        const msgs = [];
 
-            // 没奖励时接口照样回空字段, 直接拼会打出「: 」这种空行
-            if (add.title) msgs.push(`${add.title}: ${add.content || ''}`);
-            else if (add.content) msgs.push(add.content);
+        // 没奖励时接口照样回空字段, 直接拼会打出「: 」这种空行
+        if (add.title) msgs.push(`${add.title}: ${add.content || ''}`);
+        else if (add.content) msgs.push(add.content);
 
-            if (gift.title) msgs.push(`${gift.title}: ${gift.content_str || ''}`);
-            else if (gift.sub_content) msgs.push(gift.sub_content);
+        if (gift.title) msgs.push(`${gift.title}: ${gift.content_str || ''}`);
+        else if (gift.sub_content) msgs.push(gift.sub_content);
 
-            const msg = msgs.join('\n');
+        const msg = msgs.join('\n');
 
-            if (msg) $.log(`${msg}\n`);
+        if (msg) $.log(`${msg}\n`);
 
-            return {
-                isSuccess,
-                msg: msg ? `${msg}\n\n` : ''
-            };
-        }
-
-        if (`${data?.error_code ?? ''}` !== '4') {
-            $.log(`查询奖励失败！${response}`);
-        }
         return {
             isSuccess,
-            msg: ''
+            msg: msg ? `${msg}\n\n` : ''
         };
+    }
+
+    if (`${data?.error_code ?? ''}` !== '4') {
+        $.log(`查询奖励失败！${response}`);
+    }
+    return {
+        isSuccess,
+        msg: ''
+    };
 }
 
 async function extraReward(ctx) {
-        const isContinue = await isContinueCheckin(ctx);
-        if (!isContinue) {
-            const msg = '今天没有额外奖励';
-            $.log(`${msg}\n`);
-            return {
-                isSuccess: false,
-                msg: `${msg}\n`
-            };
-        }
-
-        await wait(3, 5);
-        const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/checkin/extra_reward', {
-            headers: getHeaders(ctx)
-        });
-
-        if (isSuccess) {
-            const msg = `${data.data.title}: ${removeTags(data.data.gift.content)}`;
-            $.log(msg);
-            return {
-                isSuccess: true,
-                msg: `${msg}\n`
-            };
-        }
-
-        $.log(`领取额外奖励失败！${response}`);
+    const isContinue = await isContinueCheckin(ctx);
+    if (!isContinue) {
+        const msg = '今天没有额外奖励';
+        $.log(`${msg}\n`);
         return {
             isSuccess: false,
-            msg: ''
+            msg: `${msg}\n`
         };
+    }
+
+    await wait(3, 5);
+    const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/checkin/extra_reward', {
+        headers: getHeaders(ctx)
+    });
+
+    if (isSuccess) {
+        const msg = `${data.data.title}: ${removeTags(data.data.gift.content)}`;
+        $.log(msg);
+        return {
+            isSuccess: true,
+            msg: `${msg}\n`
+        };
+    }
+
+    $.log(`领取额外奖励失败！${response}`);
+    return {
+        isSuccess: false,
+        msg: ''
+    };
 }
 
 async function isContinueCheckin(ctx) {
-        const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/checkin/show_view_v2', {
-            headers: getHeaders(ctx)
-        });
+    const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/checkin/show_view_v2', {
+        headers: getHeaders(ctx)
+    });
 
-        if (isSuccess) {
-            const result = (data.data.rows || []).find(item => item.cell_type == '18001');
-            return Boolean(result?.cell_data?.checkin_continue?.continue_checkin_reward_show);
-        }
+    if (isSuccess) {
+        const result = (data.data.rows || []).find(item => item.cell_type == '18001');
+        return Boolean(result?.cell_data?.checkin_continue?.continue_checkin_reward_show);
+    }
 
-        $.log(`查询是否有额外奖励失败！${response}`);
-        return false;
+    $.log(`查询是否有额外奖励失败！${response}`);
+    return false;
 }
 
 async function getVipInfo(ctx) {
-        const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/vip', {
-            headers: getHeaders(ctx),
-            data: {
-                token: ctx.token
-            }
-        });
-
-        if (isSuccess) {
-            return data.data;
+    const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/vip', {
+        headers: getHeaders(ctx),
+        data: {
+            token: ctx.token
         }
+    });
 
-        $.log(`查询信息失败！${response}`);
-        return false;
+    if (isSuccess) {
+        return data.data;
+    }
+
+    $.log(`查询信息失败！${response}`);
+    return false;
 }
 
 async function getTaskList(ctx) {
-        const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/task/list_v2', {
-            headers: getHeaders(ctx),
-            data: {
-                get_total: 1,
-                is_install_zhangdama: 0,
-                limit: 100,
-                offset: 0,
-                point_type: 0,
-                source_from: '任务活动'
-            }
-        });
-
-        if (isSuccess && data.data.rows[0]?.cell_data?.activity_task?.default_list_v2) {
-            let tasks = [];
-            data.data.rows[0].cell_data.activity_task.default_list_v2.forEach(item => {
-                tasks = tasks.concat(item.task_list);
-            });
-            return {
-                tasks,
-                detail: data.data.rows[0]
-            };
+    const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/task/list_v2', {
+        headers: getHeaders(ctx),
+        data: {
+            get_total: 1,
+            is_install_zhangdama: 0,
+            limit: 100,
+            offset: 0,
+            point_type: 0,
+            source_from: '任务活动'
         }
+    });
 
-        $.log(`任务列表获取失败！${response}`);
+    if (isSuccess && data.data.rows[0]?.cell_data?.activity_task?.default_list_v2) {
+        let tasks = [];
+        data.data.rows[0].cell_data.activity_task.default_list_v2.forEach(item => {
+            tasks = tasks.concat(item.task_list);
+        });
         return {
-            tasks: [],
-            detail: {}
+            tasks,
+            detail: data.data.rows[0]
         };
+    }
+
+    $.log(`任务列表获取失败！${response}`);
+    return {
+        tasks: [],
+        detail: {}
+    };
 }
 
 async function receiveActivity(ctx, activity) {
-        $.log(`领取奖励: ${activity.activity_name}`);
-        const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/task/activity_receive', {
-            headers: getHeaders(ctx),
-            data: {
-                activity_id: activity.activity_id
-            }
-        });
-
-        if (isSuccess) {
-            $.log(removeTags(data.data.reward_msg));
-            return { isSuccess };
+    $.log(`领取奖励: ${activity.activity_name}`);
+    const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/task/activity_receive', {
+        headers: getHeaders(ctx),
+        data: {
+            activity_id: activity.activity_id
         }
+    });
 
-        $.log(`领取奖励失败！${response}`);
+    if (isSuccess) {
+        $.log(removeTags(data.data.reward_msg));
         return { isSuccess };
+    }
+
+    $.log(`领取奖励失败！${response}`);
+    return { isSuccess };
 }
 
 async function receiveReward(ctx, taskId) {
-        const robotToken = await getRobotToken(ctx);
-        if (robotToken === false) {
-            return {
-                isSuccess: false,
-                msg: '领取任务奖励失败！'
-            };
-        }
-
-        const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/task/activity_task_receive', {
-            headers: getHeaders(ctx),
-            data: {
-                robot_token: robotToken,
-                geetest_seccode: '',
-                geetest_validate: '',
-                geetest_challenge: '',
-                captcha: '',
-                task_id: taskId
-            }
-        });
-
-        if (isSuccess) {
-            const msg = removeTags(data.data.reward_msg);
-            $.log(msg);
-            return {
-                isSuccess,
-                msg
-            };
-        }
-
-        $.log(`领取任务奖励失败！${response}`);
+    const robotToken = await getRobotToken(ctx);
+    if (robotToken === false) {
         return {
-            isSuccess,
+            isSuccess: false,
             msg: '领取任务奖励失败！'
         };
+    }
+
+    const { isSuccess, data, response } = await postApi('https://user-api.smzdm.com/task/activity_task_receive', {
+        headers: getHeaders(ctx),
+        data: {
+            robot_token: robotToken,
+            geetest_seccode: '',
+            geetest_validate: '',
+            geetest_challenge: '',
+            captcha: '',
+            task_id: taskId
+        }
+    });
+
+    if (isSuccess) {
+        const msg = removeTags(data.data.reward_msg);
+        $.log(msg);
+        return {
+            isSuccess,
+            msg
+        };
+    }
+
+    $.log(`领取任务奖励失败！${response}`);
+    return {
+        isSuccess,
+        msg: '领取任务奖励失败！'
+    };
 }
 
 
@@ -2262,7 +2254,7 @@ async function main() {
     $.log(`\n----- 所有账号执行完成 -----\n`);
 }
 
-// ??????
+// 脚本执行入口
 !(async () => {
     if (typeof $request !== 'undefined') {
         GetCookie();

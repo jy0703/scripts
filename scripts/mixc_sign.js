@@ -63,7 +63,6 @@ async function main() {
             $.log(`\n----- 账号 [${i + 1}/${$.userArr.length}] 开始执行 -----\n`);
 
             // 初始化
-            $.is_login = true;
             $.beforeMsgs = '';
             $.messages = [];
             $.user = $.userArr[i];
@@ -96,11 +95,25 @@ function GetCookie() {
         const missing = FIELDS.filter(k => !got[k]);
         if (missing.length) throw new Error('获取Cookie错误，缺字段: ' + missing.join(','));
 
-        const newData = Object.assign({ 'userName': maskPhone(getPhone(got.deviceParams)) }, got);
+        const phone = getPhone(got.deviceParams);
+        const newData = Object.assign({ 'userName': maskPhone(phone), 'phone': phone }, got);
 
-        // 同一 token 切换商场要各自留一条，故按 token + mallNo 去重
-        const index = $.userArr.findIndex(e => e.token == newData.token && e.mallNo == newData.mallNo);
+        // 同账号（手机号）跨商场各留一条；token 每次请求都会刷新，绝不能拿它去重，否则同账号越抓越多
+        const index = $.userArr.findIndex(e =>
+            e.mallNo == newData.mallNo &&
+            (e.phone === phone || getPhone(e.deviceParams) === phone)
+        );
         index !== -1 ? $.userArr[index] = newData : $.userArr.push(newData);
+
+        // 兜底：清掉同账号同商场的遗留重复行（旧逻辑按 token 去重时可能已产生的重复）
+        const seen = new Set();
+        $.userArr = $.userArr.filter(e => {
+            const k = (e.phone || getPhone(e.deviceParams) || '') + '@' + e.mallNo;
+            if (seen.has(k)) return false;
+            seen.add(k);
+            return true;
+        });
+
         $.setdata($.toStr($.userArr), 'mixc_data');
         pushDaidai({ envs: [['mixc_data', $.toStr($.userArr)]] });
         $.Messages.push(`🎉获取Cookie成功! ${newData.userName} · 商场 ${newData.mallNo}`);
@@ -323,6 +336,7 @@ function pushDaidai(payload) {
         return task;
     } catch (e) { $.log(`[呆呆推送] 异常已忽略: ${e.message || e}`); }
 }
+
 // 账号变量兼容面板同名多行合并格式：row&row（每行一台手机的 JSON），也兼容单数组/单对象
 function parseAccountList(raw) {
     if (!raw) return [];
@@ -341,6 +355,7 @@ function parseAccountList(raw) {
     emit(s.slice(start));
     return out;
 }
+
 function getEnv(...keys) {
     for (let key of keys) {
         var value = $.isNode() ? process.env[key] || process.env[key.toUpperCase()] || process.env[key.toLowerCase()] || $.getdata(key) : $.getdata(key);

@@ -336,53 +336,6 @@ async function ensureUserKey(user) {
     }
 }
 
-// 抓包里的 {status,code} 中 code 有 "0" 与 0 两种形态，统一成数字再判
-function parseOk(result) {
-    if (!result) return { code: -1, message: '接口无响应' };
-    return Object.assign({}, result, { code: Number(result.code) });
-}
-
-function qmPost(user, path, body) {
-    return Request({
-        url: `${HOST}${path}`,
-        headers: qmHeaders(user),
-        body: Object.assign({}, body, { appid: APPID }),
-    });
-}
-
-function qmGet(user, path) {
-    return Request({ url: `${HOST}${path}?appid=${APPID}`, headers: qmHeaders(user) });
-}
-
-function qmHeaders(user) {
-    const headers = {
-        'Accept': 'v=1.0',
-        'content-type': 'application/json',
-        'Qm-From': 'wechat',
-        'Qm-From-Type': 'catering',
-        'Qm-User-Token': user.token,
-        'store-id': String(user.storeId),
-        'work-staff-id': '',
-        'work-staff-name': '',
-        'work-wechat-userid': '',
-        'Accept-Language': 'zh-CN',
-        'User-Agent': USER_AGENT,
-        'Referer': `https://servicewechat.com/${APPID}/page-frame.html`,
-    };
-    return headers;
-}
-
-function mask(value) {
-    value = String(value || '');
-    if (value.length <= 12) return value;
-    return `${value.slice(0, 6)}...${value.slice(-6)}`;
-}
-
-function maskPhone(p) {
-    if (!p || String(p).length !== 11) return '';
-    return String(p).slice(0, 3) + '****' + String(p).slice(7);
-}
-
 // ---------- 工具函数 ----------
 
 function getEnv(...keys) {
@@ -455,6 +408,53 @@ async function sendMsg(message) {
     } catch (e) {
         $.log(`\n\n----- ${$.name} -----\n${message}`);
     }
+}
+
+// 抓包里的 {status,code} 中 code 有 "0" 与 0 两种形态，统一成数字再判
+function parseOk(result) {
+    if (!result) return { code: -1, message: '接口无响应' };
+    return Object.assign({}, result, { code: Number(result.code) });
+}
+
+function qmPost(user, path, body) {
+    return Request({
+        url: `${HOST}${path}`,
+        headers: qmHeaders(user),
+        body: Object.assign({}, body, { appid: APPID }),
+    });
+}
+
+function qmGet(user, path) {
+    return Request({ url: `${HOST}${path}?appid=${APPID}`, headers: qmHeaders(user) });
+}
+
+function qmHeaders(user) {
+    const headers = {
+        'Accept': 'v=1.0',
+        'content-type': 'application/json',
+        'Qm-From': 'wechat',
+        'Qm-From-Type': 'catering',
+        'Qm-User-Token': user.token,
+        'store-id': String(user.storeId),
+        'work-staff-id': '',
+        'work-staff-name': '',
+        'work-wechat-userid': '',
+        'Accept-Language': 'zh-CN',
+        'User-Agent': USER_AGENT,
+        'Referer': `https://servicewechat.com/${APPID}/page-frame.html`,
+    };
+    return headers;
+}
+
+function mask(value) {
+    value = String(value || '');
+    if (value.length <= 12) return value;
+    return `${value.slice(0, 6)}...${value.slice(-6)}`;
+}
+
+function maskPhone(p) {
+    if (!p || String(p).length !== 11) return '';
+    return String(p).slice(0, 3) + '****' + String(p).slice(7);
 }
 
 // 脚本执行入口

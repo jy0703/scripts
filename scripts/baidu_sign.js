@@ -538,9 +538,9 @@ function Crypt(type, a, b, c) { function MD5(string) { function RotateLeft(lValu
         await main();
     }
 })()
-    .catch(e => { $.logErr(e); $.Subtitle.push(`❌ ${e.message || e}`); })
+    .catch((e) => $.Messages.push(e.message || e) && $.logErr(e))
     .finally(async () => {
-        await sendMsg($.Messages.join('\n').trim(), $.Subtitle.join('\n').trim());
+        await sendMsg($.Messages.join('\n').trimStart().trimEnd(), $.Subtitle.join('\n').trimStart().trimEnd());
         $.isNode() || $.done();
     });
 

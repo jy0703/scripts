@@ -1,10 +1,8 @@
 /*
 ------------------------------------------
-@Description: 中国移动 · 移动爱家全方位净化增强脚本（含首页轮播、智能爱家、发现页音视频/文章、钱包充话费、借钱与信息流）
-@Author: Yuheng0101, anker1209, ccyykk666, sooyaaabo; 轮播与专区全方位净化 TomCatXue
-@Updated: 2026-10-24
-@Version: v1.1.3
-@Note: 基于上游 v1.1.2，补充「我的」页面当前版本的区域：咪咕爱看、每日福利专区、我的商城、网龄卡券，并按本机数据校正我的彩铃/我的服务/生活服务的 areaId
+脚本名称: 中国移动 · 移动爱家全方位净化增强脚本（含首页轮播、智能爱家、发现页音视频/文章、钱包充话费、借钱与信息流）
+脚本说明: 作者 Yuheng0101, anker1209, ccyykk666, sooyaaabo; 轮播与专区全方位净化 TomCatXue。基于上游 v1.1.2（本版 v1.1.3），补充「我的」页面当前版本的区域：咪咕爱看、每日福利专区、我的商城、网龄卡券，并按本机数据校正我的彩铃/我的服务/生活服务的 areaId
+更新时间: 2026-10-24
 ------------------------------------------
 */
 (function () {
@@ -1318,6 +1316,7 @@
 
     $done(signedResult(encryptJson(payload, AES_KEY, AES_IV)));
   } catch (error) {
+    console.log(`[cmcc_clean] 脚本执行异常: ${error && error.stack ? error.stack : error}`);
     $done({});
   }
 })();

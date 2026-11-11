@@ -1,12 +1,11 @@
-/* 更新内容：
- * 增加critical、volume参数设置
- * 增加关键词屏蔽参数，修改日志排版
- * 更新日期 2024.11.18 19:42
- * 原作者 @Sliverkiss
+/**
+ * 脚本名称：QX 通知过滤转发 Bark
+ * 脚本说明：Quantumult X 通知脚本，按 ignoreRegex 过滤后转发 Bark（原作者 @Sliverkiss）
+ * 更新时间：2024-11-18
  */
 
 const NAMESPACE = '通知';
-let $ = new Env(NAMESPACE, {
+const $ = new Env(NAMESPACE, {
     logLevel: 'info',
     log() {},
 });

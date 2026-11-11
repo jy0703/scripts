@@ -1,7 +1,7 @@
 /**
  * 脚本名称：慢慢买签到
  * 活动规则：每日签到领积分与金币，幸运日可开启幸运礼盒
- * 脚本说明：支持多账号，支持 NE / Node.js 环境。签到接口只认 username + 应用级 token，账号由响应侧抓取（首页 index_json.ashx 返回的 u_name + nickName，两者齐全才写入 manmanbuy_data，形如 [{"username":"wx_xxxx","nickName":"昵称"}]，昵称仅用于通知显示），也可在 manmanbuy_users 里直接填用户名
+ * 脚本说明：支持多账号，支持 NE / Node.js 环境。签到接口只认 username + 应用级 token，账号由响应侧抓取（首页 index_json.ashx 返回的 u_name + nickName），也可在 manmanbuy_users 里直接填用户名
  * 环境变量：manmanbuy_data、manmanbuy_users、manmanbuy_token(可选，token 轮换时覆盖)、manmanbuy_debug
  * 更新时间：2026-10-09
 
@@ -47,6 +47,19 @@ $.Messages = [];
 // 抓包即时推送呆呆的未决请求：入口 $.done() 前必须等完，否则 Loon/Surge 会掐断异步 POST
 $.daidaiTasks = [];
 
+// 业务常量 (照签到页 activity_check_in H5 抓包搬运)
+const API_HOST = 'https://basic-ucenter.manmanbuy.com';
+const REQ_CAPTURE_REGEX = /^https?:\/\/(basic\-ucenter\.manmanbuy\.com|apph5\.manmanbuy\.com\/taolijin\/logserver\.aspx)/;
+// 响应侧抓取: 首页 index_json.ashx 的返回体里带 "u_name":"wx_xxxx" + "nickName"，那才是签到接口要的 username
+const RESP_CAPTURE_REGEX = /^https?:\/\/apapia\.manmanbuy\.com\/index_json\.ashx/;
+// 应用级 token: 签到页 H5 的 web 调试分支里硬编码的常量, 服务端按它放行 (账号靠 username 区分)
+const APP_TOKEN = 'mmb188';
+const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 - mmbWebBrowse - ios';
+const DATA_KEY = 'manmanbuy_data';
+const USERS_KEY = 'manmanbuy_users';
+const TOKEN_KEY = 'manmanbuy_token';
+
+
 // 把 manmanbuy_data 解析成内部账号对象数组
 function parseUsers(raw) {
     const list = parseAccountList(raw);
@@ -61,19 +74,6 @@ function parseUsers(raw) {
     });
     return out;
 }
-
-// 业务常量 (照签到页 activity_check_in H5 抓包搬运)
-const API_HOST = 'https://basic-ucenter.manmanbuy.com';
-// 请求侧: APP 内 H5 走原生注入时请求里没有 username, 即使有也拿不到昵称, 只记日志不落盘
-const REQ_CAPTURE_REGEX = /^https?:\/\/(basic\-ucenter\.manmanbuy\.com|apph5\.manmanbuy\.com\/taolijin\/logserver\.aspx)/;
-// 响应侧抓取: 首页 index_json.ashx 的返回体里带 "u_name":"wx_xxxx" + "nickName"，那才是签到接口要的 username
-const RESP_CAPTURE_REGEX = /^https?:\/\/apapia\.manmanbuy\.com\/index_json\.ashx/;
-// 应用级 token: 签到页 H5 的 web 调试分支里硬编码的常量, 服务端按它放行 (账号靠 username 区分)
-const APP_TOKEN = 'mmb188';
-const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 - mmbWebBrowse - ios';
-const DATA_KEY = 'manmanbuy_data';
-const USERS_KEY = 'manmanbuy_users';
-const TOKEN_KEY = 'manmanbuy_token';
 
 
 // 主函数
@@ -90,7 +90,6 @@ async function main() {
             $.log(`\n----- 账号 [${i + 1}/${$.userArr.length}] 开始执行 -----\n`);
 
             // 初始化
-            $.is_login = true;
             $.beforeMsgs = '';
             $.messages = [];
             $.user = $.userArr[i];
@@ -189,7 +188,6 @@ function GetCookie() {
                 debug(`请求未带 username: ${url.split('?')[0]} (APP 走原生注入时不带，靠响应侧抓取)`, '抓取');
                 return;
             }
-            // 请求侧只有 username 拿不到昵称，按「有昵称才写入」不落盘，只留日志方便确认抓到过
             debug(`请求侧命中 username=${params.username}，无昵称不写入`, '抓取');
         }
     } catch (e) {

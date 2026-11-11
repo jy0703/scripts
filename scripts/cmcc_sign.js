@@ -14,6 +14,7 @@
  *          07:58 那轮先打周三场次秒杀（仅周三），再按「放量窗口(08:00 前 5 分钟~后 5 分钟)」抢 AI豆兑换；
  *          11:58 那轮只抢签到页日常秒杀（cmcc_sk_min 默认 11:00 之后）。
  *          活动绑签到轮、兑换绑放量窗口，所以窗口外的定时一次兑换请求都不发
+ * 更新时间：2026-11-11（脚本精炼重构）
 
 
 ------------------ Surge 配置 ------------------
@@ -59,6 +60,7 @@ hostname = wx.10086.cn, client.app.coc.10086.cn, yxfk.market.chinamobile.com, de
  */
 
 const $ = new Env('中国移动');
+
 $.is_debug = isOn(getEnv('cmcc_debug', 'is_debug'));  // 调试模式(打印每次请求/响应含头，boxjs 开关 cmcc_debug)
 $.userInfo = getEnv('cmcc_data') || '';  // 获取账号
 $.userArr = parseAccountList($.userInfo);  // 用户信息
@@ -181,15 +183,15 @@ const WED_MAX_DRAWS = 30;     // 单次执行最多抽这么多发
 const WED_DAY = 3;            // 场次秒杀只在北京时间周三打（任务/拼图每天都做）
 // 场次秒杀参数；cmcc_wed_sk_at 留空=按 rec_login 下发的 seckillTime 自动选最近未开始场次
 const WSK_AT_CFG = getEnv('cmcc_wed_sk_at') || '';
-const WSK_LEAD = 400;         // 提前开火(ms)
+const WSK_LEAD = 400;
 const WSK_INTERVAL = 350;     // 连发间隔(ms)
 const WSK_MAX_ATTEMPTS = 200;
 const WSK_MAX_WAIT = 300000;  // 距开场超过该时长就不干等，本次跳过(ms)
 const WSK_STOP = { '160002': '无库存' };
 // 秒杀抢券参数
 const SK_API = API_MARK + '/markSeckill';
-const SK_INTERVAL = 350;      // 重试间隔(ms)
-const SK_LEAD = 400;          // 提前开火(ms)，抵消网络延迟
+const SK_INTERVAL = 350;
+const SK_LEAD = 400;
 const SK_MAX_ATTEMPTS = 200;  // 单场最大尝试次数
 const SK_MAX_WAIT = 300000;   // 距开抢超过该时长就不再干等(ms)，本次跳过
 // 每天的秒杀下限（北京时间）：触发时刻早于它整块不执行；开抢时刻早于它的场次也不抢。cmcc_sk_min 可改，填 00:00 则不受限
@@ -216,7 +218,6 @@ async function main() {
             $.log(`\n----- 账号 [${i + 1}/${$.userArr.length}] 开始执行 -----\n`);
 
             // 初始化
-            $.is_login = true;
             $.beforeMsgs = '';
             $.messages = [];
             $.user = $.userArr[i];
@@ -2467,8 +2468,6 @@ function getDaidaiSource() {
 }
 
 // 重写抓到的数据即时推呆呆面板（仅手机侧；网关同值跳过，失败静默不影响主流程）
-// 注意：抓包脚本会在 finally 里立刻 $.done()，Loon/Surge 在 $done() 后结束脚本、丢弃未完成请求。
-// 所以这里把 POST 包成 Promise 登记进 $.daidaiTasks，由入口统一 await，否则「抓包成功但呆呆没数据」。
 function pushDaidai(payload) {
     try {
         if ($.isNode()) return;
@@ -2583,6 +2582,35 @@ async function getAllEnvByName(name) {
     return raw;
 }
 
+// 面板按名注入环境变量时同名多行冲突 → process.env 只拿到一行 cmcc_data（一个账号列表），另一台手机的账号跑不到。
+// 面板侧直接从网关拉全部同名行，按 userCheckId 合并成完整账号集合（两台手机的不同账号都跑得到）；手机侧用顶部同步初始化即可。
+async function loadCmccData() {
+    if (!$.isNode()) return;
+    if (!TOOLS_API || !TOOLS_API_TOKEN) return;
+    try {
+        const raws = await getAllEnvByName('cmcc_data');
+        const merged = [], seen = new Set();
+        for (const raw of raws) {
+            let list = $.toObj(raw);
+            if (list && !Array.isArray(list)) list = [list];
+            if (!Array.isArray(list)) continue;
+            for (const acc of list) {
+                const id = acc && acc.userCheckId;
+                if (id && seen.has(id)) continue;
+                if (id) seen.add(id);
+                merged.push(acc);
+            }
+        }
+        if (merged.length) {
+            $.userArr = merged;
+            $.userInfo = $.toStr(merged);
+            $.log(`[账号] 已从网关合并 ${merged.length} 个账号（含两台手机）`);
+        }
+    } catch (e) {
+        $.log(`[账号] 从网关拉取 cmcc_data 失败（沿用 process.env）：${shortMsg(e.message || e)}`);
+    }
+}
+
 function debug(content, title = 'debug') {
     let start = `\n----- ${title} -----\n`;
     let end = `\n----- ${$.time('HH:mm:ss')} -----\n`;
@@ -2658,13 +2686,13 @@ async function sendMsg(message) {
         else if (/dev\.coc\.10086\.cn\/coc3\/(gr|coc3-market[^/]*|gateway-route)\//i.test(u)) GetCoc3Jar($request);   // 权益市场页的整套设备 cookie（抽奖要用同源身份）
         else GetCookie();
     } else {
+        await loadCmccData();  // 面板侧从网关合并两台手机的全部账号（cmcc_data 同名多行注入会冲突）
         await main();  // 主函数
     }
 })()
     .catch((e) => $.Messages.push(e.message || e) && $.logErr(e))
     .finally(async () => {
         await sendMsg($.Messages.join('\n').trimStart().trimEnd());  // 推送通知
-        // 抓包即时推送是异步 POST：必须等它落地再 $.done()，Loon/Surge 在 $done() 后会丢弃未完成请求
         if ($.daidaiTasks && $.daidaiTasks.length) await Promise.all($.daidaiTasks);
         $.isNode() || $.done();
     });

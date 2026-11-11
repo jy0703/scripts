@@ -44,7 +44,7 @@ $.is_debug = getEnv('aliyun_debug', 'is_debug') || 'false';  // 调试模式(box
 $.userInfo = getEnv('aliyun_data') || '';  // 获取账号
 $.userArr = parseAccountList($.userInfo).filter(u => u && u.cookie);  // 用户信息
 $.Messages = [];
-// 抓包即时推送呆呆的未决请求：入口 $.done() 前必须等完，否则 Loon/Surge 会掐断异步 POST
+// 抓包即时推送的未决请求：done 前必须等完，否则 Loon/Surge 会掐断异步 POST
 $.daidaiTasks = [];
 
 // 分界时刻：之前做任务，之后领奖+收积分（与原版 aliyunWeb_time 同义）
@@ -630,8 +630,7 @@ function randDelay() {
 // key 转小写 (抓包头大小写不定)
 function ObjectKeys2LowerCase(obj = {}) { return Object.fromEntries(Object.entries(obj).map(([k, v]) => [k.toLowerCase(), v])); }
 
-// 每台手机一个稳定的来源标识：BoxJS「呆呆面板同步」分区的 @daidai.device 手填；
-// 没填就自动生成一次并写回本地，保证同一台手机以后每次抓包都落在面板的同一行。
+// 来源标识：BoxJS「呆呆面板同步」的 @daidai.device 手填，未填自动生成并写回，保证同机落在面板同一行
 function getDaidaiSource() {
     try {
         let v = String($.getdata('@daidai.device') || $.getdata('DAIDAI_DEVICE') || '').trim();
@@ -644,9 +643,7 @@ function getDaidaiSource() {
     } catch (e) { return ''; }
 }
 
-// 重写抓到的数据即时推呆呆面板（仅手机侧；网关同值跳过，失败静默不影响主流程）
-// 注意：抓包脚本会在 finally 里立刻 $.done()，Loon/Surge 在 $done() 后结束脚本、丢弃未完成请求。
-// 所以这里把 POST 包成 Promise 登记进 $.daidaiTasks，由入口统一 await，否则「抓包成功但呆呆没数据」。
+// 抓到即推呆呆面板（仅手机侧；网关同值跳过，失败静默不影响主流程）；POST 包成 Promise 登记进 $.daidaiTasks 由入口统一 await（done 后未完成请求会被丢弃）
 function pushDaidai(payload) {
     try {
         if ($.isNode()) return;
@@ -804,7 +801,7 @@ async function sendMsg(message, avatar, title) {
     if (typeof $request !== `undefined`) {
         GetCookie();
     } else {
-        await main();  // 主函数
+        await main();
     }
 })()
     .catch((e) => $.Messages.push(e.message || e) && $.logErr(e))

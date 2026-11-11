@@ -17,6 +17,7 @@
  *          - kuwo_exchange 默认 false：旧版 VIP 兑换接口，当前 H5 已改 taskExchange，仅保留开关
  *          - kuwo_debug    调试模式
  *          Node 环境变量同名可用
+ * 环境变量：kuwo_data / kuwo_phone / kuwo_ocr / kuwo_device / kuwo_smid / kuwo_notify / kuwo_exchange / kuwo_debug（与上同名）
  * 更新时间：2026-10-28
 
 ------------------ Surge 配置 ------------------
@@ -116,7 +117,7 @@ $.shouldNotify = $.notify || isLastRun();
 
 // 主函数
 async function main() {
-    const accounts = loadAccounts();
+    const accounts = $.userArr;
     if (!accounts.length) {
         $.log('未找到 kuwo_data 变量，请先打开 http://360.com/kuwo 登录 ❌');
         if ($.shouldNotify) $.Subtitle.push('❌ 未找到 kuwo_data 变量，请先打开 http://360.com/kuwo 登录');
@@ -1123,7 +1124,6 @@ function isLastRun() {
 
 class LoginError extends Error {}
 
-// 获取环境变量
 // 账号变量兼容面板同名多行合并格式：row&row（每行一台手机的 JSON），也兼容单数组/单对象
 function parseAccountList(raw) {
     if (!raw) return [];

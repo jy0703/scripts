@@ -8,13 +8,15 @@
  *           进度状态/缓存键（xx_state、xx_cache、xx_jar_at、migu_native_xx、@键，脚本 $.getdata 读）→ 面板 box.dat（cwd 下，Env dataFile）；
  *           两者都由网关在面板上完成读-改-写，只增改不删。
  *           在 BoxJS 订阅「呆呆面板同步」点运行即同步；不写 cron 声明（面板订阅不会为它建任务，面板上也没有 BoxJS 数据可同步）。
- *           空值键不同步。运行缓存键(aeon_cache/ydyp_cache 等)是脚本运行时再生的，不同步。
+ *           空值键不同步。运行缓存键(aeon_cache 等)是脚本运行时再生的，不同步；例外是 ydyp_cache——
+ *           它存各账号的 deviceId，面板首跑若为空会重新生成、与手机不一致（设备标识漂移有风控风险），故纳入同步。
  * 环境变量：TOOLS_API / @tools.address、TOOLS_API_TOKEN / @tools.token（网关连接，必填）；
  *           @daidai.keys（额外同步进环境变量的键，逗号分隔，键名即面板变量名）、@daidai.mute（true 静默）、daidai_debug
  * 更新时间：2026-11-08
  */
 
 const $ = new Env('呆呆面板同步');
+
 $.is_debug = getEnv('daidai_debug', 'is_debug') || 'false';  // 调试模式
 $.Messages = [];
 const MUTE = ['true', true].includes(getEnv('DAIDAI_MUTE', '@daidai.mute'));  // 肯定式：true 才静默
@@ -63,7 +65,7 @@ const CONFIG_KEYS = [
     'milk_tea_probe',
     'smzdm_comment', 'smzdm_comment_max', 'smzdm_crowd_keyword', 'smzdm_crowd_silver_5',
     'wps_sk_at', 'wps_sk_lead', 'wps_sk_maxwait',
-    'ydyp_device_id', 'ydyp_exchange_prizes',
+    'ydyp_device_id', 'ydyp_cache', 'ydyp_exchange_prizes',
     // ---- 调试开关：is_debug 单独一条，各脚本 getEnv 的第二键回落它在 Node 侧自然生效 ----
     'is_debug',
     'aeon_debug', 'aikebang_debug', 'aliyun_debug', 'baidu_debug', 'cll_debug', 'cmcc_balance_debug',
@@ -142,17 +144,6 @@ async function main() {
     if (fails.length) $.Messages.push(`❌ 失败 ${fails.length}: ${fails.join('、')}`);
 }
 
-// 脚本执行入口
-!(async () => {
-    await main();
-})()
-    .catch((e) => $.Messages.push(e.message || e) && $.logErr(e))
-    .finally(async () => {
-        if (!MUTE) await sendMsg($.Messages.join('\n').trimStart().trimEnd());  // 推送通知
-        $.isNode() || $.done();
-    })
-
-
 // 每台手机一个稳定的来源标识：BoxJS 本区 @daidai.device 手填；没填就自动生成一次并写回本地，
 // 保证手动同步与抓包即时推送用的是同一个 source，落在面板同名变量的同一行。
 function getDaidaiSource() {
@@ -168,6 +159,26 @@ function getDaidaiSource() {
 }
 
 
+// 仅当地址是局域网/回环时才强制直连：这类地址 Surge/Loon 默认会丢给代理节点、连不通；
+// 公网地址（如 Cloudflare Tunnel 域名）保持默认路由（走代理/系统出口到达公网），强制直连反而连不上
+function isPrivateHost(input) {
+    if (!input) return false;
+    let host = String(input).trim();
+    try { host = new URL(host).hostname || host; } catch (e) {}
+    host = host.toLowerCase();
+    if (host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]') return true;
+    if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)) {
+        const p = host.split('.').map(Number);
+        if (p[0] === 10) return true;
+        if (p[0] === 172 && p[1] >= 16 && p[1] <= 31) return true;
+        if (p[0] === 192 && p[1] === 168) return true;
+        if (p[0] === 169 && p[1] === 254) return true;
+        if (p[0] === 100 && p[1] >= 64 && p[1] <= 127) return true;
+        if (p[0] === 127) return true;
+    }
+    return false;
+}
+
 // 请求函数二次封装
 async function Request(options) {
     try {
@@ -176,14 +187,20 @@ async function Request(options) {
         const _respType = options?._respType || 'body';
         const _timeout = options?._timeout || 15000;
 
-        // Loon 的 $httpClient 默认沿「当前路由」(代理节点) 发请求、默认超时 5000ms：
-        // BoxJS 里手动点同步时，发往局域网网关的请求会被丢到节点上超时。强制直连并放宽客户端超时
-        // （Node 侧 got 的 timeout 单位不同，不设置，交给上面的 _timeout Promise.race 兜底）
+        // Loon / Surge / Stash / Shadowrocket 的 $httpClient 默认都沿「当前路由」(代理节点) 发请求：
+        // BoxJS 里手动点同步时，发往局域网网关的请求会被丢到节点上超时。强制直连并放宽客户端超时。
+        // Quantumult X 的 $httpClient 不认 node 字段（LAN 一般能直连），保持原样。
+        // Node 侧 got 的 timeout 单位不同，不设置，交给上面的 _timeout Promise.race 兜底。
         if (!$.isNode()) {
             const isLoon = typeof $.isLoon === 'function' && $.isLoon();
             const isQuanX = typeof $.isQuanX === 'function' && $.isQuanX();
+            const isSurge = typeof $.isSurge === 'function' && $.isSurge();
+            const isStash = typeof $.isStash === 'function' && $.isStash();
+            const isShadowrocket = typeof $.isShadowrocket === 'function' && $.isShadowrocket();
+            const useDirect = (isLoon || isSurge || isStash || isShadowrocket) && isPrivateHost(options.url);
+            // Loon/QX 的 timeout 单位是毫秒，Surge/Stash/Shadowrocket 是秒
             options.timeout = (isLoon || isQuanX) ? 30000 : 30;
-            if (isLoon) options.node = 'DIRECT';
+            if (useDirect) options.node = 'DIRECT';
         }
 
         // 如果请求方法是post且有body，则将body序列化为JSON字符串
@@ -238,6 +255,15 @@ async function sendMsg(message) {
     }
 }
 
+// 脚本执行入口
+!(async () => {
+    await main();
+})()
+    .catch((e) => $.Messages.push(e.message || e) && $.logErr(e))
+    .finally(async () => {
+        if (!MUTE) await sendMsg($.Messages.join('\n').trimStart().trimEnd());  // 推送通知
+        $.isNode() || $.done();
+    });
 
 // 获取环境变量
 function getEnv(...keys) {

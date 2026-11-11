@@ -13,6 +13,7 @@
  *          - @wxCode.token   接口鉴权 token (请求头 Authorization: Bearer <token>)
  *          账号 ref 配在本脚本的 boxjs 区域 YXX_REF 中, 多个以英文逗号隔开
  *          Node 环境变量同名可用: WX_CODE_ADDRESS / WX_CODE_TOKEN / YXX_REF
+ * 环境变量：WX_CODE_ADDRESS、WX_CODE_TOKEN、YXX_REF、YXX_PLAZA_CODE(可选)、yxx_debug
  * 更新时间：2026-10-10
 
 ------------------ Surge 配置 ------------------
@@ -226,7 +227,6 @@ async function gameSignIn(account, gameId) {
         }
     }
 
-    const st = String(Date.now());
     const reg = await gamePost(g, '/node_w/game/v1/register', { game_id: gameId });
     $.log(`ℹ️ [签到] register: code=${reg?.code} msg=${reg?.msg || ''}`);
     if (String(reg?.code) === '-12') {
@@ -437,14 +437,13 @@ async function gameGet(g, path, params) {
 }
 
 // 成绩参数: game_score 由真实天数与时间戳派生, sign = md5(盐 + 参与签名的参数串)
-// st = 页面上「开始/结算」展示时刻(window.startGameTMP), 服务端按它查 play 记录, 缺失会报错
-function buildScoreForm(gameId, score, st) {
+function buildScoreForm(gameId, score) {
     const timestamp = String(Date.now());
     const shift = [...timestamp].map(c => String((Number(c) + 2) % 10)).join('');
     const pick = [...shift.slice(-3)].map(i => shift[i]).join('');
     const game_score = Number((Number(score) + Number(pick)).toFixed(4));
     const raw = `${GAME_SIGN_SALT}game_id=${gameId}&game_score=${game_score}&device_type=${DEVICE_TYPE}&timestamp=${timestamp}`;
-    return { game_id: gameId, game_score, device_type: DEVICE_TYPE, timestamp, ext_info: 'null', st, sign: Crypt('md5', raw) };
+    return { game_id: gameId, game_score, device_type: DEVICE_TYPE, timestamp, ext_info: 'null', sign: Crypt('md5', raw) };
 }
 
 // 签名头: URL query 与 body 参数合并排序, HMAC-SHA256 hex
@@ -559,9 +558,9 @@ async function sendMsg(message) {
 !(async () => {
     await main();
 })()
-    .catch((e) => { $.logErr(e); $.Messages.push(`❌ ${e.message || e}`); })
+    .catch((e) => $.Messages.push(e.message || e) && $.logErr(e))
     .finally(async () => {
-        await sendMsg($.Messages.join('\n'));
+        await sendMsg($.Messages.join('\n').trimStart().trimEnd());
         $.isNode() || $.done();
     });
 

@@ -38,9 +38,7 @@ cron "0 8 * * *" script-path=https://raw.githubusercontent.com/jy0703/scripts/ma
  */
 
 const $ = new Env('咪咕音乐');
-$.is_debug = false;
 $.Messages = [];   // 通知正文：只放成功项
-// 抓包即时推送呆呆的未决请求：入口 $.done() 前必须等完，否则 Loon/Surge 会掐断异步 POST
 $.daidaiTasks = [];
 $.Subtitle = [];   // 通知副标题：登录失效/任务失败
 
@@ -1590,8 +1588,7 @@ function getDaidaiSource() {
 }
 
 // 重写抓到的数据即时推呆呆面板（仅手机侧；网关同值跳过，失败静默不影响主流程）
-// 注意：抓包脚本会在 finally 里立刻 $.done()，Loon/Surge 在 $done() 后结束脚本、丢弃未完成请求。
-// 所以这里把 POST 包成 Promise 登记进 $.daidaiTasks，由入口统一 await，否则「抓包成功但呆呆没数据」。
+// POST 包成 Promise 登记进 $.daidaiTasks，由入口统一 await，避免 $done() 后请求被丢弃
 function pushDaidai(payload) {
     try {
         if ($.isNode()) return;

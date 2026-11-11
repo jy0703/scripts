@@ -3,7 +3,7 @@
  * 活动规则：每日签到、云朵中心任务、算力大作战、红包派对，领取云朵与奖品
  * 脚本说明：支持多账号，支持 NE / Node.js 环境。Authorization 由本脚本 GetCookie 抓取（打开移动云盘 App 即可命中），deviceId 可选、需自行抓包填写
  * 环境变量：ydyp_data（账号）、ydyp_device_id（可选，全局 deviceId）、ydyp_cache（脚本自维护的 deviceId/Token 缓存）、ydyp_debug
- * 对应 Python 版本：ydyp.py v5.0.8（换票链路已更新：py 用的 caiyun.feixin.10086.cn:7071/portal/auth/tyrzLogin.action 已下线 404，本脚本改走 H5 的 /ycloud/auth-service/auth/tyrzLogin + x-signature 签名）
+ * 对应 Python 版本：ydyp.py v5.0.8（换票链路已改走 H5 的 /ycloud/auth-service/auth/tyrzLogin + x-signature 签名，py 旧链路已下线 404）
  * 更新时间：2026-10-04
 
 抓取点（仅一条）：
@@ -2781,10 +2781,9 @@ function GetCookie() {
     .catch((e) => $.Messages.push(e.message || e) && $.logErr(e))
     .finally(async () => {
         await sendMsg($.Messages.join('\n').trimStart().trimEnd());  // 推送通知
-        // 抓包即时推送是异步 POST：必须等它落地再 $.done()，Loon/Surge 在 $done() 后会丢弃未完成请求
         if ($.daidaiTasks && $.daidaiTasks.length) await Promise.all($.daidaiTasks);
         $.isNode() || $.done();
-    })
+    });
 
 
 // ---------- 工具函数 ----------
@@ -2816,8 +2815,6 @@ function getDaidaiSource() {
 }
 
 // 重写抓到的数据即时推呆呆面板（仅手机侧；网关同值跳过，失败静默不影响主流程）
-// 注意：抓包脚本会在 finally 里立刻 $.done()，Loon/Surge 在 $done() 后结束脚本、丢弃未完成请求。
-// 所以这里把 POST 包成 Promise 登记进 $.daidaiTasks，由入口统一 await，否则「抓包成功但呆呆没数据」。
 function pushDaidai(payload) {
     try {
         if ($.isNode()) return;
