@@ -2083,6 +2083,55 @@
           "desc": "逐条打印接口路径与请求长度，不含密码、ce、token 或音频地址"
         }
       ]
+    },
+    {
+      "id": "agentrouter_sign",
+      "name": "AgentRouter签到",
+      "author": "@Feng",
+      "script": "https://raw.githubusercontent.com/jy0703/scripts/main/scripts/agentrouter_sign.js",
+      "descs_html": [
+        "AgentRouter(agentrouter.org) 每日签到：本站「签到」= 每日完成一次账号密码登录，登录时发放当日额度，登录响应直接带 quota 余额，无需抓包",
+        "在 agentrouter_account 填「邮箱#密码」，多个账号以 & 或换行分隔，例：a@x.com#pwdA&b@x.com#pwdB",
+        "登录成功后脚本会查 /api/log/self 端到端核验「签到成功」日志(type=4)，通知里「日志已确认」才是真正签到落账；密码固定不过期，无需缓存会话",
+        "agentrouter_base_url 可选，默认 https://agentrouter.org，直连失败可改备用域名 ps.air-outer.com",
+        "重复执行不会重复发额度，服务端按天去重"
+      ],
+      "icons": [
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/agentrouter.png",
+        "https://raw.githubusercontent.com/jy0703/scripts/main/icons/agentrouter.png"
+      ],
+      "keys": [
+        "agentrouter_account",
+        "agentrouter_base_url",
+        "agentrouter_debug"
+      ],
+      "settings": [
+        {
+          "id": "agentrouter_account",
+          "name": "AgentRouter 账号",
+          "val": "",
+          "type": "textarea",
+          "autoGrow": true,
+          "rows": 2,
+          "placeholder": "a@x.com#pwdA&b@x.com#pwdB",
+          "desc": "邮箱#密码，多账号以 & 或换行分隔"
+        },
+        {
+          "id": "agentrouter_base_url",
+          "name": "站点地址",
+          "val": "",
+          "type": "text",
+          "placeholder": "https://agentrouter.org",
+          "desc": "可选：留空用主域名，直连失败可改备用域名 ps.air-outer.com"
+        },
+        {
+          "id": "agentrouter_debug",
+          "name": "调试模式",
+          "val": false,
+          "type": "boolean",
+          "desc": "逐条打印请求与响应，不含密码"
+        }
+      ]
     }
   ]
 }
