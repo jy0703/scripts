@@ -346,7 +346,7 @@
           "val": "",
           "type": "text",
           "placeholder": "组件编号,活动编号",
-          "desc": "留空则用脚本内置值。定时任务的 APP抽奖签到 会读回包自动刷新；插件里打开「捕获抽奖ID」进一次 App 抽奖页也会写入，每月核对一次即可"
+          "desc": "留空用脚本内置值；定时任务会读回包自动刷新，插件开「捕获抽奖ID」进一次 App 抽奖页也会写入。每月核对一次即可"
         },
         {
           "id": "lhtj_debug",
@@ -509,7 +509,7 @@
           "autoGrow": true,
           "rows": 1,
           "placeholder": "phone1",
-          "desc": "两台手机各填不同名字（如 phone1 / phone2），抓包上传呆呆时同名变量各占一行、互不覆盖；留空则首次抓包自动生成一个 ID 并保存到本机。改动后请勿与另一台手机重名"
+          "desc": "两台手机各填不同名（如 phone1 / phone2），抓包上传时同名变量各占一行、互不覆盖；留空首次抓包自动生成。改动后勿与另一台重名"
         },
         {
           "id": "@daidai.keys",
@@ -718,21 +718,21 @@
           "name": "领取连签奖励",
           "val": true,
           "type": "boolean",
-          "desc": "默认开启（关掉才不领）。达标的累计/连签奖励服务端不会自动发放，只挂在可领清单里，开着就每次执行查一遍并代领"
+          "desc": "默认开启：每次运行代领达标的累计/连签奖励（服务端不自动发放），不想领就关"
         },
         {
           "id": "cmcc_task",
           "name": "AI豆任务",
           "val": false,
           "type": "boolean",
-          "desc": "完成签到页待办任务并领 AI豆，日志逐条输出；外部合作区与邀好友/助力类常驻跳过，其余连续失败的任务进黑名单"
+          "desc": "完成签到页待办任务领 AI豆；外部合作/邀好友类跳过，连续失败的任务自动进黑名单"
         },
         {
           "id": "cmcc_seckill",
           "name": "秒杀抢券",
           "val": false,
           "type": "boolean",
-          "desc": "签到后参与同活动秒杀抢券；触发时刻早于 11:00 的运行整块跳过；场次按周分期，抢中一次（或服务端回“已领取/限领一次”）本周内不再打，下周自动恢复"
+          "desc": "签到后参与同活动秒杀抢券（早于 11:00 的运行跳过）；抢中或已领过则本周不再打，下周自动恢复"
         },
         {
           "id": "cmcc_sk_min",
@@ -742,7 +742,7 @@
           "autoGrow": true,
           "rows": 1,
           "placeholder": "11:00",
-          "desc": "北京时间 HH:MM。触发早于它：每日秒杀整块不执行；场次开抢早于它：那一场不抢。留空用 11:00，填 00:00 则不受限"
+          "desc": "北京时间 HH:MM：触发或开抢早于它的场次不执行。留空用 11:00，填 00:00 不受限"
         },
         {
           "id": "cmcc_video",
@@ -756,7 +756,7 @@
           "name": "AI豆苗养成记",
           "val": false,
           "type": "boolean",
-          "desc": "移动爱购 AI豆苗：每日签到 + 浏览/分享任务 + 领取阳光值。凭证不需要单独抓：入口 userLoginV2 用的 ticket 就是 cmcc_data 里该账号的 token（同一条大网 SSO 会话串），每次运行现签短效 phone 头。token 会随 App 重新登录被顶掉（实测抓下 20 分钟内可签、被顶后即刻失效），被顶掉后开着「捕获 Cookie」进一次签到页重抓即可"
+          "desc": "移动爱购每日签到+浏览/分享任务+领阳光值。凭证复用 cmcc_data 的 token，无需单独抓；token 被 App 重登顶掉后，开着「捕获 Cookie」进一次签到页重抓即可"
         },
         {
           "id": "cmcc_seed_channel",
@@ -773,7 +773,7 @@
           "name": "AI豆兑换话费券",
           "val": false,
           "type": "boolean",
-          "desc": "签到页「签到专属AI豆兑换」商城：按 5元→2元→1.5元→1元 顶格兑话费券，剩余库存<=100 视为已抢光，0.5 元档与充值加赠券一律不兑。兑换会真扣 AI豆、单商品每期限兑一次（重复运行幂等），所以默认关；要兑就连着「AI豆任务」一起开，先攒豆再兑（同步上游 1753cf1）"
+          "desc": "签到页 AI豆商城按 5元→2元→1.5元→1元 顶格兑话费券（0.5 元档与充值加赠券不兑，库存≤100 视为抢光）。会真扣 AI豆且每期限兑一次，默认关；要兑连「AI豆任务」一起开"
         },
         {
           "id": "cmcc_gold_at",
@@ -783,21 +783,21 @@
           "autoGrow": true,
           "rows": 1,
           "placeholder": "08:00",
-          "desc": "北京时间 HH:MM，话费券 8 点放量。兑换只认「放量前 5 分钟 ~ 后 5 分钟」这个窗口，窗口外的定时一次请求都不发；窗口内会按 sysTime 校准、等到开兑前 400ms 开火，并在放量后 70 秒内每 350ms 连查库存直到放开。所以定时排 `58 0,7,11 * * *` 时，抢兑落在 07:58 那轮（活动仍绑 00:58 的签到轮）。留空用 08:00"
+          "desc": "北京时间 HH:MM，话费券 8 点放量。只在放量前后 5 分钟窗口内发请求：窗口内按 sysTime 校准、开兑前 400ms 开火，放量后 70 秒内每 350ms 连查库存。定时排 `58 0,7,11 * * *` 时抢兑落在 07:58 那轮。留空用 08:00"
         },
         {
           "id": "cmcc_lucky3",
           "name": "幸运三日签",
           "val": false,
           "type": "boolean",
-          "desc": "移动爱购「幸运三日签」累签：每天签到即得首签卡券，当月累签第 2、3 天各开一档抽奖，每满 3 次签到再多加 1 次机会；卡券 7 天有效，同专区同档位单月限领 1 次。凭证与豆苗同一条（同一次运行只现签一次 phone，不重复签），跟随当天签到那一次执行。实测抽奖次数在签到后 1~2 分钟才结算，当场查会显示 0，属正常"
+          "desc": "移动爱购累签：每天签到得首签卡券，当月第 2/3 天及每满 3 签各加一档抽奖；卡券 7 天有效，同档位单月限领 1 次。凭证与豆苗同源，跟随当天签到执行。抽奖次数在签到后 1~2 分钟才结算，当场查到 0 属正常"
         },
         {
           "id": "cmcc_lucky3_draw",
           "name": "三日签代抽",
           "val": true,
           "type": "boolean",
-          "desc": "默认开：有次数时连「lottery/lottery」也一起代抽（走页面同款 wasm 风控参数，由取凭证网关 tools 的 /api/cmcc/wasmparams 现产，需配好 @tools.address / @tools.token）。抽奖口另要 ZWRisk 设备令牌 gr-risk-p3 与权益市场那整套设备 cookie（见下面三项，开「捕获抽奖身份」进一次权益市场页就自动填）——补齐这些形态后仍可能被风控拒（11-04 用真机自己的令牌实测过），所以通知里被拒会照实说回码，不会谎称抽过。填 false 则只签到+报次数"
+          "desc": "默认开：有次数时代抽「lottery/lottery」（风控参数由取凭证网关 /api/cmcc/wasmparams 现产，需配 @tools.address/@tools.token）。还需开「捕获抽奖身份」进一次权益市场页抓齐设备身份。补齐仍可能被风控拒，通知照实回报码。填 false 只签到+报次数"
         },
         {
           "id": "cmcc_lucky3_jar",
@@ -807,7 +807,7 @@
           "autoGrow": true,
           "rows": 2,
           "placeholder": "开「捕获抽奖身份」进一次权益市场页自动填，也可手填整串",
-          "desc": "真机抽奖请求带的一整套 cookie：_zw_kvani5r + User-Token + 页面态 9e4e5fa7244c6b6e_gdp_cs1/gio_id/user_key + gdp_user_id。抓到后抽奖与产参(gettoken)都整串原样复用，保证与 gr-risk-p3 同一台设备同源——只填这一串时下面两项不用管。留空=退回旧形态（_zw + 按手机号现造的 gdp_user_id，没有 User-Token）。会话 JSESSIONID 不在这里存：由每次抽奖响应下发、连抽自动回带；抓取时刻记在内部键 cmcc_lucky3_jar_at（只用来判断里面那张 30 分钟的 User-Token 是否过期，超期会自动不带头，不用管它）。注意这串是设备级的：多账号且分别在不同手机上时，抓取会互相覆盖，需要各号手填自己那台的串"
+          "desc": "真机抽奖请求的整套 cookie（_zw_kvani5r + User-Token + 页面态 gdp 等），抓到后整串原样复用；只填这串时下面两项不用管。留空退回旧形态（_zw + 现造 gdp_user_id）。会话 JSESSIONID 由抽奖响应自动回带，无需存。设备级凭证：多账号分布在不同手机时会互相覆盖，需各号手填"
         },
         {
           "id": "cmcc_lucky3_risk_p3",
@@ -817,7 +817,7 @@
           "autoGrow": true,
           "rows": 1,
           "placeholder": "开「捕获抽奖身份」进一次权益市场页自动填，也可手填",
-          "desc": "幸运三日签「lottery/lottery」专用的 gr-risk-p3 请求头（约 40 位）。真机只在抽奖这一发带它，签到/查次数都不带；值由 App 原生 ZWRisk SDK 现算的 param 找 yxfk.market.chinamobile.com:8081/mgt/decision-engine/udid/c1 换回来，本地造不出，只能抓。观测：11-02 抓的令牌 11-03 仍在用（≥34 小时）。⚠ 但它不是被拒的原因：11-04 拿同一台设备自己的 gr-risk-p3 + 整套真机 cookie + 本号现签的 phone 凭证照抽，仍回 SCORE_REFUSE——所以这条只算补齐形态，缺了也照发（只报回码，不谎称抽过）"
+          "desc": "幸运三日签抽奖专用的 gr-risk-p3 请求头（约 40 位），App 的 ZWRisk SDK 现算产生、本地造不出，只能真机抓；实测 ≥34 小时仍有效。补齐也可能被风控拒（SCORE_REFUSE），缺了也照发、只报回码"
         },
         {
           "id": "cmcc_lucky3_zw",
@@ -827,7 +827,7 @@
           "autoGrow": true,
           "rows": 1,
           "placeholder": "",
-          "desc": "同一条 decision-engine 接口顺带回的 _zw_kvani5r（72 位十六进制），真机每条权益市场请求的 cookie 里都带着。填了上面「权益市场cookie」那串就不用来回这里了——那串本来就含 _zw；两个都没有时抽奖只带按号现造的 gdp_user_id（不影响能否抽，但少了一条设备身份）"
+          "desc": "decision-engine 接口顺带回的 _zw_kvani5r。填了「权益市场cookie」就不用填（那串已含）；都没有时抽奖少一条设备身份，不影响能否抽"
         },
         {
           "id": "cmcc_lucky3_task",
@@ -837,7 +837,7 @@
           "autoGrow": true,
           "rows": 1,
           "placeholder": "3157",
-          "desc": "累签任务 taskId，留空用 3157。活动换期时从页面 layout JSON（res.coc.10086.cn 的 production.rightsmarket-h5-canvas.online.layout.<页面码>.json，免登录）里的 taskList[].id 取"
+          "desc": "累签任务 taskId，留空用 3157。换期时从活动 layout JSON（res.coc.10086.cn 的 …layout.<页面码>.json，免登录）的 taskList[].id 取"
         },
         {
           "id": "cmcc_lucky3_pools",
@@ -847,7 +847,7 @@
           "autoGrow": true,
           "rows": 1,
           "placeholder": "17788:累签第2日,17789:累签第3日,17790:每满3签",
-          "desc": "逗号分隔的 activityId[:显示名]，留空用上面这组（17788 累签第2日 / 17789 第3日 / 17790 每满3签）。id 在同一个 layout JSON 的 activities[].id 里，显示名只影响通知字样"
+          "desc": "逗号分隔 activityId[:显示名]，留空用内置（17788 第2日 / 17789 第3日 / 17790 每满3签）。id 取自同 layout JSON 的 activities[].id，显示名只影响通知字样"
         },
         {
           "id": "cmcc_lucky3_page",
@@ -857,14 +857,14 @@
           "autoGrow": true,
           "rows": 1,
           "placeholder": "26xysrqtybld",
-          "desc": "活动页 rightsmarket-h5-canvas/online/ 后面那段页面码，决定请求的 referer；留空用 26xysrqtybld"
+          "desc": "活动页 rightsmarket-h5-canvas/online/ 后的页面码，决定请求 referer；留空用 26xysrqtybld"
         },
         {
           "id": "cmcc_saturday",
           "name": "周六游戏中心",
           "val": false,
           "type": "boolean",
-          "desc": "每日打卡 + 代币任务挣游戏币；抽奖 10 币/次，只有周六 12:00 起奖池才拓展，其余日子只攒不抽（币按 31 天周期清零，攒够要在窗口内抽光），未中奖即停不再扣币"
+          "desc": "每日打卡+代币任务挣游戏币；仅周六 12:00 起奖池拓展才抽，其余日子只攒不抽。币按 31 天周期清零，攒够要在窗口内抽光；未中奖即停"
         },
         {
           "id": "cmcc_wed",
@@ -878,7 +878,7 @@
           "name": "周三场次秒杀",
           "val": false,
           "type": "boolean",
-          "desc": "等到场次时间连发 drawPrize；只在北京时间周三跑，当天打过一次即收工，定时需设在开场前 1~2 分钟"
+          "desc": "只在北京时间周三跑：等到场次时间连发 drawPrize，当天打过即收工；定时需设在开场前 1~2 分钟"
         },
         {
           "id": "cmcc_wed_sk_at",
@@ -888,7 +888,7 @@
           "autoGrow": true,
           "rows": 1,
           "placeholder": "08:00:00",
-          "desc": "北京时间 HH:MM:SS 强制指定场次；留空则读服务端下发的 seckillTime 自动选最近一场（未下发按 08:00）。场次秒杀只在「开抢前 5 分钟~后 5 分钟」那一轮执行，别的定时（含 11:58 的日常秒杀轮）直接跳过、零请求；留空时这个窗口跟着「AI豆兑换时刻」走，默认即 07:58 那一轮"
+          "desc": "北京时间 HH:MM:SS 强制指定场次；留空读服务端 seckillTime（未下发按 08:00）。只在开抢前后 5 分钟那轮执行，其余定时零请求；留空时窗口跟「AI豆兑换时刻」走"
         },
         {
           "id": "cmcc_task_skip_days",
@@ -941,7 +941,7 @@
           "name": "autoLogin抓包(只读)",
           "val": "",
           "type": "text",
-          "desc": "「中国移动」插件里打开「捕获 autoLogin」后由签到脚本自动写入的 autoLogin 传参(密文body/ua/x-qen)，无需手填；cmcc_sign 换票时把它传给 /api/cmcc/refresh 现场换成新票据"
+          "desc": "「中国移动」插件开「捕获 autoLogin」后自动写入的加密传参，无需手填；换票时传给 /api/cmcc/refresh 现场换新票据"
         }
       ]
     },
@@ -976,7 +976,7 @@
           "name": "autoLogin抓包(只读)",
           "val": "",
           "type": "text",
-          "desc": "由「中国移动签到」插件的「捕获 autoLogin」写入，本模块只读复用。只是兜底——正常先拿 cmcc_data 里的大网 uid 换 User-Token，那条不通才重放这份传参（重放会顶号）"
+          "desc": "「中国移动签到」插件「捕获 autoLogin」写入，本模块只读兜底——正常先拿 cmcc_data 大网 uid 换 User-Token，不通才重放（会顶号）"
         },
         {
           "id": "cmcc_sevenday_prize_cfg",
@@ -986,7 +986,7 @@
           "autoGrow": true,
           "rows": 1,
           "placeholder": "",
-          "desc": "由插件「捕获活动参数」写入，也可手填/改单项：JSON，键为 drawActivityId / clockInActivityId / touchCode / pageId / clockInRewards / clockInTotal。留空用脚本内置的当期默认值；只认形状对的字段，写错的项会忽略并回落默认"
+          "desc": "插件「捕获活动参数」写入，也可手填单项：JSON，键 drawActivityId / clockInActivityId / touchCode / pageId / clockInRewards / clockInTotal。留空用内置当期值；形状不对的项忽略并回落默认"
         },
         {
           "id": "cmcc_sevenday_prize_phone",
@@ -996,7 +996,7 @@
           "autoGrow": true,
           "rows": 1,
           "placeholder": "159xxxxxxxx",
-          "desc": "打卡 payload 要 11 位手机号明文。留空优先用本次换票拿到的号码，其次从 cmcc_data 的 userCheckId（hex 手机号）还原"
+          "desc": "打卡 payload 需 11 位手机号明文。留空依次用本次换票拿到的号码、cmcc_data userCheckId 还原"
         },
         {
           "id": "cmcc_sevenday_prize_zw",
@@ -1052,7 +1052,7 @@
           "autoGrow": true,
           "rows": 5,
           "placeholder": "",
-          "desc": "由 rewrite 抓取自动写入，勿手填；含 token/mallNo/imei/deviceParams/appVersion/osVersion"
+          "desc": "rewrite 抓取自动写入，勿手填；含 token/mallNo/imei/deviceParams/appVersion/osVersion"
         },
         {
           "id": "mixc_debug",
@@ -1101,7 +1101,7 @@
           "autoGrow": true,
           "rows": 2,
           "placeholder": "",
-          "desc": "可选抓包兜底，留空则走 code 服务；格式 openId&uid / wx#openId&uid / app#TOKEN / TOKEN，多条以换行或 ; 分隔"
+          "desc": "可选抓包兜底，留空走 code 服务；格式 openId&uid / wx#openId&uid / app#TOKEN / TOKEN，多条换行或 ; 分隔"
         },
         {
           "id": "hdl_debug",
@@ -1348,7 +1348,7 @@
           "autoGrow": true,
           "rows": 5,
           "placeholder": "",
-          "desc": "由 rewrite 抓取自动写入；形如 [{\"username\":\"wx_xxxx\",\"nickName\":\"昵称\"}]，nickName 只用于通知显示，缺省时回退到用户名"
+          "desc": "rewrite 抓取自动写入；形如 [{\"username\":\"wx_xxx\",\"nickName\":\"昵称\"}]，nickName 仅用于通知显示，缺省回退用户名"
         },
         {
           "id": "manmanbuy_users",
@@ -1655,7 +1655,7 @@
           "autoGrow": true,
           "rows": 5,
           "placeholder": "",
-          "desc": "账号唯一入口，推荐直接粘取凭证网页「复制 全部账号（票+UA+设备）」的 {\"13800000000\":{\"service_ticket\":\"…\",\"kps_wg\":\"…\",\"ua\":\"…\",\"utdid\":\"…\",\"ve\":\"…\"}}（手机号即通知里的备注，uid/昵称由脚本从 kps_wg 解出）；扫描王签到要用 utdid 现算公参 ut，老的导出里没有 utdid 就只跑网盘签到。旧的数组写法 [{st,uid,nick,ua,user}] 仍能读，但一旦换票回写就统一成按手机号的 map；ua 缺省时用脚本内置的那条，删掉某个键即停用该账号"
+          "desc": "账号唯一入口，推荐直接粘取凭证网页「复制 全部账号（票+UA+设备）」出的按手机号 map（手机号即通知备注，uid/昵称由 kps_wg 解出）。扫描王签到需 map 里的 utdid 现算公参，没有就只跑网盘签到。旧数组写法仍可读，换票回写后统一成 map；ua 缺省用内置值，删掉某键即停用该账号"
         },
         {
           "id": "quark_debug",
@@ -1709,7 +1709,7 @@
           "autoGrow": true,
           "rows": 3,
           "placeholder": "[{\"id\":\"49006\",\"name\":\"霸王茶姬\",\"appid\":\"wxafec6f8422cb357b\"}]",
-          "desc": "追加/覆盖品牌。新品牌要给 id(企迈 storeId)与 appid；改内置品牌只写要改的字段，如 {\"id\":\"217777\",\"activityId\":\"1256313914410254337\"}。留空=只用内置的 林里+茉莉奶白；不想手填 storeId 可打开签到模块里的「捕获品牌」开关，逛一次任意企迈小程序就自动追加本项"
+          "desc": "追加/覆盖品牌：新品牌需 id(企迈 storeId) 与 appid；改内置品牌只写要改的字段。留空只用内置的 林里+茉莉奶白；不想手填 storeId 可开「捕获品牌」逛一次任意企迈小程序自动追加"
         },
         {
           "id": "milk_tea_probe",
@@ -1869,14 +1869,14 @@
           "autoGrow": true,
           "rows": 5,
           "placeholder": "",
-          "desc": "抓取插件自动写入，勿手填；脚本会自动生成并维护 devuid/cuid（设备标识），遇到 9312 dev repeat 时清空这两项即可重生成；也可填 pan.baidu.com 的 Cookie 字符串，多账号用 JSON 数组 [{\"cookie\":\"BDUSS=...; STOKEN=...\"}]。抓取触发：打开百度网盘 APP 任意页面（任务系统最稳）"
+          "desc": "抓取插件自动写入，勿手填；脚本自动维护 devuid/cuid 设备标识，遇 9312 dev repeat 清空这两项重新生成。也可手填 pan.baidu.com Cookie，多账号用 JSON 数组 [{\"cookie\":\"BDUSS=...; STOKEN=...\"}]。抓取触发：打开百度网盘 APP 任意页面"
         },
         {
           "id": "baidu_do_tasks",
           "name": "上报已完成任务",
           "val": false,
           "type": "boolean",
-          "desc": "开启后对 type=91 与下面白名单里的任务直接调 tasksave，跳过实际页面，等于刷任务，可能被风控，风险自负；广告/邀请/游戏/PC 登录等不会处理"
+          "desc": "开启后对 type=91 与白名单任务直接调 tasksave 刷完成、跳过实际页面，可能被风控，风险自负；广告/邀请/游戏/PC 登录类不处理"
         },
         {
           "id": "baidu_do_ids",
@@ -1886,7 +1886,7 @@
           "autoGrow": true,
           "rows": 2,
           "placeholder": "例如 1637576931774438,1637352711774438",
-          "desc": "只对这里列出的 task_id 调 tasksave（status 0/3 时）。type=13 浏览类可用：1637576931774438 去逛逛游戏频道、1637352711774438 去体验云打印；任务 ID 可能轮换，失效会自动跳过"
+          "desc": "只对列出的 task_id 调 tasksave（status 0/3）。type=13 示例：1637576931774438 逛游戏频道、1637352711774438 体验云打印；任务 ID 会轮换，失效自动跳过"
         },
         {
           "id": "baidu_debug",
@@ -1933,7 +1933,7 @@
           "autoGrow": true,
           "rows": 5,
           "placeholder": "",
-          "desc": "登录页自动写入 [{userid,sid,phone,verificationId}]，也可手填 userid@sid（多个用换行或 & 分隔）；phone 用于 AES 生成 mobile，verificationId 由「自动注册数美设备号」补上"
+          "desc": "登录页自动写入 [{userid,sid,phone,verificationId}]，也可手填 userid@sid（换行或 & 分隔）；phone 用于生成 AES mobile，verificationId 由「自动注册数美设备号」补"
         },
         {
           "id": "kuwo_phone",
@@ -1959,14 +1959,14 @@
           "autoGrow": true,
           "rows": 4,
           "placeholder": "{\"devId\":\"\",\"appUid\":\"\",\"version\":\"11.3.8.0\",\"source\":\"\",\"prod\":\"\",\"apiversion\":\"43\",\"adApiversion\":\"54\",\"q36\":\"\",\"verificationId\":\"\"}",
-          "desc": "留空使用脚本内置的 11.3.8.0 设备画像；可只填要覆盖的字段（JSON）。verificationId 是数美 SMDEVICEID，填了则所有账号都用它，一般留空交给「数美设备号」自动注册"
+          "desc": "留空用内置设备画像；可只填要覆盖的字段（JSON）。verificationId 是数美 SMDEVICEID，填了所有账号共用，一般留空交给自动注册"
         },
         {
           "id": "kuwo_smid",
           "name": "自动注册数美设备号",
           "val": true,
           "type": "boolean",
-          "desc": "默认开启：账号缺 verificationId 时，按数美 web fp 协议向 fp-it.portal101.cn 注册一个设备号并写回 kuwo_data（每账号一次）。关掉后 verificationId 留空——签到/任务/宝箱实测不校验它，只有提现类接口才用"
+          "desc": "默认开启：账号缺 verificationId 时按数美 web fp 协议注册设备号并写回 kuwo_data（每账号一次）。关掉则留空——签到/任务/宝箱不校验它，仅提现类接口用"
         },
         {
           "id": "kuwo_notify",
@@ -1980,7 +1980,7 @@
           "name": "积分兑换会员",
           "val": false,
           "type": "boolean",
-          "desc": "默认关闭。旧版 VIP 兑换接口(getExchangeAward)，当前 H5 已改 taskExchange；开启后积分≥150000 会真扣积分，仅供老账号兜底"
+          "desc": "默认关闭。旧版 VIP 兑换接口（当前 H5 已改 taskExchange）；开启后积分≥150000 真扣积分，仅供老账号兜底"
         },
         {
           "id": "kuwo_debug",
@@ -2026,14 +2026,14 @@
           "autoGrow": true,
           "rows": 5,
           "placeholder": "13800000000@密码",
-          "desc": "每行或 & 分隔「手机号@密码」；密码含 & 或 @ 时改用 JSON：[{\"phone\":\"13800000000\",\"password\":\"...\"}]。只填本人授权账号，密码会明文保存在本机 boxjs"
+          "desc": "每行或 & 分隔「手机号@密码」；密码含 & 或 @ 时改用 JSON [{\"phone\":\"13800000000\",\"password\":\"...\"}]。只填本人授权账号，密码明文存本机"
         },
         {
           "id": "migu_listen",
           "name": "真实计时听歌",
           "val": true,
           "type": "boolean",
-          "desc": "默认开启：下载完整免费音频、按 MP3 实际时长计时、每 10 秒上报一次并独立核对服务端增量。关闭后只领取服务端已可领的档位，不播放不上报"
+          "desc": "默认开启：下载完整免费音频按实际时长计时，每 10 秒上报并核对服务端增量；关闭后只领已可领档位，不播放不上报"
         },
         {
           "id": "migu_listen_seconds",
@@ -2048,7 +2048,7 @@
           "name": "发布歌曲评论",
           "val": false,
           "type": "boolean",
-          "desc": "默认关闭。打开后每天最多公开发一条评论：歌曲自动从「咪咕尖叫榜·全网热歌榜」读取并按天轮换，正文见下（支持多条随机）；会真实公开可见，列表与福利任务都确认后才算完成，结果不确定当天不重发"
+          "desc": "默认关闭。每天最多公开发一条评论：从「咪咕尖叫榜·全网热歌榜」按天轮换选歌，真实公开可见；结果不确定当天不重发"
         },
         {
           "id": "migu_comment_text",
@@ -2058,14 +2058,14 @@
           "autoGrow": true,
           "rows": 3,
           "placeholder": "旋律很好听，支持好音乐。\n这首歌编曲很用心",
-          "desc": "支持多条：用 | 或换行分隔，每天随机取一条（当天重复运行沿用同一条，不会换一条重发）；每条 1..120 字单行，不能含链接、网址或 @"
+          "desc": "多条用 | 或换行分隔，每天随机取一条（当天重复运行沿用同一条）；每条 1..120 字单行，不能含链接或 @"
         },
         {
           "id": "migu_ringtone",
           "name": "设置免费彩铃",
           "val": false,
           "type": "boolean",
-          "desc": "默认关闭。打开后在本月彩铃任务未完成时，从官方「一日一铃」免费库随机设置一条，会改变本人彩铃；只设置鉴权通过、资费为 0 的免费库内容，不开通/购买/续费"
+          "desc": "默认关闭。本月彩铃任务未完成时从官方「一日一铃」免费库随机设置一条，会改变本人彩铃；只设资费 0 的免费内容，不开通/购买/续费"
         },
         {
           "id": "migu_ip",
