@@ -364,8 +364,8 @@ function GetCoc3Jar(req) {
 }
 
 // 任务: 建会话 → App 端签到 → (可选)连签奖励/AI豆任务/追剧领福利/周三充值日 → (可选)AI豆兑换 → (可选)抢券
-// 当天签到完成后(user.signDay)，再次执行本脚本只跑抢券(签到页秒杀/周三场次秒杀)与放量窗口内的 AI豆兑换，
-// 不再签到/领奖/任务/追剧/拼图；本周已抢中的账号连抢券请求也不发
+// 当天主站签到完成后(user.signDay)，重跑仍核对三日签，并跑抢券与放量窗口内的 AI豆兑换；
+// 其它签到/领奖/任务/追剧/拼图不重复执行；本周已抢中的账号连抢券请求也不发
 // 结果边产生边 $.log（say），通知内容仍攒在 lines 里最后一起推送
 async function doSign(user) {
     const lines = [];
@@ -373,6 +373,11 @@ async function doSign(user) {
     const today = $.time('yyyyMMdd');
     try {
         if (user.signDay === today) {
+            // 三日签独立于主站签到：允许当天补签、核对待确认记录及领取延迟到账的抽奖次数。
+            if (RUN_LUCKY3) {
+                try { lines.push(...await runLucky3(user)); }
+                catch (e) { say(`[三日签] 失败: ${e.message || e}`); }
+            }
             // 抢券前先过门控（本周已抢中 / 触发时刻未到）：不在窗口内连换票都不做，避免签到重跑白跑一条 SSO 链
             const alreadyWon = SECKILL && skWeekDone(user, Date.now());
             const dailySk = SECKILL && !alreadyWon && skWindowOpen();
@@ -1309,7 +1314,8 @@ function coc3Headers(cred, referer = SEED_PAGE_URL) {
 
 // 统一 POST；网关偶发非 JSON 或网络抖动按失败结构返回，不抛异常（网络错误重试一次）
 async function coc3Post(cred, path, body, referer = SEED_PAGE_URL, extraHeaders = null, wantResp = false) {
-    for (const retry of [0, 1000]) {
+    const mutating = /\/(?:accumulateSign|lottery)$/.test(path);
+    for (const retry of mutating ? [1000] : [0, 1000]) {
         try {
             const r = await Request({ url: `${SEED_BASE}${path}`, method: 'post', headers: Object.assign(coc3Headers(cred, referer), extraHeaders || {}), body: body || {}, _respType: wantResp ? 'all' : 'body', _timeout: 30000 });
             if (!r) return wantResp ? { json: { resultCode: 'NO_RESP', msg: '响应非 JSON' }, resp: null } : { resultCode: 'NO_RESP', msg: '响应非 JSON' };
@@ -1364,6 +1370,7 @@ function seedAge(sec) {
 //    外加「昨天记过数、今天多了一天」这一条实证判据（隔多日没跑时不做保守跳过，照签，服务端会回已签）
 // 返回 { line, count }：count 是本次判断后的当月累签天数，取不到状态时为 null
 async function coc3Sign(cred, state, today, cfg) {
+    if (!cfg.countAsSigned) return l3Sign(cred, state, today, cfg);
     const info = await coc3Post(cred, '/cmpp-manage/task/getTaskSignInfo', cfg.infoBody, cfg.referer);
     if (info.resultCode !== 0) return { line: `签到信息获取失败: ${info.resultCode} ${info.msg || ''}`, count: null };
     const count = Number(((info.data || {}).accumulateCount) || 0);
@@ -1545,6 +1552,67 @@ async function runSeed(user) {
 
 // ---------- 幸运三日签（coc3 权益市场累签组件，页面码 26xysrqtybld）----------
 
+// 只接受有效服务端次数；空响应/缺字段不能当作 0，更不能用 count+1 代替落账。
+function l3SignCount(r) {
+    const v = r && r.data && r.data.accumulateCount;
+    if (!r || r.resultCode !== 0 || !['number', 'string'].includes(typeof v) || (typeof v === 'string' && !/^\d+$/.test(v))) return null;
+    const n = Number(v);
+    return Number.isSafeInteger(n) && n >= 0 ? n : null;
+}
+
+async function l3Sign(cred, state, today, cfg) {
+    const read = async () => {
+        try { return l3SignCount(await coc3Post(cred, '/cmpp-manage/task/getTaskSignInfo', cfg.infoBody, cfg.referer)); }
+        catch (e) { return null; }
+    };
+    let count = await read();
+    if (count === null) return { line: '签到信息获取失败，未确认次数，稍后重试', count: null, status: 'unknown' };
+    const seen = () => { state.countSeen = { d: today, c: count }; };
+    seen();
+    // 旧版 signDate 来自乐观加一或跨日推断，升级后必须重新由服务端确认。
+    if (state.confirmedDate === today) {
+        state.signCount = count;
+        return { line: '今日已签到（已确认记录），次数以服务端为准', count, status: 'confirmed' };
+    }
+    const pending = state.pendingSign;
+    if (pending && pending.d === today && count > pending.before) {
+        state.confirmedDate = state.signDate = today;
+        state.signCount = count;
+        delete state.pendingSign;
+        return { line: '签到成功（重试回查已落账）', count, status: 'confirmed' };
+    }
+    state.pendingSign = { d: today, before: pending && pending.d === today ? pending.before : count };
+    const before = state.pendingSign.before;
+    const body = { taskId: cfg.taskId, channelCode: cfg.channelCode, needLimit: 0 };
+    if (cfg.wtAc) { body.wtAc = cfg.wtAc; body.wtAcId = coc3Uuid(); }
+    let resp;
+    try { resp = await coc3Post(cred, '/cmpp-manage/task/accumulateSign', body, cfg.referer); }
+    catch (e) { resp = { resultCode: 'NETWORK_ERROR', msg: '请求异常' }; }
+    resp = resp || {};
+    const msg = String(resp.msg || '');
+    // 500/502 与泛化的“重复”不能证明三日签今日已签；只认明确的已签到语义。
+    const duplicate = /^(?:本日|今日|今天)?(?:您)?已签到(?:[，,。!！\s]|$)/.test(msg);
+    for (let i = 0; i < 3; i++) {
+        if (i) await $.wait(1000);
+        const fresh = await read();
+        if (fresh !== null) { count = fresh; seen(); }
+        if (fresh !== null && fresh > before) break;
+    }
+    $.log(`[三日签·核对] task=${cfg.taskId} date=${today} before=${before} after=${count} resultCode=${resp.resultCode} duplicate=${duplicate}`);
+    if (count > before || duplicate) {
+        state.confirmedDate = state.signDate = today;
+        state.signCount = count;
+        delete state.pendingSign;
+        return { line: duplicate ? '今日已签到（服务端确认），次数以查询为准' : '签到成功（服务端次数已增加）', count, status: 'confirmed' };
+    }
+    // 请求可能已落账但响应丢失，保留基线供下次核对；绝不提前写“今天已签”。
+    delete state.signDate;
+    delete state.signCount;
+    return { line: resp.resultCode === 0 || /NETWORK_ERROR|NO_RESP/.test(String(resp.resultCode))
+        ? '签到结果待确认（次数未增加），稍后重试'
+        : `签到未确认: ${resp.resultCode} ${msg.slice(0, 40)}`, count, status: 'pending' };
+}
+
 // 奖池配置串形如 '17788:累签第2日,17789:累签第3日'；活动换期时只改 boxjs 的 cmcc_lucky3_pools，不用改代码
 function parsePools(raw) {
     return String(raw || '').split(/[,，;；]/).map(t => t.trim()).filter(Boolean).map(t => {
@@ -1559,8 +1627,9 @@ function parsePools(raw) {
 async function l3PoolCount(cred, activityId) {
     const r = await coc3Post(cred, '/cmpp-manage/lottery/residueLotteryCount', { activityId }, L3_PAGE_URL);
     if (String(r.code) !== '200') return { ok: false, why: String(r.msg || r.code || r.resultCode || '无响应') };
-    const n = Number(r.data || 0);
-    return { ok: true, n: isFinite(n) ? n : 0 };
+    const v = r.data;
+    const n = ['number', 'string'].includes(typeof v) && (typeof v !== 'string' || /^\d+$/.test(v)) ? Number(v) : NaN;
+    return Number.isSafeInteger(n) && n >= 0 ? { ok: true, n } : { ok: false, why: '抽奖次数格式无效' };
 }
 
 // 网关产 wasmparams：入参只有本次现签的 phone（+活动页 URL/UA），网关内跑 wheel_bg-0.0.8.wasm
@@ -1642,10 +1711,14 @@ async function runLucky3(user) {
 
     const all = $.toObj($.getdata(L3_STATE_KEY), {}) || {};
     const k = user.userCheckId || user.userName || 'default';
-    const state = all[k] || {};
-    const signRes = await coc3Sign(cred, state, $.time('yyyy-MM-dd'), L3_SIGN_CFG);
+    const today = $.time('yyyy-MM-dd');
+    const scope = `${L3_TASK_ID}:${L3_PAGE_URL}:${today.slice(0, 7)}`;
+    const state = all[k] && all[k].scope === scope ? all[k] : { scope };
+    const signRes = await coc3Sign(cred, state, today, L3_SIGN_CFG);
     all[k] = state;
-    $.setdata($.toStr(all, '{}'), L3_STATE_KEY);
+    if ($.setdata($.toStr(all, '{}'), L3_STATE_KEY) === false) {
+        say('[三日签] 本地签到记录保存失败，下次将重新查询服务端');
+    }
     if (signRes.count === null) {
         say(`[三日签] ${signRes.line}${/登录|-516/.test(signRes.line) ? '（ticket 已失效，开着获取Cookie在 App 里点任意一页重抓）' : ''}`);
         return lines;
@@ -1653,9 +1726,10 @@ async function runLucky3(user) {
     $.log(`[三日签·签到] ${signRes.line}`);
 
     const open = [];
+    let poolUnknown = 0;
     for (const p of L3_POOLS) {
         const c = await l3PoolCount(cred, p.id);
-        if (!c.ok) { $.log(`[三日签·奖池] ${p.name}(${p.id}) 查询失败: ${c.why}`); continue; }
+        if (!c.ok) { poolUnknown++; $.log(`[三日签·奖池] ${p.name}(${p.id}) 查询失败: ${c.why}`); continue; }
         $.log(`[三日签·奖池] ${p.name}(${p.id}): ${c.n} 次`);
         if (c.n > 0) open.push({ id: p.id, name: p.name, n: c.n });
         await $.wait(randomInt(300, 700));
@@ -1681,12 +1755,12 @@ async function runLucky3(user) {
             if (!left) break;
         }
         // 网关或 wasmparams 取不到时退回手动提示，不能把"没抽成"说成"抽了没中"
-        drawPart = got.length ? `｜已抽 ${got.length} 次：${got.join('、')}${refused && noP3 ? '（没抓到 gr-risk-p3 设备令牌，形态不全；开「捕获抽奖身份」进一次权益市场页）' : refused ? '（风控拒绝：带真机令牌也被拒过，问题不在这个头）' : ''}`
+        drawPart = got.length ? `｜抽奖请求返回 ${got.length} 次：${got.join('、')}${fatal ? `（后续中断: ${fatal}）` : ''}${refused && noP3 ? '（没抓到 gr-risk-p3 设备令牌，形态不全；开「捕获抽奖身份」进一次权益市场页）' : refused ? '（风控拒绝：带真机令牌也被拒过，问题不在这个头）' : ''}`
             : `｜${fatal ? `代抽没走通(${fatal})，` : ''}还有 ${free} 次机会（${open.map(x => x.name).join('、')}），请在 App 活动页手动抽`;
     } else if (free) {
         drawPart = `｜${free} 次抽奖机会（${open.map(x => `${x.name}×${x.n}`).join('、')}），代抽开关 cmcc_lucky3_draw 未开，请在 App 活动页手动抽`;
     }
-    say(`[三日签] 当月累签 ${signRes.count} 天｜${signRes.line.slice(0, 26)}${drawPart}${!drawPart && lag ? '｜本次刚签，次数延迟 1~2 分钟结算，稍后在活动页可见' : ''}`);
+    say(`[三日签] 当月累签 ${signRes.count} 天｜${signRes.line}${drawPart}${poolUnknown ? `｜${poolUnknown} 个奖池次数查询失败，资格待确认` : ''}${!drawPart && lag ? '｜抽奖次数尚未查到，可能延迟结算，稍后重跑核对' : ''}`);
     return lines;
 }
 
