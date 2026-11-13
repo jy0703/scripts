@@ -14,7 +14,7 @@
 # Node 下跑脚本时 Env 落的数据文件
 /box.dat
 /.box.dat
-
+/.cmcc_lucky3.test.cjs
 # 本地跑的 Inception 聊天反代（依赖本机 Chrome+CDP 代发，入库对别人没用）
 /inception-proxy/
 /cmcc/
